@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Quản Lý Học Tập Thiếu Nhi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .tab-btn.active { border-bottom: 3px solid #1e3c72; color: #1e3c72; font-weight: bold; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans">
+
+    <div class="max-w-7xl mx-auto p-4 md:p-6">
+        <!-- Header -->
+        <header class="bg-gradient-to-r from-blue-900 to-indigo-800 text-white p-6 rounded-xl shadow-lg mb-6 text-center">
+            <h1 class="text-2xl md:text-3xl font-bold uppercase tracking-wide">Quản Lý Tình Hình Học Tập Thiếu Nhi Giáo xứ Nghĩa Hòa</h1>
+            <p class="text-blue-100 text-sm mt-1">Hệ thống tính điểm tự động & Tra cứu trích lục hồ sơ</p>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <div class="flex border-b border-slate-300 mb-6 bg-white rounded-t-xl px-4 pt-2 shadow-sm">
+            <button onclick="switchTab('tab-nhap-diem')" id="btn-tab-nhap-diem" class="tab-btn active px-6 py-3 text-slate-600 hover:text-blue-900 transition">📝 Cập Nhật Điểm Hàng Loạt</button>
+            <button onclick="switchTab('tab-trich-luc')" id="btn-tab-trich-luc" class="tab-btn px-6 py-3 text-slate-600 hover:text-blue-900 transition">🔍 Trích Lục Học Bạ</button>
+            <button onclick="switchTab('tab-khen-thuong')" id="btn-tab-khen-thuong" class="tab-btn px-6 py-3 text-slate-600 hover:text-blue-900 transition">🏆 Lập Danh Sách Khen Thưởng</button>
+        </div>
+
+        <!-- TAB 1: NHẬP ĐIỂM HÀNG LOẠT -->
+        <div id="tab-nhap-diem" class="tab-content">
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <h2 class="text-xl font-bold text-blue-900 mb-4">Cập Nhật Điểm Hàng Loạt Theo Lớp</h2>
+                
+                <!-- Bộ Chọn Lớp & Năm Học -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Năm Học</label>
+                        <select id="selectNamHoc" onchange="loadStudentsForClass()" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold">
+                            <option value="2025-2026">2025-2026</option>
+                            <option value="2026-2027" selected>2026-2027</option>
+                            <option value="2027-2028">2027-2028</option>
+                            <option value="2028-2029">2028-2029</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Chọn Lớp Học</label>
+                        <select id="selectLopHoc" onchange="loadStudentsForClass()" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold">
+                            <option value="Chiên Con">Chiên Con</option>
+                            <option value="Ấu 1">Ấu 1</option><option value="Ấu 2">Ấu 2</option><option value="Ấu 3">Ấu 3</option>
+                            <option value="Thiếu 1">Thiếu 1</option><option value="Thiếu 2">Thiếu 2</option><option value="Thiếu 3">Thiếu 3</option>
+                            <option value="Nghĩa 1">Nghĩa 1</option><option value="Nghĩa 2">Nghĩa 2</option><option value="Nghĩa 3">Nghĩa 3</option>
+                            <option value="Dự bị trưởng 1">Dự bị trưởng 1</option><option value="Dự bị trưởng 2">Dự bị trưởng 2</option>
+                        </select>
+                    </div>
+                    <div class="flex items-end">
+                        <button onclick="addNewRow()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-lg w-full transition">+ Thêm Thiếu Nhi Mới Vô Lớp</button>
+                    </div>
+                </div>
+
+                <!-- Bảng Điểm Hàng Loạt -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse border border-slate-200">
+                        <thead>
+                            <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+                                <th class="p-2 border" rowspan="2">STT</th>
+                                <th class="p-2 border" rowspan="2">Số CCCD</th>
+                                <th class="p-2 border" rowspan="2">Họ Và Tên</th>
+                                <th class="p-2 border" colspan="3">Học Kỳ I</th>
+                                <th class="p-2 border" colspan="3">Học Kỳ II</th>
+                            </tr>
+                            <tr class="bg-blue-800 text-white text-xs font-bold text-center">
+                                <th class="p-2 border">CC (1-100)</th><th class="p-2 border">15p</th><th class="p-2 border">Cuối Kỳ (x2)</th>
+                                <th class="p-2 border">CC (1-100)</th><th class="p-2 border">15p</th><th class="p-2 border">Cuối Kỳ (x2)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="batchTableBody">
+                            <!-- Render JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-6 text-right">
+                    <button onclick="saveBatchScores()" id="btnSaveBatch" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3 rounded-lg shadow-lg text-lg transition">💾 Lưu Tất Cả Điểm Lớp</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: TRÍCH LÚC HỌC BẠ -->
+        <div id="tab-trich-luc" class="tab-content hidden">
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <h2 class="text-xl font-bold text-blue-900 mb-4">Trích Lục Kết Quả Học Tập Theo CCCD</h2>
+                <div class="flex gap-4 mb-6">
+                    <input type="text" id="searchCCCD" placeholder="Nhập số CCCD cần tra cứu..." class="border p-2.5 rounded-lg w-full max-w-md">
+                    <button onclick="searchByCCCD()" class="bg-blue-900 hover:bg-blue-800 text-white px-6 py-2.5 rounded-lg font-bold">Tra Cứu</button>
+                </div>
+                <div id="trichLucResult" class="hidden border-t pt-4"></div>
+            </div>
+        </div>
+
+        <!-- TAB 3: KHEN THƯỞNG -->
+        <div id="tab-khen-thuong" class="tab-content hidden">
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
+                    <h2 class="text-xl font-bold text-blue-900">Danh Sách Khen Thưởng Cuối Năm</h2>
+                    <div class="flex flex-wrap gap-3">
+                        <select id="filterNamHoc" onchange="renderKhenThuong()" class="border p-2 rounded-lg font-semibold bg-slate-50">
+                        </select>
+                        <select id="filterLop" onchange="renderKhenThuong()" class="border p-2 rounded-lg font-semibold bg-slate-50">
+                            <option value="">Tất cả các lớp</option>
+                        </select>
+                        <button onclick="window.print()" class="bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded-lg font-semibold transition">🖨️ In Danh Sách</button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-100 border-b text-xs font-bold text-slate-600 uppercase">
+                                <th class="p-3 text-center">STT</th>
+                                <th class="p-3">Họ Tên</th>
+                                <th class="p-3">Lớp</th>
+                                <th class="p-3">CC Cả Năm</th>
+                                <th class="p-3">ĐTB Học Tập CN</th>
+                                <th class="p-3">Danh Hiệu</th>
+                            </tr>
+                        </thead>
+                        <tbody id="khenThuongTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script src="/js/common.js"></script>
+<script>
+    const CLASS_ORDER = [
+        "Chiên Con",
+        "Ấu 1", "Ấu 2", "Ấu 3",
+        "Thiếu 1", "Thiếu 2", "Thiếu 3",
+        "Nghĩa 1", "Nghĩa 2", "Nghĩa 3",
+        "Dự bị trưởng 1", "Dự bị trưởng 2"
+    ];
+
+    let allStudents = [];
+    let allScores = [];
+
+    document.addEventListener("DOMContentLoaded", () => {
+        loadAllData();
+    });
+
+    function switchTab(tabId) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById(tabId).classList.remove('hidden');
+        document.getElementById('btn-' + tabId).classList.add('active');
+        if (tabId === 'tab-khen-thuong' || tabId === 'tab-trich-luc') loadAllData();
+    }
+
+    async function loadAllData() {
+        try {
+            const json = await api('/api/hocba', {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "getData" })
+            });
+            if (json.status === "success") {
+                allStudents = json.students || [];
+                allScores = json.scores || [];
+                populateFilters();
+                loadStudentsForClass();
+                renderKhenThuong();
+            }
+        } catch(e) { console.error("Lỗi tải dữ liệu:", e); }
+    }
+
+    // TÍNH LỚP HỌC THEO BẤT KỲ NĂM HỌC NÀO
+    function getCalculatedClass(student, targetYearStr) {
+        const baseYear = parseInt((student.NamNhapHoc || "2025").split('-')[0]);
+        const targetYear = parseInt((targetYearStr || "2025").split('-')[0]);
+        
+        const startClassIndex = CLASS_ORDER.indexOf(student.LopNhapHoc) !== -1 ? CLASS_ORDER.indexOf(student.LopNhapHoc) : 0;
+        const diffYears = targetYear - baseYear;
+        
+        let calculatedIndex = startClassIndex + diffYears;
+        if (calculatedIndex < 0) return null; // Chưa nhập học vào năm này
+        if (calculatedIndex >= CLASS_ORDER.length) calculatedIndex = CLASS_ORDER.length - 1; // Đã ra trường/dự bị trưởng 2
+
+        return CLASS_ORDER[calculatedIndex];
+    }
+
+    function populateFilters() {
+        const selectLop = document.getElementById('filterLop');
+        const selectNam = document.getElementById('filterNamHoc');
+
+        const years = [...new Set(allScores.map(i => i.NamHoc))].filter(Boolean).sort().reverse();
+
+        selectLop.innerHTML = '<option value="">Tất cả các lớp</option>' + CLASS_ORDER.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+
+        if (years.length > 0) {
+            selectNam.innerHTML = years.map(y => `<option value="${escapeHtml(y)}">${escapeHtml(y)}</option>`).join('');
+        } else {
+            selectNam.innerHTML = '<option value="2026-2027">2026-2027</option>';
+        }
+    }
+
+    function loadStudentsForClass() {
+        const selectedNamHoc = document.getElementById('selectNamHoc').value;
+        const selectedLopHoc = document.getElementById('selectLopHoc').value;
+        const tbody = document.getElementById('batchTableBody');
+
+        const targetStudents = allStudents.filter(st => {
+            const calculatedClass = getCalculatedClass(st, selectedNamHoc);
+            return calculatedClass === selectedLopHoc;
+        });
+
+        tbody.innerHTML = '';
+
+        if (targetStudents.length === 0) {
+            addNewRow();
+            return;
+        }
+
+        targetStudents.forEach((st, idx) => {
+            const scoreRecord = allScores.find(s => s.SoCCCD === st.SoCCCD && s.NamHoc === selectedNamHoc) || {};
+
+            renderStudentRow(
+                idx + 1, 
+                st.SoCCCD, 
+                st.HoTen, 
+                scoreRecord.CC_HK1 || '', 
+                scoreRecord.D15_HK1 || '', 
+                scoreRecord.DCK_HK1 || '', 
+                scoreRecord.CC_HK2 || '', 
+                scoreRecord.D15_HK2 || '', 
+                scoreRecord.DCK_HK2 || '',
+                st.LopNhapHoc || selectedLopHoc,
+                st.NamNhapHoc || selectedNamHoc
+            );
+        });
+    }
+
+    function addNewRow() {
+        const tbody = document.getElementById('batchTableBody');
+        const idx = tbody.children.length + 1;
+        const currentNamHoc = document.getElementById('selectNamHoc').value;
+        const currentLopHoc = document.getElementById('selectLopHoc').value;
+        renderStudentRow(idx, '', '', '', '', '', '', '', '', currentLopHoc, currentNamHoc);
+    }
+
+    function renderStudentRow(stt, cccd, hoten, cc1, d15_1, dck1, cc2, d15_2, dck2, lopNhapHoc, namNhapHoc) {
+        const tbody = document.getElementById('batchTableBody');
+        const tr = document.createElement('tr');
+        tr.className = "border-b hover:bg-slate-50 student-row";
+        tr.setAttribute('data-lopnhaphoc', lopNhapHoc);
+        tr.setAttribute('data-namnhaphoc', namNhapHoc);
+
+        tr.innerHTML = `
+            <td class="p-2 border text-center font-bold">${escapeHtml(stt)}</td>
+            <td class="p-2 border"><input type="text" value="${escapeHtml(cccd)}" class="st-cccd w-full border p-1.5 rounded font-semibold bg-slate-50"></td>
+            <td class="p-2 border"><input type="text" value="${escapeHtml(hoten)}" class="st-name w-full border p-1.5 rounded font-semibold bg-slate-50"></td>
+            <td class="p-2 border"><input type="number" min="0" max="100" value="${escapeHtml(cc1)}" class="st-cc1 w-16 border p-1.5 rounded text-center"></td>
+            <td class="p-2 border"><input type="number" step="0.1" min="0" max="10" value="${escapeHtml(d15_1)}" class="st-d15-1 w-16 border p-1.5 rounded text-center"></td>
+            <td class="p-2 border"><input type="number" step="0.1" min="0" max="10" value="${escapeHtml(dck1)}" class="st-dck1 w-16 border p-1.5 rounded text-center"></td>
+            <td class="p-2 border"><input type="number" min="0" max="100" value="${escapeHtml(cc2)}" class="st-cc2 w-16 border p-1.5 rounded text-center"></td>
+            <td class="p-2 border"><input type="number" step="0.1" min="0" max="10" value="${escapeHtml(d15_2)}" class="st-d15-2 w-16 border p-1.5 rounded text-center"></td>
+            <td class="p-2 border"><input type="number" step="0.1" min="0" max="10" value="${escapeHtml(dck2)}" class="st-dck2 w-16 border p-1.5 rounded text-center"></td>
+        `;
+        tbody.appendChild(tr);
+    }
+
+    async function saveBatchScores() {
+        const namHoc = document.getElementById('selectNamHoc').value;
+        const tenLop = document.getElementById('selectLopHoc').value;
+        const btn = document.getElementById('btnSaveBatch');
+        
+        const rows = document.querySelectorAll('.student-row');
+        const students = [];
+
+        rows.forEach(r => {
+            const cccd = r.querySelector('.st-cccd').value.trim();
+            const name = r.querySelector('.st-name').value.trim();
+            if (cccd !== "" && name !== "") {
+                students.push({
+                    SoCCCD: cccd,
+                    HoTen: name,
+                    TenLop: tenLop,
+                    NamHoc: namHoc,
+                    LopNhapHoc: r.getAttribute('data-lopnhaphoc') || tenLop,
+                    NamNhapHoc: r.getAttribute('data-namnhaphoc') || namHoc,
+                    CC_HK1: r.querySelector('.st-cc1').value || 0,
+                    D15_HK1: r.querySelector('.st-d15-1').value || 0,
+                    DCK_HK1: r.querySelector('.st-dck1').value || 0,
+                    CC_HK2: r.querySelector('.st-cc2').value || 0,
+                    D15_HK2: r.querySelector('.st-d15-2').value || 0,
+                    DCK_HK2: r.querySelector('.st-dck2').value || 0,
+                });
+            }
+        });
+
+        if (students.length === 0) {
+            alert("Vui lòng nhập ít nhất một thiếu nhi có đủ Số CCCD và Họ Tên!");
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerText = "Đang lưu bảng điểm...";
+
+        try {
+            const result = await api('/api/hocba', {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "saveBatchData", students: students })
+            });
+
+            alert(result.message || `Đã cập nhật bảng điểm thành công cho ${students.length} thiếu nhi lớp ${tenLop}!`);
+            loadAllData();
+        } catch(err) {
+            alert("Lỗi khi lưu bảng điểm: " + (err.message || ""));
+            console.error(err);
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "💾 Lưu Tất Cả Điểm Lớp";
+        }
+    }
+
+    function searchByCCCD() {
+        const query = document.getElementById('searchCCCD').value.trim();
+        const container = document.getElementById('trichLucResult');
+        
+        if (!query) {
+            alert("Vui lòng nhập số CCCD!");
+            return;
+        }
+
+        const student = allStudents.find(s => s.SoCCCD === query);
+        const records = allScores.filter(s => s.SoCCCD === query);
+
+        if (!student && records.length === 0) {
+            container.innerHTML = `<p class="text-red-500 font-semibold p-4 text-center">Không tìm thấy dữ liệu cho số CCCD này.</p>`;
+        } else {
+            const name = student ? student.HoTen : (records[0] ? "Thiếu nhi" : "");
+            const currentYear = "2026-2027";
+            const currentClass = student ? getCalculatedClass(student, currentYear) : "";
+
+            let html = `
+                <div class="mb-4 bg-blue-50 p-4 rounded-lg border border-blue-100">
+                    <h3 class="font-bold text-lg text-blue-900">${escapeHtml(name)}</h3>
+                    <p class="text-sm text-slate-700">CCCD: <strong>${escapeHtml(query)}</strong> | Lớp năm nay (2026-2027): <strong>${escapeHtml(currentClass) || 'Đã tốt nghiệp / Chưa xếp lớp'}</strong></p>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full border text-sm text-left">
+                        <tr class="bg-slate-100 font-bold border-b">
+                            <td class="p-2">Năm Học</td>
+                            <td class="p-2">Lớp Học</td>
+                            <td class="p-2">ĐTB HK1</td>
+                            <td class="p-2">ĐTB HK2</td>
+                            <td class="p-2">CC Cả Năm</td>
+                            <td class="p-2">ĐTB Cả Năm</td>
+                            <td class="p-2">Khen Thưởng</td>
+                        </tr>
+                        ${records.map(r => `
+                            <tr class="border-b hover:bg-slate-50">
+                                <td class="p-2 font-semibold">${escapeHtml(r.NamHoc)}</td>
+                                <td class="p-2 font-semibold text-blue-900">${escapeHtml(r.TenLop || (student ? getCalculatedClass(student, r.NamHoc) : ""))}</td>
+                                <td class="p-2">${escapeHtml(r.DTB_HK1)}</td>
+                                <td class="p-2">${escapeHtml(r.DTB_HK2)}</td>
+                                <td class="p-2 font-bold ${Number(r.CC_CaNam) >= 80 ? 'text-emerald-600' : 'text-red-500'}">${escapeHtml(r.CC_CaNam)}</td>
+                                <td class="p-2 font-bold ${Number(r.DTB_CaNam) >= 8.0 ? 'text-emerald-600' : 'text-red-500'}">${escapeHtml(r.DTB_CaNam)}</td>
+                                <td class="p-2 font-bold">${r.KhenThuong ? '🏆 Khen Thưởng' : 'Không'}</td>
+                            </tr>
+                        `).join('')}
+                    </table>
+                </div>
+            `;
+            container.innerHTML = html;
+        }
+        container.classList.remove('hidden');
+    }
+
+    function renderKhenThuong() {
+        const selectedNam = document.getElementById('filterNamHoc').value;
+        const selectedLop = document.getElementById('filterLop').value;
+        const tbody = document.getElementById('khenThuongTable');
+
+        let filtered = allScores.filter(s => s.KhenThuong);
+
+        if (selectedNam) {
+            filtered = filtered.filter(s => s.NamHoc === selectedNam);
+        }
+
+        if (selectedLop) {
+            filtered = filtered.filter(s => {
+                const st = allStudents.find(i => i.SoCCCD === s.SoCCCD);
+                const calculatedClass = st ? getCalculatedClass(st, s.NamHoc) : s.TenLop;
+                return calculatedClass === selectedLop;
+            });
+        }
+
+        filtered.sort((a, b) => b.DTB_CaNam - a.DTB_CaNam || b.CC_CaNam - a.CC_CaNam);
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-500 font-semibold">Không có thiếu nhi đạt tiêu chuẩn khen thưởng cho năm học / lớp đã chọn.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = filtered.map((item, idx) => {
+            const st = allStudents.find(i => i.SoCCCD === item.SoCCCD);
+            const name = st ? st.HoTen : "Thiếu nhi";
+            const className = st ? getCalculatedClass(st, item.NamHoc) : item.TenLop;
+
+            return `
+                <tr class="border-b hover:bg-slate-50">
+                    <td class="p-3 font-bold text-center">${idx + 1}</td>
+                    <td class="p-3 font-semibold text-blue-900">${escapeHtml(name)}</td>
+                    <td class="p-3 font-semibold">${escapeHtml(className)}</td>
+                    <td class="p-3 font-bold text-emerald-600">${escapeHtml(item.CC_CaNam)} / 100</td>
+                    <td class="p-3 font-bold text-emerald-600">${escapeHtml(item.DTB_CaNam)}</td>
+                    <td class="p-3 font-bold text-amber-600">🏆 Chiến sĩ của Chúa</td>
+                </tr>
+            `;
+        }).join('');
+    }
+</script>
+</body>
+</html>

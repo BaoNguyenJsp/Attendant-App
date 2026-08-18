@@ -1,0 +1,13 @@
+{
+  "name": "so-thieu-nhi-attendant",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sổ Thiếu Nhi — 3 apps behind one Express proxy + login",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

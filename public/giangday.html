@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sổ Theo Dõi & Lịch Giảng Dạy Giáo Lý Online</title>
+    <style>
+        :root {
+            --primary: #1e3c72;
+            --primary-dark: #122548;
+            --accent: #27ae60;
+            --bg: #f4f6f9;
+            --card-bg: #ffffff;
+            --text: #2c3e50;
+            --text-light: #6c757d;
+            --border: #e2e8f0;
+            --shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        * { box-sizing: border-box; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; margin: 0; padding: 0; }
+        body { background-color: var(--bg); color: var(--text); padding: 20px; line-height: 1.5; }
+        .container { max-width: 1280px; margin: 0 auto; }
+        
+        header {
+            text-align: center;
+            padding: 25px 20px;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, var(--primary), #2a5298);
+            color: white;
+            border-radius: 12px;
+            box-shadow: 0 6px 18px rgba(30, 60, 114, 0.25);
+        }
+        header h1 { font-size: 2rem; margin-bottom: 8px; letter-spacing: 0.5px; }
+        header p { font-size: 1rem; opacity: 0.9; }
+
+        /* Navigation Tabs */
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tab-btn {
+            padding: 12px 24px;
+            border: none;
+            background: #e2e8f0;
+            color: var(--text);
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 1rem;
+        }
+        .tab-btn.active {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 4px 10px rgba(30, 60, 114, 0.3);
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            background: white;
+            padding: 16px 20px;
+            border-radius: 10px;
+            box-shadow: var(--shadow);
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .date-picker, .filter-group { 
+            font-weight: 600; 
+            color: var(--primary); 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            flex-wrap: wrap;
+        }
+        .date-picker input, .filter-group select { 
+            padding: 8px 12px; 
+            font-size: 0.95rem; 
+            border-radius: 6px; 
+            border: 1px solid var(--border);
+            outline: none;
+            background: white;
+            transition: border-color 0.2s;
+        }
+        .date-picker input:focus, .filter-group select:focus { border-color: var(--primary); }
+
+        .summary-badge {
+            background: #e9ecef;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .grid-classes {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: var(--shadow);
+            border-top: 5px solid #e74c3c;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .card:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(0,0,0,0.12); }
+        .card.updated { border-top-color: var(--accent); }
+
+        .card h3 { 
+            font-size: 1.25rem; 
+            color: var(--primary); 
+            margin-bottom: 14px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+        }
+        .status-badge { 
+            font-size: 0.75rem; 
+            padding: 4px 10px; 
+            border-radius: 12px; 
+            background: #fceae9; 
+            color: #c0392b; 
+            font-weight: 600; 
+        }
+        .card.updated .status-badge { background: #e8f8f0; color: var(--accent); }
+
+        .info-group { margin-bottom: 12px; }
+        .info-label { font-size: 0.75rem; color: var(--text-light); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
+        .info-value { font-size: 0.95rem; margin-top: 3px; color: var(--text); }
+
+        .file-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #2980b9;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            word-break: break-all;
+        }
+        .file-link.reviewed {
+            color: #8e44ad;
+        }
+        .file-link:hover { text-decoration: underline; }
+
+        .btn-update {
+            width: 100%;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 15px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: background 0.2s;
+        }
+        .btn-update:hover { background-color: var(--primary-dark); }
+
+        /* Dashboard Styles for Class View */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 2.2fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        @media (max-width: 900px) {
+            .dashboard-grid { grid-template-columns: 1fr; }
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: var(--shadow);
+            margin-bottom: 20px;
+        }
+        .stat-card h3 {
+            color: var(--primary);
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+            border-bottom: 2px solid var(--bg);
+            padding-bottom: 8px;
+        }
+
+        .freq-list { list-style: none; }
+        .freq-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px dashed var(--border);
+        }
+        .freq-item:last-child { border-bottom: none; }
+        .freq-name { font-weight: 600; }
+        .freq-count { 
+            background: #eef2ff; 
+            color: var(--primary); 
+            padding: 4px 12px; 
+            border-radius: 12px; 
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
+
+        /* Table Style */
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .history-table th, .history-table td {
+            padding: 12px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.9rem;
+        }
+        .history-table th {
+            background: var(--primary);
+            color: white;
+            font-weight: 600;
+        }
+        .history-table tr:hover { background: #f8fafc; }
+
+        .loading {
+            text-align: center;
+            font-weight: 600;
+            color: var(--text-light);
+            padding: 50px 20px;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.55);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(3px);
+        }
+        .modal-content {
+            background: white;
+            padding: 28px;
+            border-radius: 12px;
+            width: 92%;
+            max-width: 520px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal h2 { margin-bottom: 18px; color: var(--primary); font-size: 1.4rem; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 0.9rem; color: var(--text); }
+        .form-group input[type="text"], .form-group textarea, .form-group input[type="file"] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.95rem;
+        }
+        .form-group textarea { resize: vertical; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px; }
+        .btn-cancel { background: #e0e0e0; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+        .btn-save { background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+        .btn-save:hover { background: #219150; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>SỔ THEO DÕI GIẢNG DẠY GIÁO LÝ HÀNG TUẦN</h1>
+        <p>Trong tuần: Giáo lý viên cập nhật bài học & giáo án | Ban quản trị theo dõi & quản lý</p>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+        <button class="tab-btn active" onclick="switchTab('weeklyTab')">📅 Lịch Theo Tuần</button>
+        <button class="tab-btn" onclick="switchTab('classTab')">📊 Thống Kê Theo Lớp</button>
+    </div>
+
+    <!-- TAB 1: THEO TUẦN -->
+    <div id="weeklyTab" class="tab-content active">
+        <div class="controls">
+            <div class="date-picker">
+                <label for="weekSelect">Chủ Nhật Tuần Này: </label>
+                <input type="date" id="weekSelect" onchange="onDateChange()">
+            </div>
+            <div class="summary-badge" id="summary">Đang tải dữ liệu...</div>
+        </div>
+
+        <div class="grid-classes" id="classGrid">
+            <div class="loading">Đang tải danh sách các lớp từ hệ thống...</div>
+        </div>
+    </div>
+
+    <!-- TAB 2: THỐNG KÊ THEO LỚP -->
+    <div id="classTab" class="tab-content">
+        <div class="controls">
+            <div class="filter-group">
+                <label for="classSelectFilter">Chọn Lớp Cần Xem: </label>
+                <select id="classSelectFilter" onchange="renderClassDashboard()">
+                    <!-- Options JS -->
+                </select>
+            </div>
+            <div class="summary-badge" id="classSummaryBadge">Đang tổng hợp dữ liệu...</div>
+        </div>
+
+        <div class="dashboard-grid">
+            <!-- Cột trái: Tần suất giảng dạy -->
+            <div>
+                <div class="stat-card">
+                    <h3>🏆 Tần Suất Dạy Của Giáo Lý Viên</h3>
+                    <ul class="freq-list" id="teacherFreqList">
+                        <li style="color:#aaa;">Chưa có dữ liệu thống kê.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Cột phải: Lịch sử giảng dạy chi tiết -->
+            <div>
+                <div class="stat-card">
+                    <h3>📖 Lịch Sử Giảng Dạy Chi Tiết</h3>
+                    <div style="overflow-x: auto;">
+                        <table class="history-table">
+                            <thead>
+                                <tr>
+                                    <th>Ngày dạy</th>
+                                    <th>Giáo lý viên</th>
+                                    <th>Bài học</th>
+                                    <th>Giáo án</th>
+                                    <th>Giáo án chỉnh sửa</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody">
+                                <tr><td colspan="5" style="text-align:center;">Chưa có dữ liệu</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Cập Nhật -->
+<div class="modal" id="updateModal">
+    <div class="modal-content">
+        <h2 id="modalTitle">Cập nhật lớp</h2>
+        <input type="hidden" id="selectedClassId">
+        
+        <div class="form-group">
+            <label for="teacherName">Tên Giáo Lý Viên đứng lớp:</label>
+            <input type="text" id="teacherName" placeholder="Ví dụ: Huynh trưởng Nguyễn Văn A...">
+        </div>
+        
+        <div class="form-group">
+            <label for="lessonContent">Nội dung / Tên bài học Chủ Nhật:</label>
+            <textarea id="lessonContent" rows="3" placeholder="Ví dụ: Bài 5: Chúa Giêsu Yêu Thương Thiếu Nhi..."></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="lessonFile">📄 Giáo án / Tài liệu (Giáo Lý Viên):</label>
+            <input type="file" id="lessonFile">
+        </div>
+
+        <div class="form-group" style="border-top: 1px dashed var(--border); padding-top: 12px; margin-top: 12px;">
+            <label for="reviewedFile" style="color: #8e44ad;">✏️ Giáo án đã chỉnh sửa (Trưởng bộ môn):</label>
+            <input type="file" id="reviewedFile">
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeModal()">Hủy</button>
+            <button class="btn-save" id="btnSave" onclick="saveDataToGoogleSheet()">Lưu & Upload Giáo Án</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/common.js"></script>
+<script>
+    const CLASSES_LIST = [
+        'Chiên Con', 'Ấu 1', 'Ấu 2', 'Ấu 3',
+        'Thiếu 1', 'Thiếu 2', 'Thiếu 3',
+        'Nghĩa 1', 'Nghĩa 2', 'Nghĩa 3',
+        'Dự bị trưởng 1', 'Dự Bị Trưởng 2'
+    ];
+
+    let rawAllData = [];
+    let currentWeekData = {};
+
+    function getSundayOfCurrentWeek(d) {
+        const date = new Date(d);
+        const day = date.getDay();
+        const diff = date.getDate() + (day === 0 ? 0 : 7 - day);
+        const sunday = new Date(date.setDate(diff));
+        return toLocalDateString(sunday);
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        const sundayDate = getSundayOfCurrentWeek(new Date());
+        document.getElementById('weekSelect').value = sundayDate;
+        
+        const classSelect = document.getElementById('classSelectFilter');
+        classSelect.innerHTML = '';
+        CLASSES_LIST.forEach(cls => {
+            const opt = document.createElement('option');
+            opt.value = cls;
+            opt.innerText = 'Lớp ' + cls;
+            classSelect.appendChild(opt);
+        });
+
+        loadDataFromGoogleSheet();
+    });
+
+    function switchTab(tabId) {
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+        if (tabId === 'weeklyTab') {
+            document.querySelectorAll('.tab-btn')[0].classList.add('active');
+        } else {
+            document.querySelectorAll('.tab-btn')[1].classList.add('active');
+            renderClassDashboard();
+        }
+        document.getElementById(tabId).classList.add('active');
+    }
+
+    function onDateChange() {
+        const inputVal = document.getElementById('weekSelect').value;
+        if (inputVal) {
+            const normalizedSunday = getSundayOfCurrentWeek(inputVal);
+            document.getElementById('weekSelect').value = normalizedSunday;
+            processDataForWeeklyView();
+        }
+    }
+
+    async function loadDataFromGoogleSheet() {
+        document.getElementById('summary').innerText = 'Đang tải dữ liệu...';
+        document.getElementById('classGrid').innerHTML = '<div class="loading">Đang tải danh sách lớp từ hệ thống...</div>';
+
+        try {
+            const data = await api('/api/giangday');
+            rawAllData = Array.isArray(data) ? data : [];
+            processDataForWeeklyView();
+            renderClassDashboard();
+        } catch (err) {
+            renderGrid();
+            document.getElementById('summary').innerText = 'Lỗi kết nối Google Sheet: ' + err.message;
+        }
+    }
+
+    function processDataForWeeklyView() {
+        const selectedDate = document.getElementById('weekSelect').value;
+        currentWeekData = {};
+
+        rawAllData.forEach(item => {
+            if (item.date) {
+                let formattedItemDate = "";
+                if (typeof item.date === 'string' && item.date.includes('T')) {
+                    let d = new Date(item.date);
+                    let year = d.getFullYear();
+                    let month = String(d.getMonth() + 1).padStart(2, '0');
+                    let day = String(d.getDate()).padStart(2, '0');
+                    formattedItemDate = `${year}-${month}-${day}`;
+                } else {
+                    formattedItemDate = String(item.date).trim().split('T')[0];
+                }
+
+                if (formattedItemDate === selectedDate) {
+                    currentWeekData[String(item.className).trim()] = {
+                        teacher: item.teacher,
+                        lesson: item.lesson,
+                        fileUrl: item.fileUrl,
+                        reviewedFileUrl: item.reviewedFileUrl // Cập nhật trường mới
+                    };
+                }
+            }
+        });
+        renderGrid();
+    }
+
+    function renderGrid() {
+        const grid = document.getElementById('classGrid');
+        grid.innerHTML = '';
+        let updatedCount = 0;
+
+        CLASSES_LIST.forEach(className => {
+            const classData = currentWeekData[className];
+            const isUpdated = !!classData;
+
+            if (isUpdated) updatedCount++;
+
+            const teacherHtml = isUpdated ? escapeHtml(classData.teacher) : 'Chưa phân công';
+            const lessonHtml = isUpdated ? escapeHtml(classData.lesson) : 'Chưa có nội dung';
+            const fileUrl = isUpdated ? safeUrl(classData.fileUrl) : '';
+            const reviewedUrl = isUpdated ? safeUrl(classData.reviewedFileUrl) : '';
+
+            const card = document.createElement('div');
+            card.className = `card ${isUpdated ? 'updated' : ''}`;
+            card.innerHTML = `
+                <div>
+                    <h3>
+                        <span>${escapeHtml(className)}</span>
+                        <span class="status-badge">${isUpdated ? 'Đã cập nhật' : 'Chưa nhập'}</span>
+                    </h3>
+                    <div class="info-group">
+                        <div class="info-label">Giáo lý viên:</div>
+                        <div class="info-value"><strong>${teacherHtml}</strong></div>
+                    </div>
+                    <div class="info-group">
+                        <div class="info-label">Nội dung bài học:</div>
+                        <div class="info-value">${lessonHtml}</div>
+                    </div>
+                    <div class="info-group">
+                        <div class="info-label">Giáo án (GLV):</div>
+                        <div class="info-value">
+                            ${fileUrl ?
+                                `<a href="${fileUrl}" target="_blank" rel="noopener" class="file-link">📄 Xem giáo án</a>` :
+                                '<span style="color:#aaa;">Chưa đính kèm</span>'}
+                        </div>
+                    </div>
+                    <div class="info-group">
+                        <div class="info-label" style="color: #8e44ad;">Giáo án đã chỉnh sửa (TBM):</div>
+                        <div class="info-value">
+                            ${reviewedUrl ?
+                                `<a href="${reviewedUrl}" target="_blank" rel="noopener" class="file-link reviewed">✏️ Xem bản đã duyệt</a>` :
+                                '<span style="color:#aaa;">Chưa có bản chỉnh sửa</span>'}
+                        </div>
+                    </div>
+                </div>
+                <button class="btn-update" onclick="openModal('${className}')">
+                    ${isUpdated ? 'Sửa thông tin / Giáo án' : 'Cập nhật bài học'}
+                </button>
+            `;
+            grid.appendChild(card);
+        });
+
+        document.getElementById('summary').innerText = `Đã cập nhật: ${updatedCount}/${CLASSES_LIST.length} lớp`;
+    }
+
+    function renderClassDashboard() {
+        const selectedClass = document.getElementById('classSelectFilter').value;
+        const teacherFreqList = document.getElementById('teacherFreqList');
+        const historyTableBody = document.getElementById('historyTableBody');
+        
+        const classRecords = rawAllData.filter(item => String(item.className).trim() === selectedClass);
+        classRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        // 1. Tần suất GLV
+        const teacherCounts = {};
+        classRecords.forEach(rec => {
+            if (rec.teacher) {
+                const names = rec.teacher.split(',').map(n => n.trim());
+                names.forEach(name => {
+                    if (name) teacherCounts[name] = (teacherCounts[name] || 0) + 1;
+                });
+            }
+        });
+
+        const sortedTeachers = Object.keys(teacherCounts).map(name => ({
+            name: name,
+            count: teacherCounts[name]
+        })).sort((a, b) => b.count - a.count);
+
+        teacherFreqList.innerHTML = '';
+        if (sortedTeachers.length === 0) {
+            teacherFreqList.innerHTML = '<li style="color:#aaa; padding: 10px 0;">Chưa có lượt dạy nào được ghi nhận.</li>';
+        } else {
+            sortedTeachers.forEach(t => {
+                const li = document.createElement('li');
+                li.className = 'freq-item';
+                li.innerHTML = `
+                    <span class="freq-name">👤 ${escapeHtml(t.name)}</span>
+                    <span class="freq-count">${t.count} buổi</span>
+                `;
+                teacherFreqList.appendChild(li);
+            });
+        }
+
+        // 2. Bảng Lịch sử chi tiết (Có thêm cột Giáo án đã chỉnh sửa)
+        historyTableBody.innerHTML = '';
+        if (classRecords.length === 0) {
+            historyTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#aaa; padding: 20px;">Chưa có lịch sử giảng dạy.</td></tr>';
+        } else {
+            classRecords.forEach(rec => {
+                let formattedDate = rec.date ? String(rec.date).split('T')[0] : 'N/A';
+                const fileUrl = safeUrl(rec.fileUrl);
+                const reviewedUrl = safeUrl(rec.reviewedFileUrl);
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${escapeHtml(formattedDate)}</strong></td>
+                    <td>${escapeHtml(rec.teacher) || 'Chưa rõ'}</td>
+                    <td>${escapeHtml(rec.lesson) || 'Chưa cập nhật'}</td>
+                    <td>
+                        ${fileUrl ? `<a href="${fileUrl}" target="_blank" rel="noopener" class="file-link">📄 Giáo án gốc</a>` : '<span style="color:#aaa;">Chưa gửi</span>'}
+                    </td>
+                    <td>
+                        ${reviewedUrl ? `<a href="${reviewedUrl}" target="_blank" rel="noopener" class="file-link reviewed">✏️ Bản đã duyệt</a>` : '<span style="color:#aaa;">Chưa có</span>'}
+                    </td>
+                `;
+                historyTableBody.appendChild(tr);
+            });
+        }
+
+        document.getElementById('classSummaryBadge').innerText = `Tổng số buổi đã cập nhật: ${classRecords.length}`;
+    }
+
+    function openModal(className) {
+        const currentData = currentWeekData[className] || { teacher: '', lesson: '' };
+
+        document.getElementById('modalTitle').innerText = 'Cập nhật - Lớp ' + className;
+        document.getElementById('selectedClassId').value = className;
+        document.getElementById('teacherName').value = currentData.teacher;
+        document.getElementById('lessonContent').value = currentData.lesson;
+        document.getElementById('lessonFile').value = '';
+        document.getElementById('reviewedFile').value = '';
+
+        document.getElementById('updateModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+        document.getElementById('updateModal').style.display = 'none';
+    }
+
+    function readFileAsBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const base64String = reader.result.split(',')[1];
+                resolve({
+                    base64: base64String,
+                    filename: file.name,
+                    mimeType: file.type
+                });
+            };
+            reader.onerror = error => reject(error);
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async function saveDataToGoogleSheet() {
+        const selectedDate = document.getElementById('weekSelect').value;
+        const className = document.getElementById('selectedClassId').value;
+        const teacher = document.getElementById('teacherName').value.trim();
+        const lesson = document.getElementById('lessonContent').value.trim();
+        const fileInput = document.getElementById('lessonFile');
+        const reviewedFileInput = document.getElementById('reviewedFile');
+        const btnSave = document.getElementById('btnSave');
+
+        if (!teacher || !lesson) {
+            alert('Vui lòng nhập đầy đủ tên Giáo lý viên và Nội dung bài học!');
+            return;
+        }
+
+        btnSave.innerText = 'Đang lưu dữ liệu...';
+        btnSave.disabled = true;
+
+        let fileData = null;
+        let reviewedFileData = null;
+
+        try {
+            if (fileInput.files.length > 0) {
+                fileData = await readFileAsBase64(fileInput.files[0]);
+            }
+            if (reviewedFileInput.files.length > 0) {
+                reviewedFileData = await readFileAsBase64(reviewedFileInput.files[0]);
+            }
+        } catch (err) {
+            alert('Lỗi đọc file: ' + err.message);
+            btnSave.innerText = 'Lưu & Upload Giáo Án';
+            btnSave.disabled = false;
+            return;
+        }
+
+        const payload = {
+            date: selectedDate,
+            className: className,
+            teacher: teacher,
+            lesson: lesson,
+            fileData: fileData,
+            reviewedFileData: reviewedFileData // Đẩy thêm dữ liệu file đã duyệt
+        };
+
+        try {
+            const result = await api('/api/giangday', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            alert(result.message || 'Đã cập nhật thông tin thành công!');
+            closeModal();
+            setTimeout(loadDataFromGoogleSheet, 1500);
+        } catch (error) {
+            alert('Lỗi khi lưu dữ liệu: ' + error.message);
+            console.error(error);
+        } finally {
+            btnSave.innerText = 'Lưu & Upload Giáo Án';
+            btnSave.disabled = false;
+        }
+    }
+</script>
+
+</body>
+</html>
