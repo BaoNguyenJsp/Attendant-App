@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Học Sinh — Sổ Thiếu Nhi</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="/shared/style.css">
+</head>
+<body class="bg-slate-100 min-h-screen"
+      data-title="👥 Quản Lý Học Sinh"
+      data-sub="Thêm / sửa thiếu nhi theo lớp — admin mọi lớp · giáo viên lớp được phân công"
+      data-back="1"
+      data-role="any">
+
+<div id="shell"></div>
+
+<div class="max-w-7xl mx-auto px-4 pb-6">
+  <div class="bg-white rounded-xl shadow-sm p-5">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
+        <select id="hs-lop" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
+      <div class="flex items-end"><button id="add-student" class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg">＋ Thêm Học Sinh</button></div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="w-full text-sm border-collapse">
+        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+          <th class="p-3">Số CCCD</th><th class="p-3">Họ Và Tên</th><th class="p-3">Ngày Sinh</th><th class="p-3">Năm Nhập Học</th><th class="p-3">Trạng Thái</th><th class="p-3">Ghi Chú</th><th class="p-3">💾</th>
+        </tr></thead>
+        <tbody id="hs-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="hocsinh.js"></script>
+</body>
+</html>

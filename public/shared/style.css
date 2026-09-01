@@ -1,0 +1,39 @@
+/* ===== login gate ===== */
+.gate{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1e3c72,#2a5298);padding:1rem;z-index:50}
+.gate-box{background:#fff;border-radius:16px;box-shadow:0 25px 50px -12px rgba(0,0,0,.5);padding:2rem;max-width:30rem;width:100%;border:1px solid #e2e8f0}
+.gate-icon{display:inline-flex;align-items:center;justify-content:center;width:4rem;height:4rem;background:#dbeafe;color:#1e3c72;border-radius:99px;font-size:1.6rem;margin-bottom:.75rem}
+.gate select{width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:.6rem;font-size:.9rem;background:#fff}
+
+/* ===== tabs ===== */
+.tab-btn{background:none;border:none;padding:.55rem 1rem;font-size:.85rem;font-weight:600;color:#64748b;cursor:pointer;border-bottom:3px solid transparent}
+.tab-btn:hover{color:#1e3c72}
+.tab-btn.active{border-bottom:3px solid #1e3c72;color:#1e3c72;font-weight:700}
+
+.attendance-checkbox{width:1.2rem;height:1.2rem;cursor:pointer;accent-color:#1e3c72}
+
+/* ===== badges ===== */
+.badge{display:inline-block;padding:.15rem .55rem;border-radius:99px;font-size:.72rem;font-weight:700;margin-right:.25rem}
+.b-class{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe}
+.b-sector{background:#fef3c7;color:#92400e;border:1px solid #fde68a}
+.b-exec{background:#ede9fe;color:#5b21b6;border:1px solid #ddd6fe}
+.b-admin{background:#fce7f3;color:#9d174d;border:1px solid #fbcfe8}
+
+/* role-restricted UI — hidden until session known */
+.exec-only,.admin-only{display:none}
+
+@media print{
+  .no-print{display:none!important}
+  .print-area{box-shadow:none!important;border:1px solid #ddd}
+}
+
+/* ===== loading overlay ===== */
+.loading-overlay{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:rgba(248,250,252,.88);opacity:0;pointer-events:none;transition:opacity .12s ease}
+.loading-overlay.active{opacity:1;pointer-events:auto}
+.loading-box{display:flex;flex-direction:column;align-items:center;gap:.6rem}
+.loading-spinner{width:40px;height:40px;border-radius:99px;border:4px solid #bfdbfe;border-top-color:#1e3c72;animation:loading-spin .7s linear infinite}
+.loading-text{font-weight:600;color:#475569}
+@keyframes loading-spin{to{transform:rotate(360deg)}}
+
+/* nội dung trang ẩn đến khi mọi component render xong (.ready do common.js gán) */
+body[data-role]:not(.ready){visibility:hidden}
+body[data-role]:not(.ready) .loading-overlay{visibility:visible}

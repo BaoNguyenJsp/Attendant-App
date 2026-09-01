@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Học Tập — Sổ Thiếu Nhi</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="/shared/style.css">
+</head>
+<body class="bg-slate-100 min-h-screen"
+      data-title="🎓 Quản Lý Học Tập Thiếu Nhi"
+      data-sub="Nhập điểm · Trích lục học bạ · Tổng hợp & xếp loại · Khen thưởng"
+      data-back="1"
+      data-role="any">
+
+<div id="shell"></div>
+
+<div class="max-w-7xl mx-auto px-4 pb-6">
+  <div class="bg-white rounded-t-xl border-b border-slate-300 shadow-sm px-4 pt-2 flex flex-wrap">
+    <button class="tab-btn active" data-tab="t-nhap">✏️ Nhập Điểm</button>
+    <button class="tab-btn" data-tab="t-hbt">🔎 Trích Lục Học Bạ</button>
+    <button class="tab-btn" data-tab="t-tonghop">📊 Tổng Hợp & Xếp Loại</button>
+    <button class="tab-btn" data-tab="t-kt">🏆 Khen Thưởng</button>
+  </div>
+
+  <!-- t-nhap -->
+  <div id="t-nhap" class="bg-white rounded-b-xl shadow-sm p-5" data-pane>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Năm Học</label>
+        <select id="nh-nam" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
+        <select id="nh-lop" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
+      <div class="flex items-end"><button id="add-student" class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg">＋ Thêm Thiếu Nhi Mới Vô Lớp</button></div>
+      <div class="flex items-end"><button id="save-scores" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-lg">💾 Lưu Điểm</button></div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="w-full text-sm border-collapse">
+        <thead>
+          <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+            <th class="p-3" rowspan="2">STT</th><th class="p-3" rowspan="2">Số CCCD</th><th class="p-3" rowspan="2">Họ Và Tên</th>
+            <th class="p-3" colspan="2">Học Kỳ I</th><th class="p-3" colspan="2">Học Kỳ II</th>
+          </tr>
+          <tr class="bg-blue-800 text-white text-xs uppercase font-bold text-center">
+            <th class="p-2">Điểm 15'</th><th class="p-2">Kiểm Tra HK</th><th class="p-2">Điểm 15'</th><th class="p-2">Kiểm Tra HK</th>
+          </tr>
+        </thead>
+        <tbody id="nh-tbody"></tbody>
+      </table>
+    </div>
+    <p class="text-xs text-slate-500 mt-3">ĐTB học kỳ = (15' + 2×HK)/3 · ĐTB năm = (HK1 + 2×HK2)/3 — tính phía máy chủ. Khóa ghi đè = (SchoolYear, ClassName) (FR-HB-07).</p>
+  </div>
+
+  <!-- t-hbt -->
+  <div id="t-hbt" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
+      <div class="md:col-span-2"><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Số CCCD / Định danh</label>
+        <input type="text" id="hbt-id" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold" placeholder="vd: 079212300101"></div>
+      <div><button id="hbt-search" class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-6 py-2.5 rounded-lg">🔎 Tra cứu</button></div>
+    </div>
+    <div id="hbt-out"></div>
+  </div>
+
+  <!-- t-tonghop -->
+  <div id="t-tonghop" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Năm Học</label>
+        <select id="th-nam" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
+        <select id="th-lop" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
+      <div class="flex items-end"><button id="th-excel" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-2.5 rounded-lg">⬇ Xuất Excel</button></div>
+      <div class="flex items-end"><button id="th-print" class="w-full bg-slate-700 hover:bg-slate-800 text-white font-bold px-4 py-2.5 rounded-lg">🖨 In</button></div>
+    </div>
+    <p class="exec-only text-sm mb-3" style="text-align:right"><button id="th-toandoan" class="bg-pink-100 hover:bg-pink-200 text-pink-900 font-bold text-sm px-4 py-2 rounded-lg">📊 Xếp loại toàn đoàn 🔒 BQT+</button></p>
+    <div style="overflow-x:auto">
+      <table class="w-full text-sm border-collapse" id="th-table">
+        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center" id="th-head"></tr></thead>
+        <tbody id="th-tbody"></tbody>
+      </table>
+    </div>
+    <p class="text-xs text-slate-500 mt-3" id="th-note"></p>
+  </div>
+
+  <!-- t-kt -->
+  <div id="t-kt" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Năm Học</label>
+        <select id="kt-nam" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
+        <select id="kt-lop" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
+      <div class="flex gap-3">
+        <button id="kt-excel" class="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-2.5 rounded-lg">⬇ Excel</button>
+        <button id="kt-print" class="flex-1 bg-slate-700 hover:bg-slate-800 text-white font-bold px-4 py-2.5 rounded-lg">🖨 In</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="w-full text-sm border-collapse" id="kt-table">
+        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+          <th class="p-3">STT</th><th class="p-3">Số CCCD</th><th class="p-3">Họ Tên</th><th class="p-3">Lớp</th><th class="p-3">ĐTB Năm</th><th class="p-3">% Chuyên Cần</th><th class="p-3">Danh Hiệu</th>
+        </tr></thead>
+        <tbody id="kt-tbody"></tbody>
+      </table>
+    </div>
+    <p class="text-xs text-slate-500 mt-3">Danh sách lấy từ kết quả <b>Tổng hợp & xếp loại</b>: học sinh đạt Xếp loại <b>Giỏi</b> (ĐTB năm ≥ 8) <u>và</u> chuyên cần ≥ 80% (FR-HB-12).</p>
+  </div>
+</div>
+
+<script type="module" src="hocba.js"></script>
+</body>
+</html>

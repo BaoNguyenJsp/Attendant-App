@@ -2,81 +2,30 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sổ Thiếu Nhi — Giáo xứ Nghĩa Hòa</title>
-<style>
-  * { box-sizing: border-box; margin: 0; }
-  body { font-family: system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-  .card { background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,.08); padding: 32px; width: 340px; text-align: center; }
-  h1 { font-size: 20px; color: #1e293b; margin-bottom: 4px; }
-  p.sub { color: #64748b; font-size: 13px; margin-bottom: 20px; }
-  input { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 10px; font-size: 14px; }
-  button { width: 100%; padding: 10px; border: 0; border-radius: 8px; background: #2563eb; color: #fff; font-size: 14px; cursor: pointer; }
-  button:hover { background: #1d4ed8; }
-  .err { color: #dc2626; font-size: 13px; margin-bottom: 10px; min-height: 18px; }
-  .apps { display: grid; gap: 12px; }
-  .apps a { display: block; padding: 16px; border: 1px solid #e2e8f0; border-radius: 10px; text-decoration: none; color: #1e293b; font-weight: 600; }
-  .apps a:hover { border-color: #2563eb; color: #2563eb; }
-  .logout { margin-top: 16px; background: transparent; color: #dc2626; border: 1px solid #dc2626; }
-  #logoutBtn { display: none; }
-</style>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="/shared/style.css">
 </head>
-<body>
-  <div class="card">
-    <div id="loginBox">
-      <h1>📖 Sổ Thiếu Nhi</h1>
-      <p class="sub">Giáo xứ Nghĩa Hòa</p>
-      <form id="loginForm">
-        <input type="text" id="id" placeholder="Tên đăng nhập" autocomplete="username" required>
-        <input type="password" id="pass" placeholder="Mật khẩu" autocomplete="current-password" required>
-        <div class="err" id="err"></div>
-        <button type="submit">Đăng nhập</button>
-      </form>
-    </div>
-    <div id="appBox" style="display:none">
-      <h1>📖 Sổ Thiếu Nhi</h1>
-      <p class="sub">Chọn ứng dụng</p>
-      <div class="apps">
-        <a href="/giangday.html">Sổ giảng dạy</a>
-        <a href="/diemdanh.html">Sổ điểm danh</a>
-        <a href="/hocba.html">Sổ học bạ</a>
-      </div>
-      <button id="logoutBtn" class="logout">Đăng xuất</button>
-    </div>
+<body class="bg-slate-100 min-h-screen"
+      data-title="Sổ Thiếu Nhi — Giáo xứ Nghĩa Hòa"
+      data-sub="Điểm danh · Giảng dạy · Học bạ · Giáo viên · Quản trị"
+      data-yearbar="1"
+      data-role="any">
+
+<div id="shell"></div>
+
+<div class="max-w-7xl mx-auto px-4 pb-6">
+  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mt-6">
+    <a href="/giangday/" class="bg-white rounded-xl shadow-sm border-2 border-blue-900 p-5 text-center cursor-pointer hover:-translate-y-1 transition no-underline"><div class="text-3xl">📕</div><h3 class="font-bold mt-2 text-slate-800">Giảng dạy</h3><p class="text-xs text-slate-500 mt-1">Lịch · giáo án theo tuần</p></a>
+    <a href="/diemdanh/" class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 text-center cursor-pointer hover:-translate-y-1 transition no-underline"><div class="text-3xl">✅</div><h3 class="font-bold mt-2 text-slate-800">Chuyên cần</h3><p class="text-xs text-slate-500 mt-1">Điểm danh · trích lục · thống kê</p></a>
+    <a href="/hocba/" class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 text-center cursor-pointer hover:-translate-y-1 transition no-underline"><div class="text-3xl">🎓</div><h3 class="font-bold mt-2 text-slate-800">Học tập</h3><p class="text-xs text-slate-500 mt-1">Điểm · học bạ · tổng hợp</p></a>
+    <a href="/hocsinh/" class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 text-center cursor-pointer hover:-translate-y-1 transition no-underline"><div class="text-3xl">👥</div><h3 class="font-bold mt-2 text-slate-800">Học sinh</h3><p class="text-xs text-slate-500 mt-1">Thêm/sửa thiếu nhi theo lớp</p></a>
+    <a href="/giaovien/" class="exec-only bg-white rounded-xl shadow-sm border border-slate-200 p-5 text-center cursor-pointer hover:-translate-y-1 transition no-underline"><div class="text-3xl">🧑‍🏫</div><h3 class="font-bold mt-2 text-slate-800">Giáo viên</h3><p class="text-xs text-slate-500 mt-1">BCH ngành / Xứ đoàn</p></a>
+    <a href="/admin/" class="admin-only bg-white rounded-xl shadow-sm border border-slate-200 p-5 text-center cursor-pointer hover:-translate-y-1 transition no-underline"><div class="text-3xl">⚙</div><h3 class="font-bold mt-2 text-slate-800">Quản trị</h3><p class="text-xs text-slate-500 mt-1">Users · Nhóm · Phân công</p></a>
   </div>
-<script src="/js/common.js"></script>
-<script>
-  const $ = id => document.getElementById(id);
-  async function checkSession() {
-    try {
-      const d = await api('/api/session');
-      if (d.status === 'success') showApps();
-    } catch {}
-  }
-  function showApps() {
-    $('loginBox').style.display = 'none';
-    $('appBox').style.display = 'block';
-    $('logoutBtn').style.display = 'block';
-  }
-  $('loginForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    $('err').textContent = '';
-    try {
-      await api('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: $('id').value, pass: $('pass').value })
-      });
-      showApps();
-    } catch (err) {
-      $('err').textContent = err.message;
-    }
-  });
-  $('logoutBtn').addEventListener('click', async () => {
-    await api('/api/logout', { method: 'POST' });
-    location.reload();
-  });
-  checkSession();
-</script>
+</div>
+
+<script type="module" src="index.js"></script>
 </body>
 </html>

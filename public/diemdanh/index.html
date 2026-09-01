@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chuyên Cần — Sổ Thiếu Nhi</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="/shared/style.css">
+</head>
+<body class="bg-slate-100 min-h-screen"
+      data-title="✅ Quản Lý Chuyên Cần"
+      data-sub="Điểm danh · Trích lục · Thống kê lớp · Toàn đoàn"
+      data-back="1"
+      data-role="any">
+
+<div id="shell"></div>
+
+<div class="max-w-7xl mx-auto px-4 pb-6">
+  <div class="bg-white rounded-t-xl border-b border-slate-300 shadow-sm px-4 pt-2 flex flex-wrap">
+    <button class="tab-btn active" data-tab="t-dd">📝 Điểm Danh</button>
+    <button class="tab-btn" data-tab="t-tl">🔎 Trích Lục CCCD</button>
+    <button class="tab-btn" data-tab="t-tk">📈 Thống Kê Lớp</button>
+    <button class="tab-btn exec-only" data-tab="t-toandoan">🌐 Toàn Đoàn 🔒</button>
+  </div>
+
+  <!-- t-dd -->
+  <div id="t-dd" class="bg-white rounded-b-xl shadow-sm p-5" data-pane>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
+        <select id="dd-lop" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></select></div>
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Tuần (Chủ Nhật)</label>
+        <input type="date" id="dd-week" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></div>
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Buổi Sinh Hoạt</label>
+        <select id="dd-buoi" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></select></div>
+      <div class="flex items-end"><button id="dd-markall" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-lg">✓ Đánh dấu tất cả có mặt</button></div>
+    </div>
+
+    <div id="dd-holiday-note"></div>
+
+    <div style="overflow-x:auto">
+      <table class="w-full text-sm border-collapse">
+        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+          <th class="p-3">STT</th><th class="p-3">Họ Và Tên</th>
+          <th class="p-3">Hiện Diện</th><th class="p-3">Có Phép</th><th class="p-3">Ghi Chú</th>
+        </tr></thead>
+        <tbody id="dd-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="mt-5 flex justify-between items-center flex-wrap gap-3">
+      <div class="flex gap-3 flex-wrap items-center">
+        <span class="font-bold text-slate-700" id="dd-summary"></span>
+        <span id="dd-dirty" class="bg-amber-100 border border-amber-400 text-amber-800 font-bold px-3 py-1.5 rounded-lg" style="display:none">⚠ Đã sửa chưa lưu</span>
+      </div>
+      <div class="flex gap-3 flex-wrap">
+        <button id="dd-refresh" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-5 py-3 rounded-lg">↻ Làm mới</button>
+        <button id="dd-save" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3 rounded-lg">💾 Lưu Điểm Danh</button>
+      </div>
+    </div>
+    <p class="text-xs text-slate-500 mt-3">Khóa ghi đè = (SchoolYear, WeekOf, Session, ClassName) — lưu lại là ghi đè nguyên cụm (FR-DD-11). Tuần trong tab <b>Holidays</b> bị loại khỏi mẫu số chuyên cần.</p>
+  </div>
+
+  <!-- t-tl -->
+  <div id="t-tl" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
+      <div class="md:col-span-2"><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Số CCCD / Định danh</label>
+        <input type="text" id="tl-id" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold" placeholder="vd: 079212300101"></div>
+      <div><button id="tl-search" class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-6 py-2.5 rounded-lg">🔎 Tra cứu</button></div>
+    </div>
+    <div id="tl-out"></div>
+    <p class="text-xs text-slate-500">Tra toàn bộ lịch sử điểm danh + điểm của học sinh theo CCCD — giữ nguyên cả tuần nghỉ để tra cứu đầy đủ (FR-DD-17).</p>
+  </div>
+
+  <!-- t-tk -->
+  <div id="t-tk" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
+        <select id="tk-lop" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></select></div>
+      <div class="md:col-span-2 flex items-end gap-3">
+        <button id="tk-excel" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-6 py-2.5 rounded-lg">⬇ Xuất Excel</button>
+        <button id="tk-print" class="bg-slate-700 hover:bg-slate-800 text-white font-bold px-6 py-2.5 rounded-lg">🖨 In</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="w-full text-sm border-collapse" id="tk-table">
+        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+          <th class="p-3">STT</th><th class="p-3">Họ Tên</th><th class="p-3">Lễ Chúa Nhật</th><th class="p-3">Học Giáo Lý</th><th class="p-3">Chầu Thánh Thể</th><th class="p-3">Lễ Thứ Năm</th><th class="p-3">Trung Bình</th>
+        </tr></thead>
+        <tbody id="tk-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- t-toandoan -->
+  <div id="t-toandoan" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div class="bg-blue-50 border border-blue-200 p-5 rounded-xl text-center"><div class="text-xs font-bold text-blue-700 uppercase">Tổng Thiếu Nhi</div><div class="text-3xl font-extrabold text-blue-900" id="td-total">—</div></div>
+      <div class="bg-emerald-50 border border-emerald-200 p-5 rounded-xl text-center"><div class="text-xs font-bold text-emerald-700 uppercase">Hiện Diện Chúa Nhật TB</div><div class="text-3xl font-extrabold text-emerald-900" id="td-sun">—</div></div>
+      <div class="bg-amber-50 border border-amber-200 p-5 rounded-xl text-center"><div class="text-xs font-bold text-amber-700 uppercase">Hiện Diện Thứ Năm TB</div><div class="text-3xl font-extrabold text-amber-900" id="td-thu">—</div></div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="w-full text-sm border-collapse" id="td-table">
+        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+          <th class="p-3">Lớp</th><th class="p-3">Sĩ Số</th><th class="p-3">Lễ CN</th><th class="p-3">Giáo Lý</th><th class="p-3">Chầu TT</th><th class="p-3">Lễ T5</th><th class="p-3">Trung Bình</th><th class="p-3">Xếp Loại</th>
+        </tr></thead>
+        <tbody id="td-tbody"></tbody>
+      </table>
+    </div>
+    <div class="mt-4 flex gap-3 flex-wrap">
+      <button id="td-excel" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-6 py-3 rounded-lg">⬇ Xuất Excel</button>
+      <button id="td-print" class="bg-slate-700 hover:bg-slate-800 text-white font-bold px-6 py-3 rounded-lg">🖨 In</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="diemdanh.js"></script>
+</body>
+</html>

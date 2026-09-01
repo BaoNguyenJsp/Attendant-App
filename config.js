@@ -1,10 +1,14 @@
-module.exports = {
-  port: process.env.PORT || 3000,
-  apps: {
-    giangday: { url: 'https://script.google.com/macros/s/AKfycbwb56a_hMrS_uq1ZpioY4AVLQonsjpNkj8CbRp0CiJjEgEHr1KXS5QU-yNcPzPVVxc/exec' },
-    diemdanh: { url: 'https://script.google.com/macros/s/AKfycby4XRzShFYEXmBlL_92tmrnas1V7byqeWOIpvvcoS0mnRbtGThZj1RfDiulQy2AnDqa/exec' },
-    hocba:    { url: 'https://script.google.com/macros/s/AKfycby9vA1LnFm5Sc6fzy1eSqshtlFkfqPQftQFAwTOEJR7fuZGt-bYVQrm97f5-Df5co2u/exec' }
-  },
-  admin: { id: process.env.ADMIN_ID || 'glv123', pass: process.env.ADMIN_PASS || 'nghiahoa2026' },
-  appScriptToken: process.env.APP_SCRIPT_TOKEN || 'change-me'
+'use strict';
+
+// Cấu hình từ biến môi trường (có mặc định dev để chạy local).
+const cfg = {
+  port: +process.env.PORT || 3000,
+  oauthClientId: process.env.OAUTH_CLIENT_ID || '406754557714-mfo0spn6jc8b9bvkh8b34gcv9ot2m3g9.apps.googleusercontent.com',
+  oauthClientSecret: process.env.OAUTH_CLIENT_SECRET || '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',
+  oauthRedirectUri: process.env.OAUTH_REDIRECT_URI || 'http://localhost:3000/auth/callback',
+  sessionSecret: process.env.SESSION_SECRET || require('crypto').randomBytes(32).toString('hex'),
+  appsScriptUrl: process.env.APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwAKUDrFieYXAshenjrxAKhMYDYBP9KffK54tCyNAbrO6EmaRExYYpPf_KRt1wh0HmPLA/exec',
+  sharedToken: process.env.SHARED_TOKEN || 'dev-shared-token'
 };
+
+module.exports = cfg;

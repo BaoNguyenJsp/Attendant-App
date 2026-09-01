@@ -1,13 +1,19 @@
 {
-  "name": "so-thieu-nhi-attendant",
+  "name": "so-thieu-nhi",
   "version": "1.0.0",
   "private": true,
-  "description": "Sổ Thiếu Nhi — 3 apps behind one Express proxy + login",
+  "description": "Sổ Thiếu Nhi — quản lý giáo xứ (Node proxy + Apps Script + Google Sheets)",
   "main": "server.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "selfcheck": "node server.js --selfcheck"
   },
   "dependencies": {
+    "cookie-session": "^2.1.0",
     "express": "^4.19.2"
   }
 }

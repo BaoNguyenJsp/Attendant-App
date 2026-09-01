@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quản Trị — Sổ Thiếu Nhi</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="/shared/style.css">
+</head>
+<body class="bg-slate-100 min-h-screen"
+      data-title="⚙ Quản Trị"
+      data-sub="Giáo viên · Nhóm · Phân công · Lớp · Nghỉ lễ · Quyền truy cập · Chuyển năm học"
+      data-back="1"
+      data-role="admin">
+
+<div id="shell"></div>
+
+<div class="max-w-7xl mx-auto px-4 pb-6">
+  <div class="bg-white rounded-t-xl border-b border-slate-300 shadow-sm px-4 pt-2 flex flex-wrap">
+    <button class="tab-btn active" data-tab="t-us">👤 Giáo viên</button>
+    <button class="tab-btn" data-tab="t-grp">🗂 Nhóm</button>
+    <button class="tab-btn" data-tab="t-asg">🔗 Phân công</button>
+    <button class="tab-btn" data-tab="t-cls">🏫 Lớp</button>
+    <button class="tab-btn" data-tab="t-hol">🗓 Nghỉ Lễ</button>
+    <button class="tab-btn" data-tab="t-perm">🔐 Quyền truy cập</button>
+    <button class="tab-btn" data-tab="t-year">🎓 Chuyển năm</button>
+  </div>
+
+  <!-- t-us -->
+  <div id="t-us" class="bg-white rounded-b-xl shadow-sm p-5" data-pane>
+    <h2 class="font-bold text-lg mb-3">Users — đăng nhập bằng Gmail (thêm bằng email, không có mật khẩu tự quản)</h2>
+    <div style="overflow-x:auto">
+      <table class="w-full text-sm border-collapse">
+        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+          <th class="p-3">Email</th><th class="p-3">Họ Tên</th><th class="p-3">Nhóm (GroupMembers)</th><th class="p-3">Trạng thái</th><th class="p-3"></th>
+        </tr></thead>
+        <tbody id="us-tbody"></tbody>
+      </table>
+    </div>
+    <p class="mt-4"><button id="us-add" class="bg-blue-900 hover:bg-blue-800 text-white font-bold px-5 py-2.5 rounded-lg">＋ Thêm giáo viên / người dùng</button></p>
+    <p class="text-xs text-slate-500">Khóa một email → email đó bị từ chối khi đăng nhập (FR-ADM-03). Quyền suy ra từ nhóm — không khai vai trò.</p>
+  </div>
+
+  <!-- t-grp -->
+  <div id="t-grp" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+    <h2 class="font-bold text-lg mb-3">Nhóm — nhóm mặc định, 4 loại (§2.3)</h2>
+    <div style="overflow-x:auto">
+      <table class="w-full text-sm border-collapse">
+        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+          <th class="p-3">Nhóm</th><th class="p-3">Loại</th><th class="p-3">Scope (lớp mở rộng)</th>
+        </tr></thead>
+        <tbody id="grp-tbody"></tbody>
+      </table>
+    </div>
+    <p class="text-xs text-slate-500 mt-3">class = nhóm lớp · sector = ngành · exec = Ban chấp hành ngành [BQT] · admin = Xứ đoàn.</p>
+  </div>
+
+  <!-- t-asg -->
+  <div id="t-asg" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+    <h2 class="font-bold text-lg mb-3">Phân Công — GroupMembers (1 dòng = 1 quan hệ user ↔ nhóm)</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Nhóm</label><select id="asg-group" class="w-full border p-2.5 rounded-lg"></select></div>
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Giáo viên (email)</label><select id="asg-user" class="w-full border p-2.5 rounded-lg"></select></div>
+      <div><button id="asg-add" class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg">＋ Thêm</button></div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="w-full text-sm border-collapse">
+        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center"><th class="p-3">Nhóm</th><th class="p-3">Email</th><th class="p-3"></th></tr></thead>
+        <tbody id="asg-tbody"></tbody>
+      </table>
+    </div>
+    <p class="text-xs text-slate-500 mt-3">Thành viên nhóm có ngay mọi quyền của nhóm đó — không có phân công theo năm học (FR-ADM-05).</p>
+  </div>
+
+  <!-- t-cls -->
+  <div id="t-cls" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+    <h2 class="font-bold text-lg mb-3">Danh Sách Lớp Học — thứ tự dòng = thứ tự lên lớp khi chuyển năm (FR-ADM-01)</h2>
+    <div style="overflow-x:auto">
+      <table class="w-full text-sm border-collapse">
+        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+          <th class="p-3">#</th><th class="p-3">Tên Lớp</th><th class="p-3">Khối</th><th class="p-3">Sĩ số (Hoạt động)</th>
+        </tr></thead>
+        <tbody id="cls-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- t-hol -->
+  <div id="t-hol" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+    <h2 class="font-bold text-lg mb-3">🗓 Nghỉ Lễ / Kỷ Niệm — loại khỏi mẫu số chuyên cần</h2>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Năm Học</label><select id="hol-nam" class="w-full border p-2.5 rounded-lg"></select></div>
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Tuần (Chủ Nhật)</label><input type="date" id="hol-week" class="w-full border p-2.5 rounded-lg"></div>
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Buổi (để trống = nghỉ cả tuần)</label><select id="hol-session" class="w-full border p-2.5 rounded-lg"><option value="">— Cả tuần —</option></select></div>
+      <div class="flex gap-2">
+        <button id="hol-add" class="flex-1 bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg">＋ Thêm</button>
+        <button id="hol-del" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2.5 rounded-lg">🗑 Xóa</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="w-full text-sm border-collapse">
+        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center"><th class="p-3">Tuần</th><th class="p-3">Buổi</th><th class="p-3">Lý do</th></tr></thead>
+        <tbody id="hol-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- t-perm -->
+  <div id="t-perm" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+    <h2 class="font-bold text-lg mb-3">Quyền Truy Cập — Giáo viên × Nhóm kèm phạm vi mở rộng (FR-ADM-06)</h2>
+    <p class="text-xs text-slate-500 mt-0 mb-3">Phạm vi = hợp các nhóm; cấp quyền = nhóm cao nhất admin &gt; exec &gt; sector &gt; class.</p>
+    <div style="overflow-x:auto">
+      <table class="w-full text-sm border-collapse">
+        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center" id="perm-head"></tr></thead>
+        <tbody id="perm-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- t-year -->
+  <div id="t-year" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+    <h2 class="font-bold text-lg mb-3">🎓 Chuyển Năm Học (startSchoolYear)</h2>
+    <ul class="space-y-1 text-sm text-slate-600 list-disc ml-5">
+      <li>① Lên lớp học sinh theo thứ tự dòng tab Lớp; lớp cuối → <b>Tốt nghiệp</b>. Học lại → chỉnh tay.</li>
+      <li>② Nhóm và thành viên giữ nguyên (không có phân công theo năm).</li>
+      <li>③ Điểm + điểm danh giữ nguyên để tra theo SchoolYear — năm mới ghi dòng mới.</li>
+      <li>④ Giáo án giảng dạy giữ lại để tham khảo. Không xóa dữ liệu gì.</li>
+    </ul>
+    <p class="mt-5"><button id="year-start" class="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-lg">▶ Chuyển sang năm học kế tiếp</button></p>
+  </div>
+</div>
+
+<script type="module" src="admin.js"></script>
+</body>
+</html>

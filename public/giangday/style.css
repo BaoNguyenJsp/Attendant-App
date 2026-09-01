@@ -1,0 +1,34 @@
+/* ===== giảng dạy (S3) — custom CSS theo app hiện hành ===== */
+.gd-title{color:var(--primary,#1e3c72);font-size:1.05rem;font-weight:700}
+.grid-classes{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem}
+.card{background:#fff;border:1px solid #e2e8f0;border-top:5px solid #e74c3c;border-radius:10px;padding:1rem 1.1rem;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.card.updated{border-top-color:#27ae60}
+.card-head{display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem}
+.card-head h3{margin:0;color:#122548;font-size:1.05rem}
+.status-badge{font-size:.72rem;font-weight:700;padding:.2rem .6rem;border-radius:99px;background:#fee2e2;color:#b91c1c}
+.status-badge.updated{background:#d1fae5;color:#065f46}
+.info{display:flex;justify-content:space-between;gap:.5rem;padding:.3rem 0;border-bottom:1px dashed #e2e8f0;font-size:.85rem}
+.info span{color:#64748b;flex-shrink:0}
+.info b{text-align:right}
+.file-link{color:#2563eb;font-weight:600;text-decoration:none;word-break:break-all;text-align:right}
+.file-link.reviewed{color:#8e44ad}
+.btn-update{margin-top:.7rem;width:100%;background:#1e3c72;color:#fff;border:none;border-radius:8px;padding:.55rem;font-weight:700;cursor:pointer}
+.btn-update:hover{background:#122548}
+.summary-badge{font-size:.85rem;color:#475569;background:#f1f5f9;padding:.4rem .8rem;border-radius:99px}
+.dashboard-grid{display:grid;grid-template-columns:1fr 2.2fr;gap:1rem}
+.freq-list{list-style:none;margin:0;padding:0}
+.freq-list li{display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px dashed #e2e8f0;font-size:.88rem}
+.freq-count{font-weight:800;color:#1e3c72}
+.history-table{width:100%;border-collapse:collapse;font-size:.85rem}
+.history-table thead th{background:#1e3c72;color:#fff;padding:.5rem;text-align:center;font-size:.72rem;text-transform:uppercase}
+.history-table td{padding:.5rem;border:1px solid #e2e8f0}
+.modal{display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:100;align-items:flex-start;justify-content:center;padding:2rem 1rem;overflow-y:auto}
+.modal.open{display:flex}
+.modal-content{background:#fff;border-radius:14px;padding:1.5rem;max-width:34rem;width:100%;box-shadow:0 25px 50px -12px rgba(0,0,0,.4)}
+.form-group{margin-bottom:.9rem}
+.form-group label{display:block;font-size:.8rem;font-weight:700;color:#334155;margin-bottom:.3rem}
+.form-group input[type=text],.form-group textarea{width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:.55rem;font-size:.9rem}
+.modal-actions{display:flex;justify-content:flex-end;gap:.6rem;margin-top:1rem}
+.btn-cancel{background:#e2e8f0;color:#334155;border:none;border-radius:8px;padding:.6rem 1.1rem;font-weight:700;cursor:pointer}
+.btn-save{background:#27ae60;color:#fff;border:none;border-radius:8px;padding:.6rem 1.1rem;font-weight:700;cursor:pointer}
+.btn-save:hover{background:#1e8a4e}
