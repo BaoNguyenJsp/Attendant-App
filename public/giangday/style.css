@@ -1,17 +1,28 @@
 /* ===== giảng dạy (S3) — custom CSS theo app hiện hành ===== */
 .gd-title{color:var(--primary,#1e3c72);font-size:1.05rem;font-weight:700}
 .grid-classes{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem}
-.card{background:#fff;border:1px solid #e2e8f0;border-top:5px solid #e74c3c;border-radius:10px;padding:1rem 1.1rem;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.card{background:#fff;border:1px solid #e2e8f0;border-top:5px solid #e74c3c;border-radius:10px;padding:1rem 1.1rem;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-direction:column;justify-content:space-between;transition:border-top-color .3s ease}
 .card.updated{border-top-color:#27ae60}
-.card-head{display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem}
-.card-head h3{margin:0;color:#122548;font-size:1.05rem}
-.status-badge{font-size:.72rem;font-weight:700;padding:.2rem .6rem;border-radius:99px;background:#fee2e2;color:#b91c1c}
+#cards .card h3{display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin:0 0 .6rem;color:#122548;font-size:1.05rem}
+.status-badge{font-size:.72rem;font-weight:700;padding:.2rem .6rem;border-radius:99px;background:#fee2e2;color:#b91c1c;width:fit-content;text-align:center;flex-shrink:0}
 .status-badge.updated{background:#d1fae5;color:#065f46}
-.info{display:flex;justify-content:space-between;gap:.5rem;padding:.3rem 0;border-bottom:1px dashed #e2e8f0;font-size:.85rem}
-.info span{color:#64748b;flex-shrink:0}
-.info b{text-align:right}
-.file-link{color:#2563eb;font-weight:600;text-decoration:none;word-break:break-all;text-align:right}
+.info-group{display:flex; flex-direction: column;gap:.5rem;padding:.3rem 0;border-bottom:1px dashed #e2e8f0;font-size:.85rem}
+.info-label{color:#64748b;flex-shrink:0; font-weight:700;min-width:0;}
+.info-value{flex:1;min-width:0;color:#0f172a;word-break:break-word}
+.file-link{color:#2563eb;font-weight:600;text-decoration:none;word-break:break-all}
 .file-link.reviewed{color:#8e44ad}
+.file-badge{display:inline-flex;align-items:center;padding:.12rem .5rem;border-radius:999px;background:#e0e7ff;color:#4338ca;font-size:.68rem;font-weight:800;letter-spacing:.04em;line-height:1.6;text-decoration:none;cursor:pointer;text-transform:uppercase}
+.file-badge.reviewed{background:#f3e8ff;color:#8e44ad}
+.file-badge:hover{box-shadow:0 0 0 2px #a5b4fc}
+.file-badge.reviewed:hover{box-shadow:0 0 0 2px #d8b4fe}
+.file-list{display:flex;flex-direction:column;gap:.35rem;margin:.35rem 0}
+.file-chip{display:flex;align-items:center;gap:.5rem;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.3rem .6rem;font-size:.82rem}
+.file-chip .file-link{flex:1;min-width:0;text-align:left}
+.chip-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip-rm{background:none;border:none;color:#dc2626;font-weight:800;cursor:pointer;padding:0 .2rem;line-height:1}
+.file-add-row{display:flex;gap:.5rem;align-items:center}
+.file-add{display:inline-block;border:1px dashed #2563eb;color:#2563eb;border-radius:8px;padding:.3rem .8rem;font-size:.8rem;font-weight:700;cursor:pointer}
+.file-hint{font-size:.72rem;color:#94a3b8;margin:.3rem 0 0}
 .btn-update{margin-top:.7rem;width:100%;background:#1e3c72;color:#fff;border:none;border-radius:8px;padding:.55rem;font-weight:700;cursor:pointer}
 .btn-update:hover{background:#122548}
 .summary-badge{font-size:.85rem;color:#475569;background:#f1f5f9;padding:.4rem .8rem;border-radius:99px}

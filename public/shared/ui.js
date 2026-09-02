@@ -45,12 +45,14 @@ export function badgeStatus(st) {
   const c = map[s] || 'bg-slate-100 text-slate-500';
   return '<span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold ' + c + '">' + esc(s || '—') + '</span>';
 }
-export function fileLink(url, rev) {
+export function fileLink(url, names, rev) {
   if (!url) return '';
-  const label = rev ? '✏️ Bản sửa' : '📄 Giáo án';
+  // Tên mỗi file lưu 1/dòng, song song với thứ tự URL; thiếu (dữ liệu cũ) → nhãn mặc định.
+  const ns = String(names || '').split('\n');
   // Chỉ link http/https — chặn javascript:/data: URI lọt vào href (lưu qua saveTeaching).
   return String(url).split(',').map(x => x.trim()).filter(f => /^https?:\/\//i.test(f))
-    .map(f => '<a class="file-link' + (rev ? ' reviewed' : '') + '" href="' + esc(f) + '" target="_blank" rel="noopener">' + label + '</a>').join(' ');
+    .map((f, i) => '<a class="file-link' + (rev ? ' reviewed' : '') + '" href="' + esc(f) + '" target="_blank" rel="noopener">' +
+      esc((ns[i] || '').trim() || (rev ? '✏️ Bản sửa' : '📄 Giáo án')) + '</a>').join(' ');
 }
 export function groupBadge(g) {
   const t = (g && (g.Type || g.type)) || '';

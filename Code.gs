@@ -19,7 +19,7 @@
  *   Students          IdNumber | SaintName | FullName | DateOfBirth | Gender | Father | Mother | CurrentClass | EnrollYear | Status | Note
  *   Attendance        SchoolYear | WeekOf | Session | IdNumber | ClassName | AttendanceStatus | Note
  *   TeacherAttendance SchoolYear | WeekOf | Session | TeacherEmail | Status | Note
- *   Teaching          SchoolYear | WeekOf | ClassName | TeacherEmail | LessonContent | LessonPlanUrl | RevisedPlanUrl | UpdatedBy
+ *   Teaching          SchoolYear | WeekOf | ClassName | TeacherEmail | LessonContent | LessonPlanUrl | LessonPlanNames | RevisedPlanUrl | RevisedPlanNames | UpdatedBy
  *   Scores            SchoolYear | IdNumber | ClassName | Quiz15_S1 | Exam_S1 | Quiz15_S2 | Exam_S2
  *   Config            Key | Value          (CurrentSchoolYear, DriveFolderId)
  *   Holidays          SchoolYear | WeekOf | Session | Reason   (Session rỗng = nghỉ cả tuần)
@@ -34,7 +34,7 @@ const TAB_HEADERS = {
   Students:          ['IdNumber', 'SaintName', 'FullName', 'DateOfBirth', 'Gender', 'Father', 'Mother', 'CurrentClass', 'EnrollYear', 'Status', 'Note'],
   Attendance:        ['SchoolYear', 'WeekOf', 'Session', 'IdNumber', 'ClassName', 'AttendanceStatus', 'Note'],
   TeacherAttendance: ['SchoolYear', 'WeekOf', 'Session', 'TeacherEmail', 'Status', 'Note'],
-  Teaching:          ['SchoolYear', 'WeekOf', 'ClassName', 'TeacherEmail', 'LessonContent', 'LessonPlanUrl', 'RevisedPlanUrl', 'UpdatedBy'],
+  Teaching:          ['SchoolYear', 'WeekOf', 'ClassName', 'TeacherEmail', 'LessonContent', 'LessonPlanUrl', 'LessonPlanNames', 'RevisedPlanUrl', 'RevisedPlanNames', 'UpdatedBy'],
   Scores:            ['SchoolYear', 'IdNumber', 'ClassName', 'Quiz15_S1', 'Exam_S1', 'Quiz15_S2', 'Exam_S2'],
   Config:            ['Key', 'Value'],
   Holidays:          ['SchoolYear', 'WeekOf', 'Session', 'Reason'],
@@ -183,6 +183,20 @@ function driveFileIds(urls) {
   return set;
 }
 
+// Tên sub-folder giáo án = SchoolYear_WeekOf_ClassName_GLV / _TBM (role tách GLV và TBM).
+const sanitize = s => String(s || '').replace(/[\\/:*?"<>|]/g, '_').trim();
+function teachFolder(year, weekOf, className, role) {
+  const root = config().DriveFolderId ? DriveApp.getFolderById(config().DriveFolderId) : DriveApp.getRootFolder();
+  const name = sanitize([year, weekOf, className, role].filter(Boolean).join('_')) || '_uploads';
+  // Cache id folder (key = cả tên + role) để đỡ query lặp; id lỗi thời → tạo lại.
+  const ps = PropertiesService.getScriptProperties(), key = 'tf_' + name, id = ps.getProperty(key);
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
+  const it = root.getFoldersByName(name);
+  const f = it.hasNext() ? it.next() : root.createFolder(name);
+  ps.setProperty(key, f.getId());
+  return f;
+}
+
 function config() {
   const c = {};
   cachedRead('Config').forEach(r => c[r.Key] = r.Value);
@@ -264,6 +278,45 @@ function summaryRows(classNames, year) {
     return { idNumber: s.IdNumber, fullName: names[s.IdNumber] || '', className: s.ClassName,
       avgH1: h1, avgH2: h2, avgYear: nam, attendancePct: pct, rating: nam === null ? '' : xepLoai(nam) };
   });
+}
+
+// Tên tài liệu để hiển thị từng link: cột LessonPlanNames/RevisedPlanNames, 1 tên/dòng theo
+// thứ tự URL trong cột tương ứng. Ô còn trống (dữ liệu cũ) → lấy tên file thật từ Drive và
+// ghi lại 1 lần (chỉ ghi khi đủ mọi file — tránh lệch cột nếu 1 file đã bị xóa).
+function planNames(rec, urlField, nameField) {
+  const cur = String(rec[nameField] || '').trim();
+  if (cur) return cur;
+  const names = [];
+  String(rec[urlField] || '').split(',').forEach(u => {
+    const m = String(u).match(/\/d\/([^/]+)/);
+    let n = '';
+    if (m) { try { n = DriveApp.getFileById(m[1]).getName(); } catch (e) {} }
+    names.push(n);
+  });
+  if (names.length && names.every(Boolean)) {
+    const sh = ss().getSheetByName('Teaching');
+    const data = sh.getDataRange().getValues(), ci = data[0].indexOf(nameField);
+    if (ci >= 0) for (let r = 1; r < data.length; r++) {
+      if (data[r][0] === rec.SchoolYear && data[r][1] === rec.WeekOf && data[r][2] === rec.ClassName)
+        { sh.getRange(r + 1, ci + 1).setValue(names.join('\n')); break; }
+    }
+  }
+  return names.join('\n');
+}
+
+// Thư mục chứa tài liệu = sub-folder {Năm}_{Tuần}_{Lớp}_{GLV|TBM}, lấy từ cha của file còn
+// tồn tại đầu tiên. Không file / đã xóa → '' (ẩn link thư mục). Dùng cho cột Nội dung ở
+// "Thống kê theo lớp" — chỉ gọi theo từng dòng hiển thị để khỏi quét cả năm.
+function folderOfUrl(urls) {
+  for (const u of String(urls || '').split(',')) {
+    const m = String(u).match(/\/d\/([^/]+)/);
+    if (!m) continue;
+    try {
+      const p = DriveApp.getFileById(m[1]).getParents();
+      if (p.hasNext()) return p.next().getUrl();
+    } catch (e) {}
+  }
+  return '';
 }
 
 /* ---------- ACTIONS ---------- */
@@ -414,8 +467,27 @@ getClassAttendanceStats: b => {
   /* ---- Giảng dạy ---- */
   getTeaching: b => {
     const year = b.schoolYear || currentYear();
-    const records = readAll('Teaching').filter(r =>
-      r.SchoolYear === year && (!b.weekOf || r.WeekOf === b.weekOf));
+    // Mỗi key (SchoolYear+WeekOf+ClassName) chỉ 1 dòng mới nhất: upsert đã đảm bảo,
+    // bản này chỉ chống dòng trùng cũ sót trong sheet (dòng cuối appended = mới nhất).
+    const by = {};
+    readAll('Teaching').forEach(r => {
+      if (r.SchoolYear !== year || (b.weekOf && r.WeekOf !== b.weekOf)) return;
+      by[r.SchoolYear + '|' + r.WeekOf + '|' + r.ClassName] = r;
+    });
+    let records = Object.values(by);
+    // recent: chỉ lấy N dòng gần nhất kèm link thư mục giáo án (truy vấn Drive có giới hạn).
+    if (b.recent) {
+      records.sort((a, b) => String(b.WeekOf).localeCompare(String(a.WeekOf)));
+      records = records.slice(0, +b.recent);
+      records.forEach(r => {
+        r.LessonFolderUrl = folderOfUrl(r.LessonPlanUrl);
+        r.RevisedFolderUrl = folderOfUrl(r.RevisedPlanUrl);
+      });
+    }
+    records.forEach(r => {
+      r.LessonPlanNames = planNames(r, 'LessonPlanUrl', 'LessonPlanNames');
+      r.RevisedPlanNames = planNames(r, 'RevisedPlanUrl', 'RevisedPlanNames');
+    });
     return { status: 'ok', records };
   },
 
@@ -431,8 +503,11 @@ getClassAttendanceStats: b => {
     }
     const row = {
       SchoolYear: b.schoolYear, WeekOf: b.weekOf, ClassName: b.className,
-      TeacherEmail: b.teacherEmail || '', LessonContent: b.lessonContent || '',
-      LessonPlanUrl: b.lessonPlanUrl || '', RevisedPlanUrl: b.revisedPlanUrl || '',
+      // Giữ GLV đầu tiên: TBM chỉnh sửa sau không ghi đè cột TeacherEmail.
+      TeacherEmail: (old ? (old.TeacherEmail || '') : '') || b.teacherEmail || '',
+      LessonContent: b.lessonContent || '',
+      LessonPlanUrl: b.lessonPlanUrl || '', LessonPlanNames: b.lessonPlanNames || '',
+      RevisedPlanUrl: b.revisedPlanUrl || '', RevisedPlanNames: b.revisedPlanNames || '',
       UpdatedBy: b.updatedBy || b.teacherEmail || '',
     };
     upsertRows('Teaching',
@@ -460,14 +535,23 @@ getClassAttendanceStats: b => {
     return { status: 'ok', ...r };
   },
 
-  // Upload giáo án lên Drive — sheet chỉ giữ link. File kế thừa quyền public (Viewer)
-  // của folder DriveFolderId (chia sẻ "Anyone with link → Viewer" trong Drive UI) —
-  // không gọi setSharing để tránh cần scope auth/drive đầy đủ.
+  // Upload giáo án lên Drive — sheet chỉ giữ link. Khi có schoolYear+weekOf+className+kind
+  // → sub-folder {Năm}_{Tuần}_{Lớp}_{GLV|TBM} (teachFolder). File/folder con kế thừa quyền
+  // public (Viewer) của folder DriveFolderId ("Anyone with link → Viewer" trong Drive UI) —
+  // không gọi setSharing để tránh cần scope auth/drive đầy đủ. Trùng tên trong cùng sub-folder
+  // → xóa (trash) bản cũ, upsert thay thế. GLV vs TBM khác folder → không đè nhau.
   // ponytail: không dùng được nếu folder riêng tư; đổi lại setSharing khi có auth/drive.
   uploadFile: b => {
-    const folderId = config().DriveFolderId || '';
     const blob = Utilities.newBlob(Utilities.base64Decode(b.base64), b.mimeType, b.filename);
-    const file = (folderId ? DriveApp.getFolderById(folderId) : DriveApp.getRootFolder()).createFile(blob);
+    let folder;
+    if (b.schoolYear && b.weekOf && b.className) {
+      folder = teachFolder(b.schoolYear, b.weekOf, b.className, b.kind === 'TBM' ? 'TBM' : 'GLV');
+    } else {
+      folder = config().DriveFolderId ? DriveApp.getFolderById(config().DriveFolderId) : DriveApp.getRootFolder();
+    }
+    const same = folder.getFilesByName(b.filename);
+    while (same.hasNext()) same.next().setTrashed(true);
+    const file = folder.createFile(blob);
     return { status: 'ok', url: file.getUrl() };
   },
 

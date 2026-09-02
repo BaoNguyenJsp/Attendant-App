@@ -4,12 +4,37 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, setState, TCLASSES, cur, defaultWeek, normSunday, year } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, setState, TCLASSES, cur, USERS_ROWS, defaultWeek, normSunday, year } from '../shared/common.js';
 import { userFull, fileLink } from '../shared/ui.js';
 
 await initCommon();
 
 let editingClass = null, editingRec = null, TEACHING_BY_CLASS = {};
+// File giữ lại (URL đã lưu) vs file chờ upload, tách riêng theo cột GLV/TBM.
+let planKeep = [], planAdd = [], revKeep = [], revAdd = [];
+const FPLAN = 'GLV', FTBM = 'TBM';
+
+// Badge trên thẻ lớp: text = đuôi file (PDF/DOCX…), hover = tên file thật.
+const badgeLinks = (url, names, rev) => {
+  const ns = String(names || '').split('\n');
+  return String(url || '').split(',').map(x => x.trim()).filter(f => /^https?:\/\//i.test(f))
+    .map((f, i) => {
+      const name = (ns[i] || '').trim();
+      const ext = String(name).split('.').pop() || '';
+      const label = /^[a-z0-9]{1,6}$/i.test(ext) ? ext.toUpperCase() : (rev ? '✏️' : '📄');
+      return '<a class="file-badge' + (rev ? ' reviewed' : '') + '" href="' + esc(f) + '" target="_blank" rel="noopener" title="' +
+        esc(name || (rev ? 'Bản sửa' : 'Giáo án')) + '">' + label + '</a>';
+    }).join(' ');
+};
+
+// Tên GLV hiển thị = tên thánh trước họ tên, vd "Phaolô Nguyễn Văn A".
+const glvLabel = em => {
+  const e = String(em || '').toLowerCase();
+  const u = USERS_ROWS.find(x => String(x.Email).toLowerCase() === e);
+  const s = u ? String(u.SaintName || '').trim() : '';
+  const f = userFull(em);
+  return s ? s + ' ' + f : f;
+};
 
 async function renderCards() {
   if (!$('gd-week').value) $('gd-week').value = defaultWeek();
@@ -19,16 +44,23 @@ async function renderCards() {
   catch (e) { return toast(e.message); }
   const byClass = {}; recs.forEach(r => byClass[r.ClassName] = r);
   TEACHING_BY_CLASS = byClass;
-  $('gd-summary').textContent = 'Tuần ' + wk + ' · ' + Object.keys(byClass).length + '/' + TCLASSES.length + ' lớp đã cập nhật';
+  $('gd-summary').textContent = Object.keys(byClass).length + '/' + TCLASSES.length + ' lớp đã cập nhật';
   $('cards').innerHTML = TCLASSES.map(c => {
     const rec = byClass[c.ClassName];
-    const meta = rec ? esc(userFull(rec.TeacherEmail)) + (rec.LessonContent ? ' · ' + esc(rec.LessonContent) : '') : 'Chưa có bài học tuần này.';
+    const badge = rec ? '<span class="status-badge updated">Đã cập nhật</span>' : '<span class="status-badge">Chưa nhập</span>';
+    const gv = rec && rec.TeacherEmail ? '<strong>' + esc(glvLabel(rec.TeacherEmail)) + '</strong>' : '<strong>Chưa phân công</strong>';
+    const lesson = rec && rec.LessonContent ? esc(rec.LessonContent) : 'Chưa có nội dung';
+    const plan = rec && rec.LessonPlanUrl ? badgeLinks(rec.LessonPlanUrl, rec.LessonPlanNames, false) : '<span style="color:#aaa;">Chưa đính kèm</span>';
+    const rev = rec && rec.RevisedPlanUrl ? badgeLinks(rec.RevisedPlanUrl, rec.RevisedPlanNames, true) : '<span style="color:#aaa;">Chưa có bản chỉnh sửa</span>';
     return '<div class="card' + (rec ? ' updated' : '') + '">' +
-      '<div class="card-head"><h3 class="font-bold">' + esc(c.ClassName) + '</h3>' +
-      '<span class="status-badge' + (rec ? ' updated' : '') + '">' + (rec ? 'Đã cập nhật' : 'Chưa cập nhật') + '</span></div>' +
-      '<div class="text-sm text-slate-600 mt-1">' + meta + '</div>' +
-      '<div class="text-xs text-slate-500 mt-1">' + (rec ? fileLink(rec.LessonPlanUrl, false) + ' ' + fileLink(rec.RevisedPlanUrl, true) : '') + '</div>' +
-      '<button class="btn-update" data-cls="' + esc(c.ClassName) + '">' + (rec ? '✏️ Cập nhật' : '＋ Cập nhật giảng dạy') + '</button>' +
+      '<div>' +
+      '<h3><b>' + esc(c.ClassName) + '</b>' + badge + '</h3>' +
+      '<div class="info-group"><div class="info-label">Giáo lý viên:</div><div class="info-value">' + gv + '</div></div>' +
+      '<div class="info-group"><div class="info-label">Nội dung bài học:</div><div class="info-value">' + lesson + '</div></div>' +
+      '<div class="info-group"><div class="info-label">Giáo án (GLV):</div><div class="info-value">' + plan + '</div></div>' +
+      '<div class="info-group"><div class="info-label" style="color:#8e44ad;">Giáo án đã chỉnh sửa (TBM):</div><div class="info-value">' + rev + '</div></div>' +
+      '</div>' +
+      '<button class="btn-update" data-cls="' + esc(c.ClassName) + '">Cập nhật bài học</button>' +
       '</div>';
   }).join('');
 }
@@ -41,24 +73,63 @@ async function renderGDStats() {
   recs.forEach(r => by[r.TeacherEmail] = (by[r.TeacherEmail] || 0) + 1);
   const freq = Object.entries(by).sort((a, b) => b[1] - a[1]);
   $('gd-freq').innerHTML = freq.length
-    ? freq.map(([em, cnt]) => '<div class="flex justify-between py-1"><span class="text-slate-600">' + esc(userFull(em)) + '</span><span class="freq-count">' + cnt + ' tuần</span></div>').join('')
+    ? freq.map(([em, cnt]) => '<li class="flex justify-between py-1"><span class="text-slate-600">' + esc(glvLabel(em)) + '</span><span class="freq-count">' + cnt + ' tuần</span></li>').join('')
     : '<p class="text-slate-400">Chưa có dữ liệu.</p>';
-  const hist = recs.slice().sort((a, b) => String(b.WeekOf).localeCompare(String(a.WeekOf))).slice(0, 8);
+  let hist = [];
+  try { hist = (await api('getTeaching', {schoolYear: year(), recent: 8})).records || []; }
+  catch (e) { return toast(e.message); }
   $('gd-history').innerHTML = hist.length
-    ? '<table class="history-table"><thead><tr><th>Tuần</th><th>Lớp</th><th>Giáo lý viên</th><th>Bài học</th><th>Tệp</th></tr></thead><tbody>' +
-      hist.map(r => '<tr><td>' + esc(r.WeekOf) + '</td><td>' + esc(r.ClassName) + '</td><td>' + esc(userFull(r.TeacherEmail)) + '</td><td class="max-w-xs truncate">' + esc(r.LessonContent || '') + '</td><td>' + fileLink(r.LessonPlanUrl, false) + ' ' + fileLink(r.RevisedPlanUrl, true) + '</td></tr>').join('') +
-      '</tbody></table>'
-    : '<p class="text-slate-400">Chưa có dữ liệu.</p>';
+    ? hist.map(r => '<tr>' +
+      '<td>' + esc(r.WeekOf) + '</td><td>' + esc(r.ClassName) + '</td><td>' + esc(glvLabel(r.TeacherEmail)) + '</td>' +
+      '<td class="max-w-xs truncate">' + esc(r.LessonContent || '') + '</td>' +
+      '<td class="whitespace-nowrap">' +
+        (r.LessonFolderUrl ? '<a class="file-badge" href="' + esc(r.LessonFolderUrl) + '" target="_blank" rel="noopener" title="Mở thư mục giáo án (GLV)">📁</a>' : '') +
+        (r.RevisedFolderUrl ? '<a class="file-badge reviewed" href="' + esc(r.RevisedFolderUrl) + '" target="_blank" rel="noopener" title="Mở thư mục bản chỉnh sửa (TBM)">✏️</a>' : '') +
+      '</td><td>' + esc(userFull(r.UpdatedBy)) + '</td></tr>').join('')
+    : '<tr><td colspan="6" class="text-slate-400">Chưa có dữ liệu.</td></tr>';
 }
+
+/* ---------- Modal: giữ/xóa tệp GLV & TBM ---------- */
+const splitUrls = s => String(s || '').split(',').map(x => x.trim()).filter(x => /^https?:\/\//i.test(x));
+// File đã lưu = cặp {url, name}; LessonPlanNames/RevisedPlanNames lưu 1 tên/dòng theo thứ tự URL.
+const splitNames = s => String(s || '').split('\n');
+const linkList = (urls, names) => {
+  const n = splitNames(names);
+  return splitUrls(urls).map((f, i) => ({url: f, name: n[i] || ''}));
+};
 
 function openModal(cls) {
   editingClass = cls;
   editingRec = TEACHING_BY_CLASS[cls] || null;
   $('gd-modal-title').textContent = 'Giáo án — ' + cls;
-  $('gd-teacher').value = cur.email;
+  $('gd-teacher').value = editingRec && editingRec.TeacherEmail ? glvLabel(editingRec.TeacherEmail) : glvLabel(cur.email);
   $('gd-lesson').value = editingRec ? (editingRec.LessonContent || '') : '';
+  planKeep = linkList(editingRec && editingRec.LessonPlanUrl, editingRec && editingRec.LessonPlanNames);
+  revKeep = linkList(editingRec && editingRec.RevisedPlanUrl, editingRec && editingRec.RevisedPlanNames);
+  planAdd = []; revAdd = [];
   $('f-plan').value = ''; $('f-rev').value = '';
+  renderLists();
   $('gd-modal').classList.add('open');
+}
+
+const chip = (inner, list, grp, i) => '<div class="file-chip">' + inner +
+  '<button type="button" class="chip-rm" data-list="' + list + '" data-grp="' + grp + '" data-i="' + i + '" title="Gỡ bỏ">✕</button></div>';
+
+function renderLists() {
+  const addChip = (f, list, i) => chip('<span class="chip-name">📎 ' + esc(f.name) + '</span>', list, 'add', i);
+  $('plan-list').innerHTML = planKeep.map((k, i) => chip(fileLink(k.url, k.name, false), FPLAN, 'keep', i)).join('') +
+    planAdd.map((f, i) => addChip(f, FPLAN, i)).join('');
+  $('rev-list').innerHTML = revKeep.map((k, i) => chip(fileLink(k.url, k.name, true), FTBM, 'keep', i)).join('') +
+    revAdd.map((f, i) => addChip(f, FTBM, i)).join('');
+}
+
+function addFiles(input, kind) {
+  input.addEventListener('change', () => {
+    const list = kind === FPLAN ? planAdd : revAdd;
+    [...input.files].forEach(f => list.push(f));
+    input.value = '';
+    renderLists();
+  });
 }
 
 function readFile(file) {
@@ -73,15 +144,20 @@ function readFile(file) {
 async function saveTeaching() {
   const lesson = $('gd-lesson').value.trim();
   if (!lesson && !editingRec) return toast('Nhập nội dung bài học trước khi lưu.');
+  const wk = $('gd-week').value;
+  const upload = (list, kind) => Promise.all(list.map(f => readFile(f).then(({base64}) =>
+    api('uploadFile', {schoolYear: year(), weekOf: wk, className: editingClass, kind, base64, mimeType: f.type || 'application/octet-stream', filename: f.name})
+      .then(r => r.url))));
   const body = {
-    schoolYear: year(), weekOf: $('gd-week').value, className: editingClass, lessonContent: lesson,
-    lessonPlanUrl: editingRec ? (editingRec.LessonPlanUrl || '') : '',
-    revisedPlanUrl: editingRec ? (editingRec.RevisedPlanUrl || '') : ''
+    schoolYear: year(), weekOf: wk, className: editingClass, lessonContent: lesson
   };
   try {
-    const fPlan = $('f-plan').files[0], fRev = $('f-rev').files[0];
-    if (fPlan) body.lessonPlanUrl = (await api('uploadFile', {base64: (await readFile(fPlan)).base64, mimeType: fPlan.type || 'application/octet-stream', filename: fPlan.name, className: editingClass})).url;
-    if (fRev) body.revisedPlanUrl = (await api('uploadFile', {base64: (await readFile(fRev)).base64, mimeType: fRev.type || 'application/octet-stream', filename: fRev.name, className: editingClass})).url;
+    const [up, ur] = [await upload(planAdd, FPLAN), await upload(revAdd, FTBM)];
+    // URL cách nhau dấu phẩy; tên file ghi song song (1 tên/dòng) để UI hiển thị đúng từng link.
+    body.lessonPlanUrl = planKeep.map(k => k.url).concat(up).join(',');
+    body.lessonPlanNames = planKeep.map(k => k.name).concat(planAdd.map(f => f.name)).join('\n');
+    body.revisedPlanUrl = revKeep.map(k => k.url).concat(ur).join(',');
+    body.revisedPlanNames = revKeep.map(k => k.name).concat(revAdd.map(f => f.name)).join('\n');
     await api('saveTeaching', body);
     $('gd-modal').classList.remove('open');
     toast('Đã lưu giáo án.');
@@ -94,9 +170,21 @@ const [cl, te] = await Promise.all([api('getClasses'), api('getTeachers')]);
 setState({TCLASSES: cl.classes || [], USERS_ROWS: te.users || [], GROUP_MEMBERS: te.members || [], GROUPS_LIST: te.groups || []});
 
 const gdModal = $('gd-modal');
-gdModal.addEventListener('click', e => { if (e.target === gdModal) gdModal.classList.remove('open'); });
+gdModal.addEventListener('click', e => {
+  if (e.target === gdModal) return gdModal.classList.remove('open');
+  const rm = e.target.closest('.chip-rm');
+  if (rm) {
+    const arr = rm.dataset.grp === 'keep'
+      ? (rm.dataset.list === FPLAN ? planKeep : revKeep)
+      : (rm.dataset.list === FPLAN ? planAdd : revAdd);
+    arr.splice(+rm.dataset.i, 1);
+    renderLists();
+  }
+});
 gdModal.querySelector('.btn-cancel').addEventListener('click', () => gdModal.classList.remove('open'));
 gdModal.querySelector('.btn-save').addEventListener('click', () => saveTeaching());
+addFiles($('f-plan'), FPLAN);
+addFiles($('f-rev'), FTBM);
 $('gd-week').addEventListener('change', () => { normSunday($('gd-week')); renderCards(); });
 $('cards').addEventListener('click', e => { const b = e.target.closest('.btn-update'); if (b) openModal(b.dataset.cls); });
 
