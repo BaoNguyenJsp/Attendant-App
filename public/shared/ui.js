@@ -48,7 +48,8 @@ export function badgeStatus(st) {
 export function fileLink(url, rev) {
   if (!url) return '';
   const label = rev ? '✏️ Bản sửa' : '📄 Giáo án';
-  return String(url).split(',').map(x => x.trim()).filter(Boolean)
+  // Chỉ link http/https — chặn javascript:/data: URI lọt vào href (lưu qua saveTeaching).
+  return String(url).split(',').map(x => x.trim()).filter(f => /^https?:\/\//i.test(f))
     .map(f => '<a class="file-link' + (rev ? ' reviewed' : '') + '" href="' + esc(f) + '" target="_blank" rel="noopener">' + label + '</a>').join(' ');
 }
 export function groupBadge(g) {

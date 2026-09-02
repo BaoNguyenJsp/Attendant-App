@@ -4,7 +4,7 @@
    ===================================================================== */
 'use strict';
 
-import { groupBadge, highestType } from './ui.js';
+import { highestType } from './ui.js';
 
 /* ---------- Hằng số ---------- */
 export const SESSIONS = ['Lễ Chúa Nhật', 'Học Giáo Lý', 'Chầu Thánh Thể', 'Lễ Thứ Năm'];
@@ -50,8 +50,8 @@ export function toast(m) { const t = $('toastbox'); if (!t) return; t.textConten
 
 export const fmtDate = d => { const p = n => String(n).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate()); };
 export const parseLocal = s => { if (!s) return null; const a = String(s).split('-').map(Number); return a.length === 3 ? new Date(a[0], a[1]-1, a[2]) : null; };
-export function defaultWeek() { const d = new Date(); const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); const diff = x.getDay() === 0 ? 0 : 7 - x.getDay(); x.setDate(x.getDate() + diff); return fmtDate(x); }
-export function normSunday(input) { if (!input.value) return; const [y, m, dd] = input.value.split('-').map(Number); const x = new Date(y, m-1, dd); const diff = x.getDay() === 0 ? 0 : 7 - x.getDay(); x.setDate(x.getDate() + diff); input.value = fmtDate(x); }
+export function defaultWeek() { const d = new Date(); const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - x.getDay()); return fmtDate(x); }
+export function normSunday(input) { if (!input.value) return; const [y, m, dd] = input.value.split('-').map(Number); const x = new Date(y, m-1, dd); x.setDate(x.getDate() - x.getDay()); input.value = fmtDate(x); }
 
 export const fmt1 = v => v == null || v === '' ? '—' : (Math.round(+v*100)/100).toLocaleString('vi-VN');
 export const num = v => { if (v == null || v === '') return null; const n = +v; return isNaN(n) ? null : n; };
@@ -147,35 +147,45 @@ function scopeText() {
   return hi === BQT ? 'Toàn đoàn ngành: ' + cls : 'Phạm vi: ' + cls;
 }
 
+const NAV = [
+  ['/giangday/', '📕 Giảng dạy', ''],
+  ['/diemdanh/', '✅ Chuyên cần', ''],
+  ['/hocba/', '🎓 Học tập', ''],
+  ['/hocsinh/', '👥 Học sinh', ''],
+  ['/giaovien/', '🧑‍🏫 Giáo viên', 'exec-only'],
+  ['/admin/', '⚙ Quản trị', 'admin-only'],
+];
+
 function shell() {
   const b = document.body;
-  let html = '<div class="max-w-7xl mx-auto px-4 pt-6">' +
-    '<header class="bg-gradient-to-r from-blue-900 to-indigo-800 text-white p-6 rounded-xl shadow-lg flex justify-between items-center flex-wrap gap-4">' +
-    '<div><h1 class="text-2xl font-extrabold">' + esc(b.dataset.title || '') + '</h1>' +
-    (b.dataset.sub ? '<p class="text-blue-200 text-sm mt-1">' + esc(b.dataset.sub) + '</p>' : '') + '</div>' +
-    '<div style="text-align:right"><span class="badge b-admin" data-user></span><br>' +
-    (b.dataset.back
-      ? '<a href="/" class="mt-2 inline-block bg-white text-blue-900 hover:bg-blue-50 font-bold text-sm px-4 py-2 rounded-lg">← Trang chính</a>'
-      : '<a href="/auth/logout" class="mt-2 inline-block bg-white text-blue-900 hover:bg-blue-50 font-bold text-sm px-4 py-2 rounded-lg">🔒 Đăng xuất</a>') +
-    '</div></header>';
+  const links = NAV.map(n => '<a class="nav-link' + (n[2] ? ' ' + n[2] : '') + '" href="' + n[0] + '">' + n[1] + '</a>').join('');
+  const logout = '<a class="nav-logout" href="/auth/logout">🔒 Đăng xuất</a>';
+  const brand = '<a href="/" class="flex items-center gap-2.5 no-underline">' +
+    '<img src="../../logo.png" alt="TNTT Nghĩa Hòa" class="h-9 w-9 rounded-lg">' +
+    '<span class="text-blue-900 font-extrabold text-sm sm:text-base leading-tight">Quản lý học vụ TNTT Nghĩa Hòa</span></a>';
+  let html = '<input type="checkbox" id="menu-toggle" class="menu-toggle">' +
+    '<nav class="sticky top-0 z-40 bg-white/95 backdrop-blur shadow-sm border-b border-slate-200">' +
+    '<div class="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap">' + brand +
+    '<div class="hidden md:flex items-center gap-1">' + links + logout + '</div>' +
+    '<label for="menu-toggle" class="menu-hamburger md:hidden" aria-label="Mở menu">☰</label>' +
+    '</div></nav>' +
+    '<label for="menu-toggle" class="menu-backdrop" aria-hidden="true"></label>' +
+    '<aside class="menu-drawer">' +
+    '<div class="flex items-center justify-between px-4 py-3 border-b border-slate-200">' + brand +
+    '<label for="menu-toggle" class="menu-close" aria-label="Đóng menu">✕</label></div>' +
+    '<div class="px-3 py-3 flex flex-col gap-1">' + links + logout + '</div></aside>';
+  html += '<div class="max-w-7xl mx-auto px-4 pt-4">' +
+    '<header class="banner text-white p-6 rounded-xl shadow-lg mb-4">' +
+    '<h1 class="text-2xl font-extrabold">' + esc(b.dataset.title || '') + '</h1>' +
+    (b.dataset.sub ? '<p class="text-blue-200 text-sm mt-1">' + esc(b.dataset.sub) + '</p>' : '') + '</header>';
   if (b.dataset.yearbar) {
-    html += '<div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mt-6 flex flex-wrap items-center gap-4">' +
+    html += '<div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mt-4 flex flex-wrap items-center gap-4">' +
       '<b class="text-sm">Năm học:</b>' +
       '<select id="year-sel" style="width:auto" class="border p-2 rounded-lg font-semibold"></select>' +
-      '<span class="text-sm text-slate-600" id="scope-line"></span>' +
-      '<span style="margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap">' +
-      '<a class="exec-only bg-indigo-100 hover:bg-indigo-200 text-indigo-900 font-bold text-sm px-4 py-2 rounded-lg" href="/giaovien/">🧑‍🏫 Giáo viên</a>' +
-      '<a class="admin-only bg-pink-100 hover:bg-pink-200 text-pink-900 font-bold text-sm px-4 py-2 rounded-lg" href="/admin/">⚙ Quản trị</a>' +
-      '</span></div>';
+      '<span class="text-sm text-slate-600" id="scope-line"></span></div>';
   }
   html += '<div id="toastbox" style="position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:.6rem 1.1rem;border-radius:8px;font-size:.85rem;display:none;max-width:80%;z-index:200"></div></div>';
   $('shell').innerHTML = html;
-}
-
-function scopeUserBadge() {
-  const hi = highestType(cur.groups);
-  const name = cur.fullName || cur.email;
-  document.querySelectorAll('[data-user]').forEach(el => { el.innerHTML = esc(name) + ' ' + groupBadge({Type: hi}); });
 }
 
 /* ---------- Đổi năm học (chỉ launcher) ---------- */
@@ -207,7 +217,6 @@ export async function initCommon() {
   if (ysel) { fillYears('year-sel', YEAR); ysel.addEventListener('change', () => setYearSel(ysel.value)); }
   const sl = $('scope-line');
   if (sl) sl.textContent = scopeText();
-  scopeUserBadge();
   document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => tab(b)));
   setVis('.exec-only', isExec());
   setVis('.admin-only', isAdmin());

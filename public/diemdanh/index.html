@@ -21,7 +21,7 @@
     <button class="tab-btn active" data-tab="t-dd">📝 Điểm Danh</button>
     <button class="tab-btn" data-tab="t-tl">🔎 Trích Lục CCCD</button>
     <button class="tab-btn" data-tab="t-tk">📈 Thống Kê Lớp</button>
-    <button class="tab-btn exec-only" data-tab="t-toandoan">🌐 Toàn Đoàn 🔒</button>
+    <button class="tab-btn" data-tab="t-toandoan">🌐 Toàn Đoàn</button>
   </div>
 
   <!-- t-dd -->
@@ -33,15 +33,15 @@
         <input type="date" id="dd-week" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></div>
       <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Buổi Sinh Hoạt</label>
         <select id="dd-buoi" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></select></div>
-      <div class="flex items-end"><button id="dd-markall" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-lg">✓ Đánh dấu tất cả có mặt</button></div>
+      <div class="flex items-end"><button id="dd-markall" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-lg">✅ Chọn hiện diện tất cả</button></div>
     </div>
 
     <div id="dd-holiday-note"></div>
 
     <div style="overflow-x:auto">
-      <table class="w-full text-sm border-collapse">
+      <table class="w-full text-sm border-collapse min-w-[820px]">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
-          <th class="p-3">STT</th><th class="p-3">Họ Và Tên</th>
+          <th class="p-3">STT</th><th class="p-3">Số CCCD</th><th class="p-3">Tên thánh</th><th class="p-3">Họ Và Tên</th>
           <th class="p-3">Hiện Diện</th><th class="p-3">Có Phép</th><th class="p-3">Ghi Chú</th>
         </tr></thead>
         <tbody id="dd-tbody"></tbody>
@@ -66,7 +66,10 @@
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
       <div class="md:col-span-2"><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Số CCCD / Định danh</label>
         <input type="text" id="tl-id" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold" placeholder="vd: 079212300101"></div>
-      <div><button id="tl-search" class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-6 py-2.5 rounded-lg">🔎 Tra cứu</button></div>
+      <div class="flex gap-3">
+        <button id="tl-search" class="bg-blue-900 hover:bg-blue-800 text-white font-bold px-6 py-2.5 rounded-lg flex-1">🔎 Tra cứu</button>
+        <button id="tl-excel" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-6 py-2.5 rounded-lg">⬇ Xuất file excel</button>
+      </div>
     </div>
     <div id="tl-out"></div>
     <p class="text-xs text-slate-500">Tra toàn bộ lịch sử điểm danh + điểm của học sinh theo CCCD — giữ nguyên cả tuần nghỉ để tra cứu đầy đủ (FR-DD-17).</p>
@@ -83,9 +86,9 @@
       </div>
     </div>
     <div style="overflow-x:auto">
-      <table class="w-full text-sm border-collapse" id="tk-table">
+      <table class="w-full text-sm border-collapse min-w-[700px]" id="tk-table">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
-          <th class="p-3">STT</th><th class="p-3">Họ Tên</th><th class="p-3">Lễ Chúa Nhật</th><th class="p-3">Học Giáo Lý</th><th class="p-3">Chầu Thánh Thể</th><th class="p-3">Lễ Thứ Năm</th><th class="p-3">Trung Bình</th>
+          <th class="p-3">STT</th><th class="p-3">Họ Tên</th><th class="p-3">Lễ Chúa Nhật</th><th class="p-3">Học Giáo Lý</th><th class="p-3">Chầu Thánh Thể</th><th class="p-3">Lễ Thứ Năm</th><th class="p-3">Tỉ lệ hiện diện</th>
         </tr></thead>
         <tbody id="tk-tbody"></tbody>
       </table>
@@ -100,9 +103,9 @@
       <div class="bg-amber-50 border border-amber-200 p-5 rounded-xl text-center"><div class="text-xs font-bold text-amber-700 uppercase">Hiện Diện Thứ Năm TB</div><div class="text-3xl font-extrabold text-amber-900" id="td-thu">—</div></div>
     </div>
     <div style="overflow-x:auto">
-      <table class="w-full text-sm border-collapse" id="td-table">
+      <table class="w-full text-sm border-collapse min-w-[760px]" id="td-table">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
-          <th class="p-3">Lớp</th><th class="p-3">Sĩ Số</th><th class="p-3">Lễ CN</th><th class="p-3">Giáo Lý</th><th class="p-3">Chầu TT</th><th class="p-3">Lễ T5</th><th class="p-3">Trung Bình</th><th class="p-3">Xếp Loại</th>
+          <th class="p-3">Lớp</th><th class="p-3">Sĩ Số</th><th class="p-3">Lễ CN</th><th class="p-3">Giáo Lý</th><th class="p-3">Chầu TT</th><th class="p-3">Lễ T5</th><th class="p-3">Tỉ lệ</th><th class="p-3">Xếp Loại</th>
         </tr></thead>
         <tbody id="td-tbody"></tbody>
       </table>

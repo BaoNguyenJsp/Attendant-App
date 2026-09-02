@@ -1,3 +1,29 @@
+/* ===== theme ===== */
+:root{--primary:#1e3c72}
+.banner{background:linear-gradient(135deg,var(--primary),#2a5298)}
+
+/* ===== sticky nav ===== */
+.nav-link{color:#334155;font-weight:600;font-size:.85rem;padding:.45rem .7rem;border-radius:8px;text-decoration:none;white-space:nowrap}
+.nav-link:hover{background:#eff6ff;color:var(--primary)}
+.nav-logout{color:#fff;background:var(--primary);font-weight:700;font-size:.8rem;padding:.45rem .85rem;border-radius:8px;text-decoration:none;white-space:nowrap}
+.nav-logout:hover{background:#2a5298}
+
+/* ===== mobile: collapsible left drawer ===== */
+.menu-toggle{display:none}
+.menu-toggle:checked ~ .menu-backdrop{opacity:1;pointer-events:auto}
+.menu-toggle:checked ~ .menu-drawer{transform:translateX(0)}
+.menu-hamburger{color:var(--primary);font-size:1.5rem;line-height:1;cursor:pointer;padding:.1rem .45rem;border-radius:8px;user-select:none}
+.menu-hamburger:hover{background:#eff6ff}
+.menu-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:50;opacity:0;pointer-events:none;transition:opacity .2s ease}
+.menu-drawer{position:fixed;top:0;left:0;bottom:0;width:min(280px,82vw);background:#fff;z-index:60;transform:translateX(-100%);transition:transform .25s ease;box-shadow:0 0 40px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow-y:auto}
+.menu-close{color:#64748b;font-size:1rem;font-weight:700;cursor:pointer;padding:.3rem .6rem;border-radius:8px}
+.menu-close:hover{background:#f1f5f9}
+.menu-drawer .nav-link{display:block;padding:.7rem .9rem;font-size:.95rem}
+.menu-drawer .nav-logout{margin-top:.5rem;text-align:center;padding:.75rem;font-size:.9rem}
+@media(min-width:768px){
+  .menu-drawer,.menu-backdrop{display:none}
+}
+
 /* ===== login gate ===== */
 .gate{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1e3c72,#2a5298);padding:1rem;z-index:50}
 .gate-box{background:#fff;border-radius:16px;box-shadow:0 25px 50px -12px rgba(0,0,0,.5);padding:2rem;max-width:30rem;width:100%;border:1px solid #e2e8f0}
