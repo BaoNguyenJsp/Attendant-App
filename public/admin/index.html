@@ -29,7 +29,7 @@
   <!-- t-us -->
   <div id="t-us" class="bg-white rounded-b-xl shadow-sm p-5" data-pane>
     <h2 class="font-bold text-lg mb-3">Users — đăng nhập bằng Gmail (thêm bằng email, không có mật khẩu tự quản)</h2>
-    <div style="overflow-x:auto">
+    <div class="tbl-scroll sticky">
       <table class="w-full text-sm border-collapse">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
           <th class="p-3">Email</th><th class="p-3">Họ Tên</th><th class="p-3">Nhóm (GroupMembers)</th><th class="p-3">Trạng thái</th><th class="p-3"></th>
@@ -44,7 +44,7 @@
   <!-- t-grp -->
   <div id="t-grp" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
     <h2 class="font-bold text-lg mb-3">Nhóm — nhóm mặc định, 4 loại (§2.3)</h2>
-    <div style="overflow-x:auto">
+    <div class="tbl-scroll sticky">
       <table class="w-full text-sm border-collapse">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
           <th class="p-3">Nhóm</th><th class="p-3">Loại</th><th class="p-3">Scope (lớp mở rộng)</th>
@@ -63,7 +63,7 @@
       <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Giáo viên (email)</label><select id="asg-user" class="w-full border p-2.5 rounded-lg"></select></div>
       <div><button id="asg-add" class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg">＋ Thêm</button></div>
     </div>
-    <div style="overflow-x:auto">
+    <div class="tbl-scroll sticky">
       <table class="w-full text-sm border-collapse">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center"><th class="p-3">Nhóm</th><th class="p-3">Email</th><th class="p-3"></th></tr></thead>
         <tbody id="asg-tbody"></tbody>
@@ -75,7 +75,7 @@
   <!-- t-cls -->
   <div id="t-cls" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
     <h2 class="font-bold text-lg mb-3">Danh Sách Lớp Học — thứ tự dòng = thứ tự lên lớp khi chuyển năm (FR-ADM-01)</h2>
-    <div style="overflow-x:auto">
+    <div class="tbl-scroll sticky">
       <table class="w-full text-sm border-collapse">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
           <th class="p-3">#</th><th class="p-3">Tên Lớp</th><th class="p-3">Khối</th><th class="p-3">Sĩ số (Hoạt động)</th>
@@ -97,7 +97,7 @@
         <button id="hol-del" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2.5 rounded-lg">🗑 Xóa</button>
       </div>
     </div>
-    <div style="overflow-x:auto">
+    <div class="tbl-scroll sticky">
       <table class="w-full text-sm border-collapse">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center"><th class="p-3">Tuần</th><th class="p-3">Buổi</th><th class="p-3">Lý do</th></tr></thead>
         <tbody id="hol-tbody"></tbody>
@@ -109,7 +109,7 @@
   <div id="t-perm" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
     <h2 class="font-bold text-lg mb-3">Quyền Truy Cập — Giáo viên × Nhóm kèm phạm vi mở rộng (FR-ADM-06)</h2>
     <p class="text-xs text-slate-500 mt-0 mb-3">Phạm vi = hợp các nhóm; cấp quyền = nhóm cao nhất admin &gt; exec &gt; sector &gt; class.</p>
-    <div style="overflow-x:auto">
+    <div class="tbl-scroll sticky">
       <table class="w-full text-sm border-collapse">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center" id="perm-head"></tr></thead>
         <tbody id="perm-body"></tbody>

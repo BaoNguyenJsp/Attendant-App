@@ -1,7 +1,7 @@
 /* =====================================================================
    SỔ THIẾU NHI — shared/ui.js
    Helpers render/build dùng chung: công thức điểm, tra cứu người, badges,
-   trích lục (điểm + điểm danh). common.js và ui.js import chéo nhau nhưng
+   trích lục (điểm). common.js và ui.js import chéo nhau nhưng
    chỉ dùng bên trong thân hàm nên không có vòng lặp khởi tạo.
    ===================================================================== */
 'use strict';
@@ -82,7 +82,7 @@ export function expandLocal(gs) {
 }
 export const rankBadge = avg => avg == null ? '—' : (avg >= 85 ? '<span class="badge b-admin">Tốt</span>' : (avg >= 70 ? '<span class="badge b-sector">Khá</span>' : '<span class="badge b-class">Cần cải thiện</span>'));
 
-/* ---------- Trích lục (dùng chung cho Điểm danh và Học bạ) ---------- */
+/* ---------- Trích lục ---------- */
 export async function searchCard(id, outId) {
   const out = $(outId);
   if (!id) { out.innerHTML = ''; return; }
@@ -92,9 +92,9 @@ export async function searchCard(id, outId) {
   const st = (r.students || [])[0];
   if (!st) { out.innerHTML = '<div class="p-4 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-sm">Không tìm thấy thiếu nhi có Số CCCD này.</div>'; return; }
   out.innerHTML = '<div class="p-4 bg-slate-50 border border-slate-200 rounded-lg">' +
-    '<div class="font-bold text-lg">' + esc(st.FullName) + ' ' + badgeStatus(st.Status) + '</div>' +
-    '<div class="text-sm text-slate-600 mt-1">' + esc(st.IdNumber) + ' · ' + esc(st.CurrentClass || '') + (st.SaintName ? ' · ' + esc(st.SaintName) : '') + '</div>' +
-    scoresBlock(r.scores) + attendanceBlock(r.attendance) + '</div>';
+    '<div class="font-bold text-lg">' + esc([st.SaintName, st.FullName].filter(Boolean).join(' ')) + ' ' + badgeStatus(st.Status) + '</div>' +
+    '<div class="text-sm text-slate-600 mt-1">' + esc(st.IdNumber) + ' · ' + esc(st.CurrentClass || '') + '</div>' +
+    (r.academic ? academicBlock(r.academic) : scoresBlock(r.scores)) + '</div>';
 }
 export function scoresBlock(scores) {
   const list = (scores || []).slice().sort((a, b) => String(b.SchoolYear).localeCompare(String(a.SchoolYear)));
@@ -110,11 +110,19 @@ export function scoresBlock(scores) {
         '<td class="border p-1 text-center font-bold">' + fmt1(n) + '</td><td class="border p-1 text-center">' + (xepLoai(n) || '—') + '</td></tr>';
     }).join('') + '</tbody></table>';
 }
-export function attendanceBlock(list) {
-  const arr = (list || []).slice().sort((a, b) => String(b.WeekOf).localeCompare(String(a.WeekOf)));
-  if (!arr.length) return '';
-  return '<h4 class="font-bold text-sm mt-3 mb-1">Lịch sử điểm danh</h4>' +
-    '<table class="w-full text-sm border-collapse"><thead><tr class="bg-slate-100"><th class="border p-1 text-left">Năm</th><th class="border p-1 text-left">Tuần</th><th class="border p-1 text-left">Buổi</th><th class="border p-1 text-left">Trạng thái</th><th class="border p-1 text-left">Ghi chú</th></tr></thead><tbody>' +
-    arr.map(a => '<tr><td class="border p-1">' + esc(a.SchoolYear) + '</td><td class="border p-1">' + esc(a.WeekOf) + '</td><td class="border p-1">' + esc(a.Session) + '</td><td class="border p-1">' + badgeStatus(a.AttendanceStatus) + '</td><td class="border p-1">' + esc(a.Note || '') + '</td></tr>').join('') +
-    '</tbody></table>';
+// Học bạ theo AcademicYear (bản chốt): mỗi năm 1 dòng như bảng Tổng hợp — HK1/HK2/ĐTB năm/%CC/xếp loại.
+export function academicBlock(rows) {
+  const list = (rows || []).slice().sort((a, b) => String(b.SchoolYear).localeCompare(String(a.SchoolYear)));
+  if (!list.length) return '';
+  return '<h4 class="font-bold text-sm mt-3 mb-1">Học bạ theo năm</h4>' +
+    '<table class="w-full text-sm border-collapse"><thead><tr class="bg-slate-100">' +
+    ['Năm học', 'Lớp', 'ĐTB HK1', 'ĐTB HK2', 'ĐTB Năm', '% Chuyên Cần', 'Xếp loại'].map(h => '<th class="border p-1 text-left">' + h + '</th>').join('') +
+    '</tr></thead><tbody>' + list.map(x => {
+      const s = normSummary(x);
+      return '<tr><td class="border p-1">' + esc(x.SchoolYear) + '</td><td class="border p-1">' + esc(s.className) + '</td>' +
+        '<td class="border p-1 text-center">' + fmt1(s.h1) + '</td><td class="border p-1 text-center">' + fmt1(s.h2) + '</td>' +
+        '<td class="border p-1 text-center font-bold">' + fmt1(s.avgYear) + '</td>' +
+        '<td class="border p-1 text-center">' + (s.cc == null ? '—' : s.cc + '%') + '</td>' +
+        '<td class="border p-1 text-center">' + esc(s.rating || '—') + '</td></tr>';
+    }).join('') + '</tbody></table>';
 }

@@ -26,15 +26,17 @@
 
   <!-- t-nhap -->
   <div id="t-nhap" class="bg-white rounded-b-xl shadow-sm p-5" data-pane>
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
-      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Năm Học</label>
-        <select id="nh-nam" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
       <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
         <select id="nh-lop" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
-      <div class="flex items-end"><button id="add-student" class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg">＋ Thêm Thiếu Nhi Mới Vô Lớp</button></div>
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Năm Học</label>
+        <div id="nh-year" class="w-full border p-2.5 rounded-lg font-semibold bg-slate-200 text-slate-700"></div></div>
+      <div class="flex items-end"><label for="nh-file" class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg text-center cursor-pointer">📥 Nhập Bằng File</label>
+        <input type="file" id="nh-file" accept=".xlsx,.xls" class="hidden"></div>
       <div class="flex items-end"><button id="save-scores" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-lg">💾 Lưu Điểm</button></div>
     </div>
-    <div style="overflow-x:auto">
+    <p class="text-xs text-blue-700 underline mb-3"><a href="#" id="nh-template">⬇ Tải khung nhập điểm của lớp (.xlsx)</a></p>
+    <div class="tbl-scroll">
       <table class="w-full text-sm border-collapse">
         <thead>
           <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
@@ -48,7 +50,6 @@
         <tbody id="nh-tbody"></tbody>
       </table>
     </div>
-    <p class="text-xs text-slate-500 mt-3">ĐTB học kỳ = (15' + 2×HK)/3 · ĐTB năm = (HK1 + 2×HK2)/3 — tính phía máy chủ. Khóa ghi đè = (SchoolYear, ClassName) (FR-HB-07).</p>
   </div>
 
   <!-- t-hbt -->
@@ -71,14 +72,14 @@
       <div class="flex items-end"><button id="th-excel" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-2.5 rounded-lg">⬇ Xuất Excel</button></div>
       <div class="flex items-end"><button id="th-print" class="w-full bg-slate-700 hover:bg-slate-800 text-white font-bold px-4 py-2.5 rounded-lg">🖨 In</button></div>
     </div>
-    <p class="exec-only text-sm mb-3" style="text-align:right"><button id="th-toandoan" class="bg-pink-100 hover:bg-pink-200 text-pink-900 font-bold text-sm px-4 py-2 rounded-lg">📊 Xếp loại toàn đoàn 🔒 BQT+</button></p>
-    <div style="overflow-x:auto">
+    <div class="tbl-scroll sticky">
       <table class="w-full text-sm border-collapse" id="th-table">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center" id="th-head"></tr></thead>
         <tbody id="th-tbody"></tbody>
       </table>
     </div>
     <p class="text-xs text-slate-500 mt-3" id="th-note"></p>
+    <p class="exec-only text-sm mt-2" style="text-align:right"><button id="th-toandoan" class="bg-pink-100 hover:bg-pink-200 text-pink-900 font-bold text-sm px-4 py-2 rounded-lg">📊 Xếp loại toàn đoàn 🔒 BQT+</button></p>
   </div>
 
   <!-- t-kt -->
@@ -93,7 +94,7 @@
         <button id="kt-print" class="flex-1 bg-slate-700 hover:bg-slate-800 text-white font-bold px-4 py-2.5 rounded-lg">🖨 In</button>
       </div>
     </div>
-    <div style="overflow-x:auto">
+    <div class="tbl-scroll sticky">
       <table class="w-full text-sm border-collapse" id="kt-table">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
           <th class="p-3">STT</th><th class="p-3">Số CCCD</th><th class="p-3">Họ Tên</th><th class="p-3">Lớp</th><th class="p-3">ĐTB Năm</th><th class="p-3">% Chuyên Cần</th><th class="p-3">Danh Hiệu</th>
@@ -101,7 +102,6 @@
         <tbody id="kt-tbody"></tbody>
       </table>
     </div>
-    <p class="text-xs text-slate-500 mt-3">Danh sách lấy từ kết quả <b>Tổng hợp & xếp loại</b>: học sinh đạt Xếp loại <b>Giỏi</b> (ĐTB năm ≥ 8) <u>và</u> chuyên cần ≥ 80% (FR-HB-12).</p>
   </div>
 </div>
 

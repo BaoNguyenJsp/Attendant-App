@@ -7,7 +7,7 @@ const cfg = {
   oauthClientSecret: process.env.OAUTH_CLIENT_SECRET || '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',
   oauthRedirectUri: process.env.OAUTH_REDIRECT_URI || 'http://localhost:3000/auth/callback',
   sessionSecret: process.env.SESSION_SECRET || require('crypto').randomBytes(32).toString('hex'),
-  appsScriptUrl: process.env.APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycby4YRf7PJvy9ZxtlTacteMLSLOgRFu06U6ABWu7gScVaOi1iegjasuAlWHKFVSr6WgBfQ/exec',
+  appsScriptUrl: process.env.APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbx2EbgOPnv2f_sXCAk6Ruwot4xrE8hokfXo8mn3CQQ8cGtTfaFmQoC6NsITyRi6n--yFw/exec',
   sharedToken: process.env.SHARED_TOKEN || 'dev-shared-token'
 };
 

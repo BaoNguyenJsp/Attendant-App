@@ -8,7 +8,7 @@ module.exports = {
     const { send } = authz;
 
     // Đọc mở cho user hợp lệ (FR-AUTH-11)
-    for (const a of ['getStudents', 'getClasses', 'getHolidays', 'getTeachers', 'getAcademicYear', 'getConfig']) {
+    for (const a of ['getStudents', 'getClasses', 'getHolidays', 'getTeachers', 'getAcademicYear', 'getConfig', 'getYearOptions']) {
       app.post('/api/' + a, proxy(a));
     }
 

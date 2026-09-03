@@ -1,10 +1,10 @@
 /* =====================================================================
    SỔ THIẾU NHI — hocba/index.js
-   Nhập điểm theo lớp/năm + trích lục học bạ + tổng hợp & xếp loại + khen thưởng.
+   Nhập điểm theo lớp (năm hiện tại) + trích lục học bạ + tổng hợp & xếp loại + khen thưởng.
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, setState, TSTUDENTS, TSCORES, year, isExec, cur, fmt1, fillClasses, fillYearSelects, exportExcel } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, setState, TSCORES, TCLASSES, year, isExec, cur, fmt1, fillClasses, fillSel, exportExcel } from '../shared/common.js';
 import { searchCard, normSummary, activeStudents } from '../shared/ui.js';
 
 await initCommon();
@@ -18,33 +18,34 @@ const [st, cl, sc] = await Promise.all([
 ]);
 setState({TSTUDENTS: st.students || [], TCLASSES: cl.classes || [], TSCORES: sc.scores || []});
 fillClasses('nh-lop', 'th-lop', 'kt-lop');
-fillYearSelects('nh-nam', 'th-nam', 'kt-nam');
+$('nh-year').textContent = year();
+// Năm học dropdown = mọi năm có dữ liệu (AcademicYear ∪ Attendance ∪ Scores), sớm nhất trước.
+let years = [year()];
+try { const r = await api('getYearOptions'); if (r.years && r.years.length) years = r.years; } catch (e) {}
+if (!years.includes(year())) years = [year(), ...years];
+fillSel('th-nam', years.map(y => ({v:y})), year());
+fillSel('kt-nam', years.map(y => ({v:y})), year());
 
-/* ---------- Nhập điểm ---------- */
+/* ---------- Nhập điểm (luôn theo năm học hiện tại) ---------- */
 async function renderNhap() {
-  const yr = $('nh-nam').value, cls = $('nh-lop').value;
+  const cls = $('nh-lop').value;
   const sts = activeStudents(cls);
   const scoreMap = {};
-  if (yr === year()) {
-    TSCORES.filter(s => s.SchoolYear === yr && s.ClassName === cls).forEach(s => scoreMap[s.IdNumber] = s);
-  } else {
-    try { const r = await api('getScores', {schoolYear: yr, className: cls}); (r.scores || []).forEach(s => scoreMap[s.IdNumber] = s); }
-    catch (e) { return toast(e.message); }
-  }
+  TSCORES.filter(s => s.SchoolYear === year() && s.ClassName === cls).forEach(s => scoreMap[s.IdNumber] = s);
   const tb = $('nh-tbody');
   tb.innerHTML = sts.length
     ? sts.map((st, i) => {
         const sc = scoreMap[st.IdNumber] || {};
         return '<tr><td class="p-2 border text-center">' + (i + 1) + '</td>' +
           '<td class="p-2 border text-center">' + esc(st.IdNumber) + '</td>' +
-          '<td class="p-2 border">' + esc(st.FullName) + '</td>' +
+          '<td class="p-2 border">' + esc([st.SaintName, st.FullName].filter(Boolean).join(' ')) + '</td>' +
           SCORE_FIELDS.map(f => '<td class="p-2 border text-center"><input type="number" step="0.1" min="0" max="10" data-f="' + f + '" class="score-input w-16 text-center border p-1.5 rounded" value="' + (sc[f] == null ? '' : esc(sc[f])) + '"></td>').join('') +
           '</tr>';
       }).join('')
     : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có học sinh trong lớp ' + esc(cls) + '.</td></tr>';
 }
 async function saveScores() {
-  const yr = $('nh-nam').value, cls = $('nh-lop').value;
+  const cls = $('nh-lop').value;
   const students = [];
   $('nh-tbody').querySelectorAll('tr').forEach(tr => {
     const id = tr.children[1].textContent.trim();
@@ -55,22 +56,52 @@ async function saveScores() {
   });
   if (!students.length) return;
   try {
-    const r = await api('saveScores', {schoolYear: yr, className: cls, students});
-    if (yr === year()) setState({TSCORES: TSCORES.filter(s => !(s.SchoolYear === yr && s.ClassName === cls)).concat(r.students || [])});
+    const r = await api('saveScores', {schoolYear: year(), className: cls, students});
+    setState({TSCORES: TSCORES.filter(s => !(s.SchoolYear === year() && s.ClassName === cls)).concat(r.students || [])});
   } catch (e) { return toast(e.message); }
   toast('Đã lưu điểm.');
   renderNhap();
 }
-async function addStudentRow() {
+
+/* ---------- Nhập điểm bằng file Excel (khóa = Số CCCD) ---------- */
+function downloadTemplate() {
   const cls = $('nh-lop').value;
-  const id = prompt('Số CCCD của thiếu nhi:');
-  if (!id) return;
-  const name = prompt('Họ và tên:');
-  if (!name) return;
-  try { const r = await api('saveStudent', {idNumber: id.trim(), fullName: name.trim(), className: cls, enrollYear: year()}); TSTUDENTS.push(r.student); }
-  catch (e) { return toast(e.message); }
-  toast('Đã thêm học sinh.');
-  renderNhap();
+  const aoa = [['Số CCCD', 'Tên thánh', 'Họ và tên', "Điểm 15' HK1", 'Kiểm tra HK1', "Điểm 15' HK2", 'Kiểm tra HK2']];
+  activeStudents(cls).forEach(s => aoa.push([s.IdNumber, s.SaintName || '', s.FullName, '', '', '', '']));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Điểm');
+  XLSX.writeFile(wb, 'Khung_nhap_diem_' + cls + '.xlsx');
+}
+async function importScores() {
+  const f = $('nh-file').files[0];
+  $('nh-file').value = '';
+  if (!f) return;
+  let ws;
+  try { const wb = XLSX.read(await f.arrayBuffer()); ws = wb.Sheets[wb.SheetNames[0]]; }
+  catch (e) { return toast('Không đọc được file Excel.'); }
+  const rows = XLSX.utils.sheet_to_json(ws, {header: 1, defval: ''});
+  const keyOf = s => String(s || '').replace(/[^0-9]/g, '').replace(/^0+/, '');
+  const byId = {};
+  $('nh-tbody').querySelectorAll('tr').forEach(tr => {
+    const id = tr.children[1] ? tr.children[1].textContent.trim() : '';
+    if (id) byId[keyOf(id)] = tr;
+  });
+  const errs = [], updates = []; let skipped = 0;
+  rows.slice(1).forEach(r => {
+    const tr = byId[keyOf(r[0])];
+    if (!tr) { if (String(r[0] || '').trim()) skipped++; return; }
+    const vals = SCORE_FIELDS.map((f, i) => String(r[i + 3] == null ? '' : r[i + 3]).trim());
+    if (vals.some(v => v !== '' && (isNaN(+v) || +v < 0 || +v > 10))) {
+      const who = tr.children[2] ? tr.children[2].textContent.trim() : tr.children[1].textContent.trim();
+      errs.push(who);
+    } else updates.push({tr, vals});
+  });
+  if (errs.length) return toast('Điểm không hợp lệ (0–10): ' + errs.slice(0, 3).join(', ') + (errs.length > 3 ? '…' : '') + '. Chưa lưu gì.');
+  if (!updates.length) return toast(skipped ? 'Không có CCCD nào trong file thuộc lớp này.' : 'File không có dòng điểm nào.');
+  updates.forEach(({tr, vals}) => tr.querySelectorAll('[data-f]').forEach((inp, i) => { inp.value = vals[i]; }));
+  const msg = skipped ? ' — bỏ qua ' + skipped + ' CCCD không thuộc lớp.' : '';
+  toast('Đã nhập ' + updates.length + ' học sinh' + msg);
+  saveScores();
 }
 
 /* ---------- Trích lục ---------- */
@@ -94,14 +125,16 @@ async function renderTongHop() {
         '<td class="p-2 border text-center">' + (x.cc == null ? '—' : x.cc + '%') + '</td>' +
         (showRating ? '<td class="p-2 border text-center">' + (x.rating ? esc(x.rating) : '—') + '</td>' : '') + '</tr>').join('')
     : '<tr><td colspan="' + heads.length + '" class="p-4 text-center text-slate-400">Chưa có dữ liệu.</td></tr>';
-  $('th-note').textContent = "ĐTB HK1 = (KT 15' + 2×KT HK1)/3 · ĐTB Năm = (HK1 + 2×HK2)/3 · Xếp loại: ≥8 Giỏi · ≥6.5 Tiên tiến · còn lại Trung bình";
 }
 async function toanDoan() {
   if (!isExec()) return;
   let r;
   try { r = await api('getSummary', {wholeDeanery: true}); }
   catch (e) { return toast(e.message); }
-  const rows = (r.summary || []).map(normSummary).sort((a, b) => String(a.className).localeCompare(String(b.className)));
+  // Thứ tự lớp theo sheet Classes (Chiên con > Ấu 1 > … > Dự bị trưởng 2), không theo A→Z.
+  const ord = {}; TCLASSES.forEach((c, i) => ord[c.ClassName] = i);
+  const rows = (r.summary || []).map(normSummary).sort((a, b) =>
+    (ord[a.className] ?? 1e9) - (ord[b.className] ?? 1e9) || String(a.idNumber || '').localeCompare(String(b.idNumber || '')));
   const w = window.open('', '_blank');
   w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Xếp loại toàn đoàn ' + esc(year()) + '</title>' +
     '<style>body{font-family:Arial,sans-serif;padding:24px}h1{font-size:18px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #999;padding:4px 6px;text-align:left}th{background:#eee}.c{text-align:center}</style></head><body>' +
@@ -121,15 +154,15 @@ async function renderKT() {
     ? rows.map((x, i) => '<tr><td class="p-2 border text-center">' + (i + 1) + '</td><td class="p-2 border">' + esc(x.idNumber) + '</td>' +
         '<td class="p-2 border font-medium">' + esc(x.fullName) + '</td><td class="p-2 border">' + esc(x.className) + '</td>' +
         '<td class="p-2 border text-center">' + fmt1(x.avgYear) + '</td><td class="p-2 border text-center">' + (x.cc == null ? '—' : x.cc + '%') + '</td>' +
-        '<td class="p-2 border text-center text-pink-600 font-bold">🏆 Chiến sĩ của Chúa</td></tr>').join('')
+        '<td class="p-2 border text-center text-pink-600 font-bold">Giỏi</td></tr>').join('')
     : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có học sinh đạt chuẩn.</td></tr>';
 }
 
 /* ---------- Sự kiện ---------- */
-$('nh-nam').addEventListener('change', renderNhap);
 $('nh-lop').addEventListener('change', renderNhap);
-$('add-student').addEventListener('click', addStudentRow);
 $('save-scores').addEventListener('click', saveScores);
+$('nh-template').addEventListener('click', e => { e.preventDefault(); downloadTemplate(); });
+$('nh-file').addEventListener('change', importScores);
 $('hbt-search').addEventListener('click', renderHBT);
 $('th-nam').addEventListener('change', renderTongHop);
 $('th-lop').addEventListener('change', renderTongHop);

@@ -50,6 +50,8 @@
 @media print{
   .no-print{display:none!important}
   .print-area{box-shadow:none!important;border:1px solid #ddd}
+  .tbl-scroll{max-height:none;overflow:visible}
+  .tbl-scroll.sticky thead th{position:static}
 }
 
 /* ===== loading overlay ===== */
@@ -63,3 +65,8 @@
 /* nội dung trang ẩn đến khi mọi component render xong (.ready do common.js gán) */
 body[data-role]:not(.ready){visibility:hidden}
 body[data-role]:not(.ready) .loading-overlay{visibility:visible}
+
+/* ===== bảng cuộn dọc khi dài hơn khung (áp dụng được cho mọi bảng) ===== */
+.tbl-scroll{max-height:min(58vh,720px);overflow:auto;border:1px solid #cbd5e1;border-radius:8px}
+.tbl-scroll th,.tbl-scroll td{border:1px solid #e2e8f0}
+.tbl-scroll.sticky thead th{position:sticky;top:0;background:#1e3a8a;color:#fff;z-index:1}

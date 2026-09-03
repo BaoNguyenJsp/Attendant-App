@@ -23,7 +23,7 @@
  *   Scores            SchoolYear | IdNumber | ClassName | Quiz15_S1 | Exam_S1 | Quiz15_S2 | Exam_S2
  *   Config            Key | Value          (CurrentSchoolYear, DriveFolderId)
  *   Holidays          SchoolYear | WeekOf | Session | Reason   (Session rỗng = nghỉ cả tuần)
- *   AcademicYear      SchoolYear | IdNumber | ClassName | YearScore | YearAttendant | Status
+ *   AcademicYear      SchoolYear | IdNumber | ClassName | HK1Score | HK2Score | YearScore | YearAttendant | Status
  */
 
 const TAB_HEADERS = {
@@ -38,7 +38,7 @@ const TAB_HEADERS = {
   Scores:            ['SchoolYear', 'IdNumber', 'ClassName', 'Quiz15_S1', 'Exam_S1', 'Quiz15_S2', 'Exam_S2'],
   Config:            ['Key', 'Value'],
   Holidays:          ['SchoolYear', 'WeekOf', 'Session', 'Reason'],
-  AcademicYear:      ['SchoolYear', 'IdNumber', 'ClassName', 'YearScore', 'YearAttendant', 'Status'],
+  AcademicYear:      ['SchoolYear', 'IdNumber', 'ClassName', 'HK1Score', 'HK2Score', 'YearScore', 'YearAttendant', 'Status'],
 };
 
 const SESSIONS = ['Lễ Chúa Nhật', 'Học Giáo Lý', 'Chầu Thánh Thể', 'Lễ Thứ Năm'];
@@ -71,6 +71,9 @@ const fmtDate = d => {
   return Utilities.formatDate(dt, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 };
 
+// CCCD dạng "001234" khi nhập bằng Excel bị mất số 0 đầu → nén về số thuần để khớp.
+const normId = s => String(s ?? '').replace(/^['0]+/, '').trim();
+
 // Normalizes text to ensure students aren't accidentally filtered out
 function activeStudents(className) {
   const targetClass = String(className).normalize('NFC').trim();
@@ -96,6 +99,29 @@ function rowObj(head, r) {
   return o;
 }
 
+// Cột thiếu vì schema mở rộng sau khi tab đã tồn tại → chèn đúng vị trí schema
+// (insertColumns dịch dữ liệu phải sang, giữ các cột sau — vd thêm HK1Score/HK2Score
+// trước YearScore). Idempotent: header đủ rồi thì bỏ qua; cột đã có thì không nhân bản.
+function ensureHeader(name) {
+  const want = TAB_HEADERS[name];
+  if (!want) return;
+  const sh = ss().getSheetByName(name);
+  if (!sh) return;
+  const cur0 = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(c => String(c ?? ''));
+  if (want.every(h => cur0.includes(h))) return;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const cur = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(c => String(c ?? ''));
+    for (let i = 0; i < want.length; i++) {
+      if (cur[i] === want[i] || cur.includes(want[i])) continue; // đã đúng vị trí / đã tồn tại
+      sh.insertColumns(i + 1);
+      sh.getRange(1, i + 1).setValue(want[i]);
+      cur.splice(i, 0, want[i]);
+    }
+  } finally { lock.releaseLock(); }
+}
+
 function readAll(name) {
   let sh = ss().getSheetByName(name);
   if (!sh) {
@@ -104,6 +130,7 @@ function readAll(name) {
     sh = ss().insertSheet(name);
     sh.getRange(1, 1, 1, h.length).setValues([h]);
   }
+  ensureHeader(name);
   const values = sh.getDataRange().getValues();
   const head = values.shift();
   return values.filter(r => String(r[0]) !== '').map(r => rowObj(head, r));
@@ -253,29 +280,53 @@ function activeUsers() {
 }
 
 /* ĐTB HK = (15' + 2·HK)/3 · ĐTB năm = (HK1 + 2·HK2)/3 · xếp loại ≥8 Giỏi · ≥6.5 Tiên tiến · còn lại Trung bình */
-function dtbHK(q, e) { return (q !== '' && e !== '') ? (+q + 2 * +e) / 3 : null; }
+// null/undefined/' ' = chưa có → null (tránh NaN khi ô trống). Điểm 0 hợp lệ.
+function dtbHK(q, e) { return (q == null || q === '' || e == null || e === '') ? null : (+q + 2 * +e) / 3; }
 function xepLoai(n) { return n >= 8 ? 'Giỏi' : n >= 6.5 ? 'Tiên tiến' : 'Trung bình'; }
 
 // Tổng hợp điểm + chuyên cần cho một bộ lớp (dùng chung getSummary / startSchoolYear).
+// Năm đã khóa (có dòng AcademicYear): danh sách lấy theo AcademicYear.SchoolYear + .ClassName;
+// IdNumber chỉ để nối tên học sinh từ Students. Năm chưa khóa: đọc Scores/Attendance đang chạy,
+// % CC giống tab Chuyên cần (Hiện diện ÷ số CN đã qua). Chọn nguồn theo DỮ LIỆU thực có, không
+// theo Config.CurrentSchoolYear — Config chưa lăn năm không được làm ẩn dòng năm đã khóa.
 function summaryRows(classNames, year) {
-  const nghi = holidays(year);
-  const scores = cachedRead('Scores').filter(r => r.SchoolYear === year && classNames.includes(r.ClassName));
-  const att = cachedRead('Attendance').filter(r =>
-    r.SchoolYear === year && classNames.includes(r.ClassName) && !isHoliday(nghi, r.WeekOf, r.Session));
-  const ccBy = {};
-  att.forEach(r => {
-    ccBy[r.IdNumber] = ccBy[r.IdNumber] || { co: 0, tong: 0 };
-    ccBy[r.IdNumber].tong++;
-    if (r.AttendanceStatus === 'Hiện diện') ccBy[r.IdNumber].co++;
-  });
   const names = {};
-  cachedRead('Students').forEach(st => names[st.IdNumber] = st.FullName);
-  return scores.map(s => {
+  cachedRead('Students').forEach(st => {
+    const sn = String(st.SaintName || '').trim();
+    names[normId(st.IdNumber)] = sn ? sn + ' ' + st.FullName : st.FullName;
+  });
+  const archived = cachedRead('AcademicYear').filter(r => String(r.SchoolYear).trim() === year);
+  if (archived.length) {
+    // HK1/HK2 chốt lưu trong dòng. Dòng chốt trước khi có cột HK1Score/HK2Score → tính lại từ Scores
+    // (Quiz15/Exam cố định theo năm nên khớp giá trị chốt). ĐTB năm/%CC/xếp loại giữ giá trị khóa.
+    const sc = {};
+    if (archived.some(r => r.HK1Score == null || r.HK1Score === '' || r.HK2Score == null || r.HK2Score === ''))
+      cachedRead('Scores').filter(s => s.SchoolYear === year)
+        .forEach(s => { sc[normId(s.IdNumber) + '|' + s.ClassName] = s; });
+    return archived.filter(r => classNames.includes(r.ClassName)).map(r => {
+      const avgYear = Number(r.YearScore) || null;
+      const s = sc[normId(r.IdNumber) + '|' + r.ClassName] || {};
+      const h1 = r.HK1Score != null && r.HK1Score !== '' ? +r.HK1Score : dtbHK(s.Quiz15_S1, s.Exam_S1);
+      const h2 = r.HK2Score != null && r.HK2Score !== '' ? +r.HK2Score : dtbHK(s.Quiz15_S2, s.Exam_S2);
+      return { idNumber: r.IdNumber, fullName: names[normId(r.IdNumber)] || '', className: r.ClassName,
+        avgH1: h1, avgH2: h2, avgYear, attendancePct: Number(r.YearAttendant) || null,
+        rating: avgYear == null ? '' : xepLoai(avgYear) };
+    });
+  }
+  const w = attendanceWindow(year);
+  const maxTotal = SESSIONS.reduce((a, s) => a + (w.max[s] || 0), 0);
+  const coBy = {};
+  const todayYmd = fmtDate(new Date());
+  cachedRead('Attendance').forEach(r => {
+    if (r.SchoolYear !== year || !classNames.includes(r.ClassName)) return;
+    if (String(r.WeekOf) > todayYmd || isHoliday(w.nghi, r.WeekOf, r.Session)) return;
+    if (r.AttendanceStatus === 'Hiện diện') coBy[normId(r.IdNumber)] = (coBy[normId(r.IdNumber)] || 0) + 1;
+  });
+  return cachedRead('Scores').filter(r => r.SchoolYear === year && classNames.includes(r.ClassName)).map(s => {
     const h1 = dtbHK(s.Quiz15_S1, s.Exam_S1), h2 = dtbHK(s.Quiz15_S2, s.Exam_S2);
     const nam = (h1 !== null && h2 !== null) ? (h1 + 2 * h2) / 3 : (h1 ?? h2);
-    const cc = ccBy[s.IdNumber];
-    const pct = cc && cc.tong ? Math.round(cc.co / cc.tong * 100) : null;
-    return { idNumber: s.IdNumber, fullName: names[s.IdNumber] || '', className: s.ClassName,
+    const pct = maxTotal ? Math.round((coBy[normId(s.IdNumber)] || 0) / maxTotal * 100) : null;
+    return { idNumber: s.IdNumber, fullName: names[normId(s.IdNumber)] || '', className: s.ClassName,
       avgH1: h1, avgH2: h2, avgYear: nam, attendancePct: pct, rating: nam === null ? '' : xepLoai(nam) };
   });
 }
@@ -580,6 +631,14 @@ getClassAttendanceStats: b => {
     return { status: 'ok', summary: summaryRows(classNames, year) };
   },
 
+  /* ---- Danh sách năm học có dữ liệu (AcademicYear ∪ Attendance ∪ Scores), sớm nhất trước ---- */
+  getYearOptions: () => {
+    const set = new Set([currentYear()]);
+    ['AcademicYear', 'Attendance', 'Scores'].forEach(t =>
+      cachedRead(t).forEach(r => { if (r.SchoolYear) set.add(String(r.SchoolYear).trim()); }));
+    return { status: 'ok', years: [...set].sort() };
+  },
+
   /* ---- Trích lục theo CCCD: mọi năm (giữ nguyên cả tuần nghỉ — tra lịch sử đầy đủ) ---- */
   // Trích lục theo CCCD. absences = mọi buổi không nghỉ trong cửa sổ chuyên cần (AttendanceStartDate → nay)
   // mà học sinh chưa ghi 'Hiện diện' — kể cả tuần chưa điểm danh (không có bản ghi) để tra đủ (FR-DD-17).
@@ -616,8 +675,18 @@ getClassAttendanceStats: b => {
         });
       }
     }
-    return { status: 'ok', students: [st], attendance: att,
-      scores: cachedRead('Scores').filter(r => String(r.IdNumber).replace(/^['0]+/, '').trim() === id), absences };
+    // Trích lục điểm = bản chốt AcademicYear từng năm (cùng nguồn Tổng hợp/xếp loại),
+    // mọi năm học sinh có dòng (AcademicYear ∪ Scores), không giới hạn xếp loại.
+    const ayRows = cachedRead('AcademicYear').filter(r => normId(r.IdNumber) === id);
+    const scoreRows = cachedRead('Scores').filter(r => normId(r.IdNumber) === id);
+    const clsOf = {};
+    ayRows.forEach(r => { clsOf[String(r.SchoolYear).trim()] = r.ClassName; });
+    scoreRows.forEach(r => { const y = String(r.SchoolYear).trim(); if (clsOf[y] == null) clsOf[y] = r.ClassName; });
+    const academic = Object.keys(clsOf).sort().map(y => {
+      const row = summaryRows([clsOf[y]], y).find(x => normId(x.idNumber) === id);
+      return row ? { SchoolYear: y, ...row } : null;
+    }).filter(Boolean);
+    return { status: 'ok', students: [st], attendance: att, academic, scores: scoreRows, absences };
   },
 }
 /* ponytail: readAll quét cả tab — đủ cho ~25k dòng/năm; đổi TextFinder theo tuần khi Attendance vượt vài trăm nghìn dòng. */
