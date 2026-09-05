@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Giáo Viên — Sổ Thiếu Nhi</title>
+<title>Huynh trưởng — Sổ Thiếu Nhi</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="/shared/style.css">
 </head>
 <body class="bg-slate-100 min-h-screen"
-      data-title="🧑‍🏫 Quản Lý Giáo Viên"
-      data-sub="Điểm danh giáo viên theo ngành · Thống kê — BCH ngành / Xứ đoàn (403 cho nhóm khác)"
+      data-title="🧑‍🏫 Quản Lý Huynh trưởng"
+      data-sub="Điểm danh · Trích lục · Thống kê Huynh trưởng theo Ngành / Lớp — BCH ngành / Xứ đoàn"
       data-back="1"
       data-role="any">
 
@@ -18,42 +18,76 @@
 
 <div class="max-w-7xl mx-auto px-4 pb-6">
   <div class="bg-white rounded-t-xl border-b border-slate-300 shadow-sm px-4 pt-2 flex flex-wrap">
-    <button class="tab-btn active" data-tab="t-gvdd">📝 Điểm Danh Giáo Viên</button>
+    <button class="tab-btn active" data-tab="t-gvdd">📝 Điểm Danh</button>
+    <button class="tab-btn" data-tab="t-gvtrich">🔎 Trích Lục</button>
     <button class="tab-btn" data-tab="t-gvtk">📊 Thống Kê</button>
   </div>
 
+  <!-- t-gvdd -->
   <div id="t-gvdd" class="bg-white rounded-b-xl shadow-sm p-5" data-pane>
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
       <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Ngành</label>
         <select id="gvdd-nganh" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
       <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Tuần (Chủ Nhật)</label>
         <input type="date" id="gvdd-week" class="w-full border p-2.5 rounded-lg font-semibold"></div>
       <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Buổi Sinh Hoạt</label>
         <select id="gvdd-session" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
-      <div class="flex items-end"><button id="gvdd-save" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-lg">💾 Lưu Điểm Danh</button></div>
     </div>
+
+    <div id="gvdd-holiday-note" style="display:none"></div>
+
     <div class="tbl-scroll sticky">
-      <table class="w-full text-sm border-collapse">
+      <table class="w-full text-sm border-collapse min-w-[820px]">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
-          <th class="p-3">STT</th><th class="p-3">Email</th><th class="p-3">Họ Tên</th><th class="p-3">Hiện Diện</th><th class="p-3">Có Phép</th><th class="p-3">Ghi Chú</th>
+          <th class="p-3">ID</th><th class="p-3">Email</th><th class="p-3">Họ Tên</th><th class="p-3">Lớp</th>
+          <th class="p-3">Hiện Diện</th><th class="p-3">Có Phép</th><th class="p-3">Ghi Chú</th>
         </tr></thead>
         <tbody id="gvdd-tbody"></tbody>
       </table>
     </div>
-    <p class="text-xs text-slate-500 mt-3" id="gvdd-summary"></p>
-    <p class="text-xs text-slate-500 mt-3">BCH ngành chỉ thấy ngành mình; Xứ đoàn thấy mọi ngành; nhóm khác bị từ chối 403 (FR-GV-04).</p>
+
+    <div class="mt-5 flex justify-between items-center flex-wrap gap-3">
+      <div class="flex gap-3 flex-wrap items-center">
+        <span class="font-bold text-slate-700" id="gvdd-summary"></span>
+        <span id="gvdd-dirty" class="bg-amber-100 border border-amber-400 text-amber-800 font-bold px-3 py-1.5 rounded-lg" style="display:none">⚠ Đã sửa chưa lưu</span>
+      </div>
+      <div class="flex gap-3 flex-wrap">
+        <button id="gvdd-refresh" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-5 py-3 rounded-lg">↻ Làm mới</button>
+        <button id="gvdd-markall" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-3 rounded-lg">✅ Chọn hiện diện tất cả</button>
+        <button id="gvdd-save" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3 rounded-lg">💾 Lưu Điểm Danh</button>
+      </div>
+    </div>
   </div>
 
+  <!-- t-gvtrich -->
+  <div id="t-gvtrich" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
+      <div class="md:col-span-2"><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Email Huynh trưởng</label>
+        <input type="text" id="gvtrich-q" class="w-full border p-2.5 rounded-lg font-semibold" placeholder="vd: a.nguyen@gmail.com"></div>
+      <div class="flex gap-3">
+        <button id="gvtrich-search" class="bg-blue-900 hover:bg-blue-800 text-white font-bold px-6 py-2.5 rounded-lg flex-1">🔎 Tra cứu</button>
+      </div>
+    </div>
+    <div id="gvtrich-out"></div>
+  </div>
+
+  <!-- t-gvtk -->
   <div id="t-gvtk" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
       <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Ngành</label>
-        <select id="gvtk-nhom" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
-      <div class="flex items-end"><button id="gvtk-excel" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-2.5 rounded-lg">⬇ Xuất Excel</button></div>
+        <select id="gvtk-nganh" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
+        <select id="gvtk-lop" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
+      <div class="flex items-end gap-3">
+        <button id="gvtk-excel" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-6 py-2.5 rounded-lg flex-1">⬇ Xuất Excel</button>
+        <button id="gvtk-print" class="bg-slate-700 hover:bg-slate-800 text-white font-bold px-6 py-2.5 rounded-lg">🖨 In</button>
+      </div>
     </div>
     <div class="tbl-scroll sticky">
-      <table class="w-full text-sm border-collapse" id="gvtk-table">
+      <table class="w-full text-sm border-collapse min-w-[960px]" id="gvtk-table">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
-          <th class="p-3">Giáo viên</th><th class="p-3">Buổi dạy đã cập nhật (tab Giảng dạy)</th><th class="p-3">Tỷ lệ hiện diện</th>
+          <th class="p-3">ID</th><th class="p-3">Họ Tên</th><th class="p-3">Email</th><th class="p-3">Lớp</th><th class="p-3">Buổi dạy</th>
+          <th class="p-3">Lễ CN</th><th class="p-3">Học GL</th><th class="p-3">Chầu TT</th><th class="p-3">Lễ T5</th><th class="p-3">Họp HT</th><th class="p-3">Tỉ lệ hiện diện</th>
         </tr></thead>
         <tbody id="gvtk-tbody"></tbody>
       </table>

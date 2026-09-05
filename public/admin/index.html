@@ -9,7 +9,7 @@
 </head>
 <body class="bg-slate-100 min-h-screen"
       data-title="⚙ Quản Trị"
-      data-sub="Giáo viên · Nhóm · Phân công · Lớp · Nghỉ lễ · Quyền truy cập · Chuyển năm học"
+      data-sub="Huynh trưởng · Nhóm · Phân công · Lớp · Nghỉ lễ · Chuyển năm học"
       data-back="1"
       data-role="admin">
 
@@ -17,33 +17,32 @@
 
 <div class="max-w-7xl mx-auto px-4 pb-6">
   <div class="bg-white rounded-t-xl border-b border-slate-300 shadow-sm px-4 pt-2 flex flex-wrap">
-    <button class="tab-btn active" data-tab="t-us">👤 Giáo viên</button>
+    <button class="tab-btn active" data-tab="t-us">👤 Huynh trưởng</button>
     <button class="tab-btn" data-tab="t-grp">🗂 Nhóm</button>
-    <button class="tab-btn" data-tab="t-asg">🔗 Phân công</button>
     <button class="tab-btn" data-tab="t-cls">🏫 Lớp</button>
     <button class="tab-btn" data-tab="t-hol">🗓 Nghỉ Lễ</button>
-    <button class="tab-btn" data-tab="t-perm">🔐 Quyền truy cập</button>
     <button class="tab-btn" data-tab="t-year">🎓 Chuyển năm</button>
   </div>
 
   <!-- t-us -->
   <div id="t-us" class="bg-white rounded-b-xl shadow-sm p-5" data-pane>
-    <h2 class="font-bold text-lg mb-3">Users — đăng nhập bằng Gmail (thêm bằng email, không có mật khẩu tự quản)</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
+      <div class="md:col-span-2"><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lọc theo tên hoặc email</label>
+        <input type="text" id="us-q" class="w-full border p-2.5 rounded-lg font-semibold" placeholder="vd: Nguyễn Văn A · a.nguyen@gmail.com"></div>
+      <div class="flex items-end"><button id="us-add" class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg">＋ Thêm Huynh trưởng</button></div>
+    </div>
     <div class="tbl-scroll sticky">
       <table class="w-full text-sm border-collapse">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
-          <th class="p-3">Email</th><th class="p-3">Họ Tên</th><th class="p-3">Nhóm (GroupMembers)</th><th class="p-3">Trạng thái</th><th class="p-3"></th>
+          <th class="p-3">ID</th><th class="p-3">Email</th><th class="p-3">Họ Tên</th><th class="p-3">SDT</th><th class="p-3">Nhóm</th><th class="p-3">Trạng thái</th><th class="p-3"></th>
         </tr></thead>
         <tbody id="us-tbody"></tbody>
       </table>
     </div>
-    <p class="mt-4"><button id="us-add" class="bg-blue-900 hover:bg-blue-800 text-white font-bold px-5 py-2.5 rounded-lg">＋ Thêm giáo viên / người dùng</button></p>
-    <p class="text-xs text-slate-500">Khóa một email → email đó bị từ chối khi đăng nhập (FR-ADM-03). Quyền suy ra từ nhóm — không khai vai trò.</p>
   </div>
 
   <!-- t-grp -->
   <div id="t-grp" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
-    <h2 class="font-bold text-lg mb-3">Nhóm — nhóm mặc định, 4 loại (§2.3)</h2>
     <div class="tbl-scroll sticky">
       <table class="w-full text-sm border-collapse">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
@@ -52,29 +51,10 @@
         <tbody id="grp-tbody"></tbody>
       </table>
     </div>
-    <p class="text-xs text-slate-500 mt-3">class = nhóm lớp · sector = ngành · exec = Ban chấp hành ngành [BQT] · admin = Xứ đoàn.</p>
-  </div>
-
-  <!-- t-asg -->
-  <div id="t-asg" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
-    <h2 class="font-bold text-lg mb-3">Phân Công — GroupMembers (1 dòng = 1 quan hệ user ↔ nhóm)</h2>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
-      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Nhóm</label><select id="asg-group" class="w-full border p-2.5 rounded-lg"></select></div>
-      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Giáo viên (email)</label><select id="asg-user" class="w-full border p-2.5 rounded-lg"></select></div>
-      <div><button id="asg-add" class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg">＋ Thêm</button></div>
-    </div>
-    <div class="tbl-scroll sticky">
-      <table class="w-full text-sm border-collapse">
-        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center"><th class="p-3">Nhóm</th><th class="p-3">Email</th><th class="p-3"></th></tr></thead>
-        <tbody id="asg-tbody"></tbody>
-      </table>
-    </div>
-    <p class="text-xs text-slate-500 mt-3">Thành viên nhóm có ngay mọi quyền của nhóm đó — không có phân công theo năm học (FR-ADM-05).</p>
   </div>
 
   <!-- t-cls -->
   <div id="t-cls" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
-    <h2 class="font-bold text-lg mb-3">Danh Sách Lớp Học — thứ tự dòng = thứ tự lên lớp khi chuyển năm (FR-ADM-01)</h2>
     <div class="tbl-scroll sticky">
       <table class="w-full text-sm border-collapse">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
@@ -87,46 +67,76 @@
 
   <!-- t-hol -->
   <div id="t-hol" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
-    <h2 class="font-bold text-lg mb-3">🗓 Nghỉ Lễ / Kỷ Niệm — loại khỏi mẫu số chuyên cần</h2>
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
-      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Năm Học</label><select id="hol-nam" class="w-full border p-2.5 rounded-lg"></select></div>
-      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Tuần (Chủ Nhật)</label><input type="date" id="hol-week" class="w-full border p-2.5 rounded-lg"></div>
-      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Buổi (để trống = nghỉ cả tuần)</label><select id="hol-session" class="w-full border p-2.5 rounded-lg"><option value="">— Cả tuần —</option></select></div>
-      <div class="flex gap-2">
-        <button id="hol-add" class="flex-1 bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg">＋ Thêm</button>
-        <button id="hol-del" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2.5 rounded-lg">🗑 Xóa</button>
-      </div>
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Tuần (Chủ Nhật)</label>
+        <input type="date" id="hol-week" class="w-full border p-2.5 rounded-lg font-semibold"></div>
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Buổi</label>
+        <select id="hol-session" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
+      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lý do</label>
+        <input type="text" id="hol-reason" class="w-full border p-2.5 rounded-lg font-semibold" placeholder="vd: Mùa Chay"></div>
+      <div class="flex items-end"><button id="hol-add" class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg">＋ Thêm</button></div>
     </div>
     <div class="tbl-scroll sticky">
       <table class="w-full text-sm border-collapse">
-        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center"><th class="p-3">Tuần</th><th class="p-3">Buổi</th><th class="p-3">Lý do</th></tr></thead>
+        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center"><th class="p-3">Tuần</th><th class="p-3">Buổi</th><th class="p-3">Lý do</th><th class="p-3"></th></tr></thead>
         <tbody id="hol-tbody"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- t-perm -->
-  <div id="t-perm" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
-    <h2 class="font-bold text-lg mb-3">Quyền Truy Cập — Giáo viên × Nhóm kèm phạm vi mở rộng (FR-ADM-06)</h2>
-    <p class="text-xs text-slate-500 mt-0 mb-3">Phạm vi = hợp các nhóm; cấp quyền = nhóm cao nhất admin &gt; exec &gt; sector &gt; class.</p>
-    <div class="tbl-scroll sticky">
-      <table class="w-full text-sm border-collapse">
-        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center" id="perm-head"></tr></thead>
-        <tbody id="perm-body"></tbody>
       </table>
     </div>
   </div>
 
   <!-- t-year -->
   <div id="t-year" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
-    <h2 class="font-bold text-lg mb-3">🎓 Chuyển Năm Học (startSchoolYear)</h2>
-    <ul class="space-y-1 text-sm text-slate-600 list-disc ml-5">
-      <li>① Lên lớp học sinh theo thứ tự dòng tab Lớp; lớp cuối → <b>Tốt nghiệp</b>. Học lại → chỉnh tay.</li>
-      <li>② Nhóm và thành viên giữ nguyên (không có phân công theo năm).</li>
-      <li>③ Điểm + điểm danh giữ nguyên để tra theo SchoolYear — năm mới ghi dòng mới.</li>
-      <li>④ Giáo án giảng dạy giữ lại để tham khảo. Không xóa dữ liệu gì.</li>
+    <h2 class="font-bold text-lg mb-3">🎓 Chuyển Năm Học</h2>
+    <ul class="space-y-1 text-sm text-slate-600 list-disc ml-5 mb-4">
+      <li>① Chốt điểm + tỉ lệ chuyên cần của <b>năm hiện tại</b> vào sheet <b>AcademicYear</b> (học bạ).</li>
+      <li>② Xóa sạch bản ghi điểm danh (Attendance, TeacherAttendance) và Nghỉ lễ (Holidays).</li>
+      <li>③ Thiếu nhi đang <b>Hoạt động</b> tự lên lớp kế tiếp theo thứ tự tab Lớp; lớp cuối <b>giữ nguyên</b> — muốn ra khỏi lớp cuối thì đổi trạng thái thành <b>Tốt nghiệp</b> / <b>Ngưng hoạt động</b>.</li>
+      <li>④ Năm học tự tăng lên 1. Nhóm / người dùng giữ nguyên.</li>
     </ul>
-    <p class="mt-5"><button id="year-start" class="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-lg">▶ Chuyển sang năm học kế tiếp</button></p>
+    <p class="mt-5"><button id="year-open" class="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-lg">🎓 Chuyển sang năm học kế tiếp…</button></p>
+  </div>
+</div>
+
+<!-- Modal: thêm / sửa người dùng -->
+<div id="us-modal" class="modal">
+  <div class="modal-content">
+    <h3 id="us-m-title">Thêm Huynh trưởng / Người Dùng</h3>
+    <div class="form-grid">
+      <div class="form-group full"><label>Email Google *</label><input id="us-m-email" type="text" placeholder="vd: a.nguyen@gmail.com"></div>
+      <div class="form-group"><label>Tên Thánh</label><input id="us-m-saint" type="text"></div>
+      <div class="form-group"><label>Họ Và Tên *</label><input id="us-m-full" type="text"></div>
+      <div class="form-group"><label>SDT</label><input id="us-m-sdt" type="text" placeholder="vd: 0912 345 678"></div>
+      <div class="form-group"><label>Trạng Thái</label><select id="us-m-status"><option>Hoạt động</option><option>Ngưng hoạt động</option></select></div>
+      <div class="form-group full"><label>Nhóm (chọn nhiều)</label>
+        <div id="us-m-groups" class="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-56 overflow-y-auto border rounded-lg p-2 bg-slate-50"></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel">Hủy</button>
+      <button type="button" class="btn-save">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: chuyển năm -->
+<div id="year-modal" class="modal">
+  <div class="modal-content">
+    <h3>🎓 Chuyển Năm Học</h3>
+    <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm mb-4 flex flex-wrap gap-2 items-center">
+      <span>Năm hiện tại: <b id="yr-old"></b></span>
+      <span class="text-slate-400">→</span>
+      <span>Năm mới: <b id="yr-new"></b></span>
+    </div>
+    <p class="text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm font-semibold mb-4">
+      ⚠ Hành động phá hủy — không thể hoàn tác. Nên chạy trên bản sao spreadsheet nếu còn ngờ.</p>
+    <div class="form-grid">
+      <div class="form-group full"><label>Ngày bắt đầu năm học mới (AttendanceStartDate) *</label>
+        <input id="sy-start" type="date" placeholder="Chủ Nhật đầu năm học mới"></div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel">Hủy</button>
+      <button type="button" class="btn-save" id="sy-confirm">Xác nhận chuyển năm</button>
+    </div>
   </div>
 </div>
 

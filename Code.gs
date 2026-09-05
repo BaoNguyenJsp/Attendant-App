@@ -12,7 +12,7 @@
  *   (folder giáo án nằm trong Config tab → khóa DriveFolderId)
  *
  * 12 tab + cột (tự tạo khi thiếu):
- *   Users             Email | SaintName | FullName | Status
+ *   Users             Email | SaintName | FullName | Status | Id
  *   Groups            GroupName | Type | Scope | Description
  *   GroupMembers      GroupName | Email
  *   Classes           ClassName | Grade
@@ -27,7 +27,7 @@
  */
 
 const TAB_HEADERS = {
-  Users:             ['Email', 'SaintName', 'FullName', 'Status'],
+  Users:             ['Email', 'SaintName', 'FullName', 'Status', 'Id', 'SDT'],
   Groups:            ['GroupName', 'Type', 'Scope', 'Description'],
   GroupMembers:      ['GroupName', 'Email'],
   Classes:           ['ClassName', 'Grade'],
@@ -42,6 +42,9 @@ const TAB_HEADERS = {
 };
 
 const SESSIONS = ['Lễ Chúa Nhật', 'Học Giáo Lý', 'Chầu Thánh Thể', 'Lễ Thứ Năm'];
+const TEACHER_SESSIONS = [...SESSIONS, 'Họp Huynh Trưởng'];
+// Giá trị sector 'Xứ đoàn' ở trang giaovien = lọc thành viên nhóm Type='Quản trị' (BCH Xứ đoàn).
+const XUDOAN = '__Xudoan__';
 const CACHE_TTL = 300;
 
 /* ---------- HTTP entry: chỉ doPost, cửa chính là SHARED_TOKEN ---------- */
@@ -74,13 +77,22 @@ const fmtDate = d => {
 // CCCD dạng "001234" khi nhập bằng Excel bị mất số 0 đầu → nén về số thuần để khớp.
 const normId = s => String(s ?? '').replace(/^['0]+/, '').trim();
 
+// Id (Users) là số nguyên — người dùng có thể nhập tay sai kiểu, quy về số (0 nếu rỗng/hỏng).
+const numId = v => { const n = +v; return Number.isFinite(n) ? n : 0; };
+
 // Normalizes text to ensure students aren't accidentally filtered out
 function activeStudents(className) {
   const targetClass = String(className).normalize('NFC').trim();
   return cachedRead('Students').filter(s => 
     String(s.CurrentClass).normalize('NFC').trim() === targetClass && 
     String(s.Status).normalize('NFC').trim().toLowerCase() === 'hoạt động'
-  );
+  ).sort((a, b) => genderRank(a.Gender) - genderRank(b.Gender));
+}
+
+// Roster order: Nữ trước, Nam sau, còn lại (trống/khác) cuối.
+function genderRank(v) {
+  const g = String(v ?? '').normalize('NFC').trim().toLowerCase();
+  return g === 'nữ' ? 0 : g === 'nam' ? 1 : 2;
 }
 function rowObj(head, r) {
   const o = {};
@@ -104,13 +116,14 @@ function rowObj(head, r) {
 // trước YearScore). Idempotent: header đủ rồi thì bỏ qua; cột đã có thì không nhân bản.
 function ensureHeader(name) {
   const want = TAB_HEADERS[name];
-  if (!want) return;
+  if (!want) return false;
   const sh = ss().getSheetByName(name);
-  if (!sh) return;
+  if (!sh) return false;
   const cur0 = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(c => String(c ?? ''));
-  if (want.every(h => cur0.includes(h))) return;
+  if (want.every(h => cur0.includes(h))) return false;
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
+  let changed = false;
   try {
     const cur = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(c => String(c ?? ''));
     for (let i = 0; i < want.length; i++) {
@@ -118,8 +131,10 @@ function ensureHeader(name) {
       sh.insertColumns(i + 1);
       sh.getRange(1, i + 1).setValue(want[i]);
       cur.splice(i, 0, want[i]);
+      changed = true;
     }
   } finally { lock.releaseLock(); }
+  return changed;
 }
 
 function readAll(name) {
@@ -133,7 +148,39 @@ function readAll(name) {
   ensureHeader(name);
   const values = sh.getDataRange().getValues();
   const head = values.shift();
+  if (name === 'Users' && values.some(r => String(r[0]) !== '' && !String(r[TAB_HEADERS.Users.indexOf('Id')] ?? '').trim())) {
+    backfillUsersId();
+    return readAll(name); // backfill lấp hết ô trống → lần sau không rơi vào vòng lặp
+  }
   return values.filter(r => String(r[0]) !== '').map(r => rowObj(head, r));
+}
+
+// Users thêm tay (Email/Họ tên, bỏ trống Id) → cấp số tự động = max hiện có + 1, tăng dần.
+// Idempotent: hết ô trống thì bỏ qua không lock. Lock + re-đọc để 2 request song song không trùng số.
+// Ghi theo từng ô (sheet row thật) — an toàn kể cả khi có dòng Email trống nằm xen (sheet sửa tay).
+function backfillUsersId() {
+  const sh = ss().getSheetByName('Users');
+  const head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(c => String(c ?? ''));
+  const ci = head.indexOf('Id');
+  if (ci < 0) return;
+  const data = sh.getDataRange().getValues().slice(1);
+  const dirty = data.some(r => String(r[0]) !== '' && !String(r[ci] ?? '').trim());
+  if (!dirty) return;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const cur = sh.getDataRange().getValues().slice(1);
+    if (!cur.some(r => String(r[0]) !== '' && !String(r[ci] ?? '').trim())) return;
+    let max = 0;
+    cur.forEach(r => { if (String(r[0]) !== '') { const n = +r[ci]; if (Number.isFinite(n) && n > max) max = n; } });
+    let next = max + 1;
+    cur.forEach((r, i) => {
+      if (String(r[0]) !== '' && !String(r[ci] ?? '').trim()) {
+        sh.getRange(i + 2, ci + 1).setValue(next++);
+      }
+    });
+  } finally { lock.releaseLock(); }
+  bustCache(['Users']);
 }
 
 // cachedRead chia nhỏ chuỗi JSON theo khối — CacheService giới hạn ~100KB/khóa nên nếu
@@ -261,22 +308,59 @@ function attendanceWindow(year) {
   }
   const max = {};
   SESSIONS.forEach(s => max[s] = 0);
+  // Họp Huynh Trưởng (buổi 5 của Huynh trưởng) chỉ nghỉ khi nghỉ cả tuần (holiday Session rỗng).
+  max['Họp Huynh Trưởng'] = 0;
   let start = null, lastYmd = '';
   if (startYmd) {
     start = sundayOf(startYmd);
     const end = new Date(); end.setDate(end.getDate() - end.getDay());
     lastYmd = fmtDate(end);
-    for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 7))
+    for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 7)) {
       SESSIONS.forEach(s => { if (!isHoliday(nghi, fmtDate(d), s)) max[s]++; });
+      if (!isHoliday(nghi, fmtDate(d), '')) max['Họp Huynh Trưởng']++;
+    }
   }
   return { start, lastYmd, max, nghi };
 }
 
-function activeStudents(className) {
-  return cachedRead('Students').filter(s => s.CurrentClass === className && String(s.Status).toLowerCase() === 'hoạt động');
-}
 function activeUsers() {
   return cachedRead('Users').filter(u => String(u.Status).toLowerCase() === 'hoạt động');
+}
+
+// Huynh trưởng = active User là GroupMember của Lớp thuộc scope Ngành. sector rỗng = toàn đoàn
+// (gộp scope mọi Nhóm loại 'Ngành'). Mỗi GV 1 className (lớp gắn) → dòng nhân theo lớp.
+const normText = s => String(s ?? '').normalize('NFC').trim();
+function rosterFor(sector) {
+  if (sector === XUDOAN) {
+    const adminGroups = new Set();
+    cachedRead('Groups').forEach(g => { if (g.Type === 'Quản trị') adminGroups.add(normText(g.GroupName)); });
+    const active = {};
+    activeUsers().forEach(u => active[String(u.Email).toLowerCase()] = u);
+    const out = {};
+    cachedRead('GroupMembers').forEach(m => {
+      if (!adminGroups.has(normText(m.GroupName))) return;
+      const u = active[String(m.Email || '').toLowerCase()];
+      if (u) out[String(u.Email).toLowerCase()] = { email: u.Email, fullName: u.FullName || '', saintName: u.SaintName || '', className: '', id: numId(u.Id) };
+    });
+    return Object.values(out).sort((a, b) => (a.id - b.id) || String(a.fullName).localeCompare(String(b.fullName), 'vi'));
+  }
+  const sectorClasses = new Set();
+  cachedRead('Groups').forEach(g => {
+    if (g.Type === 'Ngành' && (sector === '' || normText(g.GroupName) === normText(sector)))
+      String(g.Scope || '').split(',').forEach(c => { const x = normText(c); if (x) sectorClasses.add(x); });
+  });
+  const clsOfGroup = {};
+  cachedRead('Groups').forEach(g => { if (g.Type === 'Lớp') clsOfGroup[normText(g.GroupName)] = normText(g.Scope || g.GroupName); });
+  const active = {};
+  activeUsers().forEach(u => active[String(u.Email).toLowerCase()] = u);
+  const out = {};
+  cachedRead('GroupMembers').forEach(m => {
+    const cls = clsOfGroup[normText(m.GroupName)];
+    if (!cls || !sectorClasses.has(cls)) return;
+    const u = active[String(m.Email || '').toLowerCase()];
+    if (u) out[String(u.Email).toLowerCase()] = { email: u.Email, fullName: u.FullName || '', saintName: u.SaintName || '', className: cls, id: numId(u.Id) };
+  });
+  return Object.values(out).sort((a, b) => (a.id - b.id) || String(a.fullName).localeCompare(String(b.fullName), 'vi'));
 }
 
 /* ĐTB HK = (15' + 2·HK)/3 · ĐTB năm = (HK1 + 2·HK2)/3 · xếp loại ≥8 Giỏi · ≥6.5 Tiên tiến · còn lại Trung bình */
@@ -286,7 +370,7 @@ function xepLoai(n) { return n >= 8 ? 'Giỏi' : n >= 6.5 ? 'Tiên tiến' : 'Tr
 
 // Tổng hợp điểm + chuyên cần cho một bộ lớp (dùng chung getSummary / startSchoolYear).
 // Năm đã khóa (có dòng AcademicYear): danh sách lấy theo AcademicYear.SchoolYear + .ClassName;
-// IdNumber chỉ để nối tên học sinh từ Students. Năm chưa khóa: đọc Scores/Attendance đang chạy,
+// IdNumber chỉ để nối tên Thiếu nhi từ Students. Năm chưa khóa: đọc Scores/Attendance đang chạy,
 // % CC giống tab Chuyên cần (Hiện diện ÷ số CN đã qua). Chọn nguồn theo DỮ LIỆU thực có, không
 // theo Config.CurrentSchoolYear — Config chưa lăn năm không được làm ẩn dòng năm đã khóa.
 function summaryRows(classNames, year) {
@@ -392,14 +476,18 @@ const ACTIONS = {
     });
     return { status: 'ok', session: {
       email: u.email, fullName: u.fullName, groups,
-      classes: cachedRead('Classes').map(c => c.ClassName), year: currentYear(),
+      classes: cachedRead('Classes').map(c => c.ClassName), catalog: Object.values(byName),
+      year: currentYear(),
     } };
   },
 
   /* ---- Danh mục ---- */
   getStudents: () => ({ status: 'ok', students: cachedRead('Students') }),
   getClasses:  () => ({ status: 'ok', classes: cachedRead('Classes') }),
-  getTeachers: () => ({ status: 'ok', users: cachedRead('Users'), members: cachedRead('GroupMembers'), groups: cachedRead('Groups') }),
+  getTeachers: () => {
+    if (ensureHeader('Users')) bustCache(['Users']); // schema mở rộng (SDT) → đọc lại để dòng có đủ cột
+    return { status: 'ok', users: cachedRead('Users').sort((a, b) => numId(a.Id) - numId(b.Id)), members: cachedRead('GroupMembers'), groups: cachedRead('Groups') };
+  },
   getConfig:   () => ({ status: 'ok', config: config() }),
 
   saveClass: b => {
@@ -407,7 +495,7 @@ const ACTIONS = {
     return { status: 'ok' };
   },
 
-  // Thêm/sửa học sinh — không bao giờ xóa dòng (lịch sử tra theo CCCD)
+  // Thêm/sửa Thiếu nhi — không bao giờ xóa dòng (lịch sử tra theo CCCD)
   saveStudent: b => {
     const row = {
       IdNumber: b.idNumber, SaintName: b.saintName || '', FullName: b.fullName,
@@ -463,7 +551,7 @@ const ACTIONS = {
   },
 
   /* ---- Chuyên cần: mẫu số chung = các Chủ Nhật từ AttendanceStartDate (mặc định: bản ghi sớm nhất)
-         đến Chủ Nhật vừa qua, trừ tuần nghỉ. Tử số = số buổi 'Hiện diện' của từng học sinh. ---- */
+         đến Chủ Nhật vừa qua, trừ tuần nghỉ. Tử số = số buổi 'Hiện diện' của từng Thiếu nhi. ---- */
 getClassAttendanceStats: b => {
     const year = String(b.schoolYear || currentYear()).trim();
     const rawClassNames = b.className ? [b.className] : cachedRead('Classes').map(x => x.ClassName);
@@ -526,20 +614,25 @@ getClassAttendanceStats: b => {
       by[r.SchoolYear + '|' + r.WeekOf + '|' + r.ClassName] = r;
     });
     let records = Object.values(by);
-    // recent: chỉ lấy N dòng gần nhất kèm link thư mục giáo án (truy vấn Drive có giới hạn).
-    if (b.recent) {
-      records.sort((a, b) => String(b.WeekOf).localeCompare(String(a.WeekOf)));
-      records = records.slice(0, +b.recent);
-      records.forEach(r => {
-        r.LessonFolderUrl = folderOfUrl(r.LessonPlanUrl);
-        r.RevisedFolderUrl = folderOfUrl(r.RevisedPlanUrl);
-      });
+    if (b.className) records = records.filter(r => r.ClassName === b.className);
+    records.sort((a, b) => String(b.WeekOf).localeCompare(String(a.WeekOf)));
+    const total = records.length;
+    // recent: N dòng gần nhất (chế độ cũ); page/pageSize: phân trang. Drive lookup
+    // chỉ khi trả về lát cắt giới hạn vì truy vấn DriveApp chậm, có giới hạn.
+    if (b.recent && !b.page) records = records.slice(0, +b.recent);
+    if (b.page) {
+      const size = Math.max(1, Math.min(+b.pageSize || 10, 50));
+      records = records.slice((+b.page - 1) * size, +b.page * size);
     }
+    if (b.recent || b.page) records.forEach(r => {
+      r.LessonFolderUrl = folderOfUrl(r.LessonPlanUrl);
+      r.RevisedFolderUrl = folderOfUrl(r.RevisedPlanUrl);
+    });
     records.forEach(r => {
       r.LessonPlanNames = planNames(r, 'LessonPlanUrl', 'LessonPlanNames');
       r.RevisedPlanNames = planNames(r, 'RevisedPlanUrl', 'RevisedPlanNames');
     });
-    return { status: 'ok', records };
+    return { status: 'ok', records, total };
   },
 
   saveTeaching: b => {
@@ -641,7 +734,7 @@ getClassAttendanceStats: b => {
 
   /* ---- Trích lục theo CCCD: mọi năm (giữ nguyên cả tuần nghỉ — tra lịch sử đầy đủ) ---- */
   // Trích lục theo CCCD. absences = mọi buổi không nghỉ trong cửa sổ chuyên cần (AttendanceStartDate → nay)
-  // mà học sinh chưa ghi 'Hiện diện' — kể cả tuần chưa điểm danh (không có bản ghi) để tra đủ (FR-DD-17).
+  // mà Thiếu nhi chưa ghi 'Hiện diện' — kể cả tuần chưa điểm danh (không có bản ghi) để tra đủ (FR-DD-17).
   searchByIdNumber: b => {
     const id = String(b.idNumber).replace(/^['0]+/, '').trim();
     const st = cachedRead('Students').find(s => String(s.IdNumber).replace(/^['0]+/, '').trim() === id);
@@ -676,7 +769,7 @@ getClassAttendanceStats: b => {
       }
     }
     // Trích lục điểm = bản chốt AcademicYear từng năm (cùng nguồn Tổng hợp/xếp loại),
-    // mọi năm học sinh có dòng (AcademicYear ∪ Scores), không giới hạn xếp loại.
+    // mọi năm Thiếu nhi có dòng (AcademicYear ∪ Scores), không giới hạn xếp loại.
     const ayRows = cachedRead('AcademicYear').filter(r => normId(r.IdNumber) === id);
     const scoreRows = cachedRead('Scores').filter(r => normId(r.IdNumber) === id);
     const clsOf = {};
@@ -687,6 +780,172 @@ getClassAttendanceStats: b => {
       return row ? { SchoolYear: y, ...row } : null;
     }).filter(Boolean);
     return { status: 'ok', students: [st], attendance: att, academic, scores: scoreRows, absences };
+  },
+
+  /* ---- Điểm danh Huynh trưởng (buổi 5 = Họp Huynh Trưởng) ---- */
+  // 1 GV × 1 tuần × 1 buổi = 1 dòng TeacherAttendance. Chưa có bản ghi → để trống (chưa điểm danh).
+  getTeacherAttendance: b => {
+    const year = currentYear();
+    const recs = {};
+    cachedRead('TeacherAttendance').forEach(r => {
+      if (String(r.SchoolYear).trim() === year &&
+          String(r.WeekOf).trim() === String(b.weekOf).trim() &&
+          normText(r.Session) === normText(b.session))
+        recs[String(r.TeacherEmail).toLowerCase()] = r;
+    });
+    const roster = rosterFor(b.sector).map(u => {
+      const r = recs[u.email.toLowerCase()];
+      return { id: u.id, email: u.email, fullName: u.fullName, saintName: u.saintName, className: u.className,
+        status: r ? r.Status : '', note: (r && r.Note) || '' };
+    });
+    return { status: 'ok', roster, isHolidayWeek: !!isHoliday(holidays(year), b.weekOf, b.session) };
+  },
+
+  saveTeacherAttendance: b => {
+    const year = currentYear();
+    const rows = (b.records || []).map(r => ({
+      SchoolYear: year, WeekOf: String(b.weekOf).trim(), Session: normText(b.session),
+      TeacherEmail: String(r.email).trim(), Status: r.status, Note: r.note || '',
+    }));
+    upsertRows('TeacherAttendance',
+      o => String(o.SchoolYear).trim() === year &&
+           String(o.WeekOf).trim() === String(b.weekOf).trim() &&
+           normText(o.Session) === normText(b.session),
+      rows);
+    return { status: 'ok', records: rows };
+  },
+
+  // Thống kê theo (các) lớp thuộc Ngành: % từng buổi + Tỉ lệ hiện diện = Hiện diện ÷ tổng buổi đã qua.
+  getTeacherStats: b => {
+    const year = currentYear();
+    const w = attendanceWindow(year);
+    const maxTotal = TEACHER_SESSIONS.reduce((a, s) => a + (w.max[s] || 0), 0);
+    const todayYmd = fmtDate(new Date());
+    const roster = rosterFor(b.sector).filter(u => !b.className || normText(u.className) === normText(b.className));
+    const emails = new Set(roster.map(u => u.email.toLowerCase()));
+    const by = {};
+    cachedRead('TeacherAttendance').forEach(r => {
+      if (String(r.SchoolYear).trim() !== year || String(r.WeekOf).trim() > todayYmd) return;
+      const e = String(r.TeacherEmail || '').toLowerCase();
+      if (!emails.has(e) || isHoliday(w.nghi, r.WeekOf, r.Session)) return;
+      if (normText(r.Status).toLowerCase() !== 'hiện diện') return;
+      const k = e + '|' + normText(r.Session);
+      by[k] = (by[k] || 0) + 1;
+    });
+    // Buổi dạy đã cập nhật = số giáo án (khác tuần/lớp) GV ghi trong năm, mọi môn.
+    const taught = {};
+    const seen = {};
+    readAll('Teaching').forEach(r => {
+      if (String(r.SchoolYear).trim() !== year) return;
+      const e = String(r.TeacherEmail || '').toLowerCase();
+      if (!e || !emails.has(e)) return;
+      const k = e + '|' + r.WeekOf + '|' + r.ClassName;
+      if (!seen[k]) { seen[k] = true; taught[e] = (taught[e] || 0) + 1; }
+    });
+    const stats = roster.map(u => {
+      const e = u.email.toLowerCase();
+      const present = {};
+      TEACHER_SESSIONS.forEach(s => present[s] = by[e + '|' + normText(s)] || 0);
+      return { id: u.id, email: u.email, fullName: u.fullName, className: u.className,
+        taught: taught[e] || 0, present };
+    });
+    return { status: 'ok', max: w.max, maxTotal, stats };
+  },
+
+  // Trích lục Huynh trưởng: các buổi đã điểm danh KHÔNG phải 'Hiện diện' trong năm (không có CCCD → tra theo email).
+  getTeacherTrichLuc: b => {
+    const year = b.schoolYear || currentYear();
+    const email = String(b.teacherEmail || '').toLowerCase();
+    const u = cachedRead('Users').find(x => String(x.Email).toLowerCase() === email);
+    if (!u) return { status: 'ok', teacher: null, absences: [] };
+    const w = attendanceWindow(year);
+    const absences = [];
+    if (w.start) {
+      const lo = fmtDate(w.start);
+      cachedRead('TeacherAttendance').forEach(r => {
+        if (String(r.TeacherEmail || '').toLowerCase() !== email ||
+            String(r.SchoolYear).trim() !== String(year).trim()) return;
+        const wk = String(r.WeekOf).trim();
+        if (wk < lo || wk > w.lastYmd || isHoliday(w.nghi, r.WeekOf, r.Session)) return;
+        if (normText(r.Status).toLowerCase() === 'hiện diện') return;
+        absences.push({ WeekOf: wk, Session: r.Session, Status: r.Status, Note: r.Note || '' });
+      });
+    }
+    absences.sort((a, b) => String(a.WeekOf).localeCompare(String(b.WeekOf)) || String(a.Session).localeCompare(String(b.Session)));
+    return { status: 'ok', teacher: { email: u.Email, fullName: u.FullName || '', saintName: u.SaintName || '' }, absences };
+  },
+
+  /* ---- Admin (xem requirements/Rework_Admin.md) ---- */
+  // Nghỉ lễ năm hiện tại (không cho chọn năm — Chuyển năm xóa sạch Holidays nên mặc định = năm hiện tại).
+  getHolidays: b => {
+    const year = b.schoolYear || currentYear();
+    const list = cachedRead('Holidays').filter(o => String(o.SchoolYear) === year)
+      .map(o => ({ weekOf: o.WeekOf, session: o.Session || '', reason: o.Reason || '' }))
+      .sort((x, y) => String(x.weekOf).localeCompare(String(y.weekOf)) || String(x.session).localeCompare(String(y.session)));
+    return { status: 'ok', holidays: list };
+  },
+
+  // Thay toàn bộ danh sách nghỉ lễ của NĂM HIỆN TẠI (1 lần ghi, không upsert từng dòng).
+  saveHolidays: b => {
+    const year = currentYear();
+    const rows = (b.holidays || []).map(h => ({ SchoolYear: year, WeekOf: h.weekOf, Session: h.session || '', Reason: h.reason || '' }));
+    upsertRows('Holidays', o => String(o.SchoolYear) === year, rows);
+    return { status: 'ok', ok: true };
+  },
+
+  // Thêm/Sửa 1 người dùng theo email — giữ Id cũ; dòng mới thiếu Id được backfill cấp số tự động.
+  saveUser: b => {
+    ensureHeader('Users');
+    const email = String((b.user || {}).email || '').trim().toLowerCase();
+    if (!email) throw new Error('Thiếu email.');
+    const old = cachedRead('Users').find(u => String(u.Email).toLowerCase() === email);
+    const row = {
+      Email: email,
+      SaintName: String(b.user.saintName || '').trim(),
+      FullName: String(b.user.fullName || '').trim(),
+      SDT: String(b.user.sdt || '').trim(),
+      Status: b.user.status || (old && old.Status) || 'Hoạt động',
+      Id: (old && old.Id) ?? '',
+    };
+    upsertRows('Users', o => String(o.Email).toLowerCase() === email, [row]);
+    backfillUsersId();
+    // Đọc lại sau backfill để trả Id thật (dòng mới được cấp số tự động ở sheet).
+    const saved = cachedRead('Users').find(u => String(u.Email).toLowerCase() === email);
+    return { status: 'ok', user: saved || row };
+  },
+
+  // Gán lại toàn bộ nhóm cho từng email (danh sách gửi lên là đầy đủ; rỗng = gỡ hết nhóm).
+  saveGroupMembers: b => {
+    (b.assignments || []).forEach(a => {
+      const email = String(a.email || '').trim().toLowerCase();
+      if (!email) return;
+      upsertRows('GroupMembers', o => String(o.Email).toLowerCase() === email,
+        (a.groups || []).map(g => ({ GroupName: g, Email: email })));
+    });
+    return { status: 'ok', ok: true };
+  },
+
+  /* Chuyển năm: năm +1 tự động (không nhận newYear). Lưu Score/Attendance năm cũ vào AcademicYear,
+     xóa sạch Attendance/TeacherAttendance/Holidays, Thiếu nhi 'Hoạt động' tự lên lớp kế tiếp theo thứ tự
+     Classes (lớp cuối Dự bị trưởng 2 giữ nguyên — đổi Status thủ công để không còn hiện). */
+  startSchoolYear: b => {
+    const oldYear = config().CurrentSchoolYear || currentYear();
+    const [a, c] = oldYear.split('-');
+    const newYear = (+a + 1) + '-' + (+c + 1);
+    const order = cachedRead('Classes').map(cl => cl.ClassName);
+    upsertRows('AcademicYear', o => String(o.SchoolYear) === oldYear,
+      summaryRows(order, oldYear).map(r => ({ SchoolYear: oldYear, IdNumber: r.idNumber, ClassName: r.className,
+        HK1Score: r.avgH1, HK2Score: r.avgH2, YearScore: r.avgYear, YearAttendant: r.attendancePct, Status: r.rating })));
+    ['Attendance', 'TeacherAttendance', 'Holidays'].forEach(n => upsertRows(n, () => true, []));
+    const st = cachedRead('Students').map(s => {
+      if (String(s.Status).toLowerCase() !== 'hoạt động') return s;
+      const i = order.indexOf(s.CurrentClass);
+      return (i >= 0 && i < order.length - 1) ? { ...s, CurrentClass: order[i + 1] } : s;
+    });
+    upsertRows('Students', () => false, st);
+    upsertRows('Config', o => o.Key === 'CurrentSchoolYear', [{ Key: 'CurrentSchoolYear', Value: newYear }]);
+    if (b.attendanceStartDate) upsertRows('Config', o => o.Key === 'AttendanceStartDate', [{ Key: 'AttendanceStartDate', Value: b.attendanceStartDate }]);
+    return { status: 'ok', newYear };
   },
 }
 /* ponytail: readAll quét cả tab — đủ cho ~25k dòng/năm; đổi TextFinder theo tuần khi Attendance vượt vài trăm nghìn dòng. */

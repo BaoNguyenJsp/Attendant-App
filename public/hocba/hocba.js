@@ -4,7 +4,7 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, setState, TSCORES, TCLASSES, year, isExec, cur, fmt1, fillClasses, fillSel, exportExcel } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, setState, TSTUDENTS, TSCORES, TCLASSES, year, isExec, cur, fmt1, fillClasses, fillSel, exportExcel } from '../shared/common.js';
 import { searchCard, normSummary, activeStudents } from '../shared/ui.js';
 
 await initCommon();
@@ -26,6 +26,15 @@ if (!years.includes(year())) years = [year(), ...years];
 fillSel('th-nam', years.map(y => ({v:y})), year());
 fillSel('kt-nam', years.map(y => ({v:y})), year());
 
+/* Bảng tổng hợp từ getSummary: xếp Lớp (theo sheet Classes) rồi Giới tính (Nữ trước) rồi Họ tên. */
+const clsOrd = {}; TCLASSES.forEach((c, i) => clsOrd[c.ClassName] = i);
+const keyId = s => String(s || '').replace(/^['0]+/, '');
+const gMap = {};
+TSTUDENTS.forEach(st => { const g = String(st.Gender || '').normalize('NFC').trim().toLowerCase(); gMap[keyId(st.IdNumber)] = g === 'nữ' ? 0 : g === 'nam' ? 1 : 2; });
+const sumSort = (a, b) => (clsOrd[a.className] ?? 1e9) - (clsOrd[b.className] ?? 1e9)
+  || (gMap[keyId(a.idNumber)] ?? 2) - (gMap[keyId(b.idNumber)] ?? 2)
+  || String(a.fullName || '').localeCompare(String(b.fullName || ''), 'vi');
+
 /* ---------- Nhập điểm (luôn theo năm học hiện tại) ---------- */
 async function renderNhap() {
   const cls = $('nh-lop').value;
@@ -42,7 +51,7 @@ async function renderNhap() {
           SCORE_FIELDS.map(f => '<td class="p-2 border text-center"><input type="number" step="0.1" min="0" max="10" data-f="' + f + '" class="score-input w-16 text-center border p-1.5 rounded" value="' + (sc[f] == null ? '' : esc(sc[f])) + '"></td>').join('') +
           '</tr>';
       }).join('')
-    : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có học sinh trong lớp ' + esc(cls) + '.</td></tr>';
+    : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi trong lớp ' + esc(cls) + '.</td></tr>';
 }
 async function saveScores() {
   const cls = $('nh-lop').value;
@@ -100,7 +109,7 @@ async function importScores() {
   if (!updates.length) return toast(skipped ? 'Không có CCCD nào trong file thuộc lớp này.' : 'File không có dòng điểm nào.');
   updates.forEach(({tr, vals}) => tr.querySelectorAll('[data-f]').forEach((inp, i) => { inp.value = vals[i]; }));
   const msg = skipped ? ' — bỏ qua ' + skipped + ' CCCD không thuộc lớp.' : '';
-  toast('Đã nhập ' + updates.length + ' học sinh' + msg);
+  toast('Đã nhập ' + updates.length + ' Thiếu nhi' + msg);
   saveScores();
 }
 
@@ -116,7 +125,7 @@ async function renderTongHop() {
   let r;
   try { r = await api('getSummary', {schoolYear: yr, className: cls}); }
   catch (e) { return toast(e.message); }
-  const rows = (r.summary || []).map(normSummary);
+  const rows = (r.summary || []).map(normSummary).sort(sumSort);
   $('th-tbody').innerHTML = rows.length
     ? rows.map((x, i) => '<tr><td class="p-2 border text-center">' + (i + 1) + '</td><td class="p-2 border">' + esc(x.idNumber) + '</td>' +
         '<td class="p-2 border font-medium">' + esc(x.fullName) + '</td><td class="p-2 border">' + esc(x.className) + '</td>' +
@@ -131,10 +140,7 @@ async function toanDoan() {
   let r;
   try { r = await api('getSummary', {wholeDeanery: true}); }
   catch (e) { return toast(e.message); }
-  // Thứ tự lớp theo sheet Classes (Chiên con > Ấu 1 > … > Dự bị trưởng 2), không theo A→Z.
-  const ord = {}; TCLASSES.forEach((c, i) => ord[c.ClassName] = i);
-  const rows = (r.summary || []).map(normSummary).sort((a, b) =>
-    (ord[a.className] ?? 1e9) - (ord[b.className] ?? 1e9) || String(a.idNumber || '').localeCompare(String(b.idNumber || '')));
+  const rows = (r.summary || []).map(normSummary).sort(sumSort);
   const w = window.open('', '_blank');
   w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Xếp loại toàn đoàn ' + esc(year()) + '</title>' +
     '<style>body{font-family:Arial,sans-serif;padding:24px}h1{font-size:18px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #999;padding:4px 6px;text-align:left}th{background:#eee}.c{text-align:center}</style></head><body>' +
@@ -149,13 +155,13 @@ async function renderKT() {
   let r;
   try { r = await api('getSummary', {schoolYear: yr, className: cls}); }
   catch (e) { return toast(e.message); }
-  const rows = (r.summary || []).map(normSummary).filter(x => x.rating === 'Giỏi' && x.cc != null && +x.cc >= 80);
+  const rows = (r.summary || []).map(normSummary).filter(x => x.rating === 'Giỏi' && x.cc != null && +x.cc >= 80).sort(sumSort);
   $('kt-tbody').innerHTML = rows.length
     ? rows.map((x, i) => '<tr><td class="p-2 border text-center">' + (i + 1) + '</td><td class="p-2 border">' + esc(x.idNumber) + '</td>' +
         '<td class="p-2 border font-medium">' + esc(x.fullName) + '</td><td class="p-2 border">' + esc(x.className) + '</td>' +
         '<td class="p-2 border text-center">' + fmt1(x.avgYear) + '</td><td class="p-2 border text-center">' + (x.cc == null ? '—' : x.cc + '%') + '</td>' +
         '<td class="p-2 border text-center text-pink-600 font-bold">Giỏi</td></tr>').join('')
-    : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có học sinh đạt chuẩn.</td></tr>';
+    : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi đạt chuẩn.</td></tr>';
 }
 
 /* ---------- Sự kiện ---------- */

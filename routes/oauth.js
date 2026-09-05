@@ -57,7 +57,7 @@ module.exports = function registerOAuth(app, ctx) {
       req.session.email = s.email;
       req.session.fullName = s.fullName;
       req.session.groups = s.groups;               // [{name, type}]
-      req.session.scope = expandScope(s.groups, classes);
+      req.session.scope = expandScope(s.groups, s.catalog, classes);
       req.session.tier = computeTier(s.groups);
       req.session.sectors = computeSectors(s.groups);
       res.redirect('/');

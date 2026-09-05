@@ -37,7 +37,7 @@ Nguồn chuẩn: `SRS.md` + `GOOGLE-SHEET-DESIGN.md`. Không build toolchain, No
    - Copy URL web app → đây là `APPS_SCRIPT_URL`.
 4. Trong tab `Config` của Sheet: khóa `CurrentSchoolYear` (vd `2026-2027`) và `DriveFolderId` (id thư mục Drive chứa file giáo án — tạo trước, cấp quyền cho tài khoản đã "Execute as").
 
-> **SHARED_TOKEN dùng để làm gì?** Web app "Anyone with link" là URL công khai — ai biết URL đều POST tới được và Apps Script chạy với quyền của chủ sở hữu (đọc/ghi toàn bộ Sheet, có PII học sinh). `doPost` từ chối mọi request thiếu đúng token. Chỉ Node giữ token trong env; Apps Script giữ bản sao trong script property. → Khoảng 3 dòng code ngăn người ngoài đọc/ghi Sheet khi biết URL.
+> **SHARED_TOKEN dùng để làm gì?** Web app "Anyone with link" là URL công khai — ai biết URL đều POST tới được và Apps Script chạy với quyền của chủ sở hữu (đọc/ghi toàn bộ Sheet, có PII Thiếu nhi). `doPost` từ chối mọi request thiếu đúng token. Chỉ Node giữ token trong env; Apps Script giữ bản sao trong script property. → Khoảng 3 dòng code ngăn người ngoài đọc/ghi Sheet khi biết URL.
 
 ## 3. Chạy Node
 
@@ -78,7 +78,7 @@ node --check server.js       # syntax
 
 - **Lớp** — điểm danh/điểm/giáo án trong đúng lớp của mình.
 - **Ngành** — như Lớp, mở rộng sang các lớp trong `Groups.Scope`.
-- **Quản trị ngành** — thêm điểm danh/thống kê giáo viên trong ngành; thống kê toàn đoàn.
+- **Quản trị ngành** — thêm điểm danh/thống kê Huynh trưởng trong ngành; thống kê toàn đoàn.
 - **Quản trị** — toàn bộ (users, groups, lớp, holidays, config, năm học).
 
 `Groups.Type` lưu tiếng Việt: `Lớp / Ngành / Quản trị ngành / Quản trị`. Mọi write đều bị chặn nếu `className` ngoài phạm vi (403), kể cả gọi thẳng API.
@@ -94,8 +94,8 @@ public/
 ├── giangday/             ← `/giangday/`: giáo án giảng dạy
 ├── diemdanh/             ← `/diemdanh/`: chuyên cần · trích lục · thống kê
 ├── hocba/                ← `/hocba/`: học bạ
-├── hocsinh/              ← `/hocsinh/`: quản lý học sinh
-├── giaovien/             ← `/giaovien/`: điểm danh & thống kê giáo viên
+├── hocsinh/              ← `/hocsinh/`: quản lý Thiếu nhi
+├── giaovien/             ← `/giaovien/`: điểm danh & thống kê Huynh trưởng
 ├── admin/                ← `/admin/`: quản trị (users, nhóm, phân công, lớp, nghỉ lễ, quyền, chuyển năm)
 └── shared/
     ├── common.js         ← session guard, shell (header/năm/toast), api, helpers

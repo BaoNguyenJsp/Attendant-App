@@ -7,7 +7,7 @@
 'use strict';
 
 import {
-  num, fmt1, esc, $, api,
+  num, fmt1, esc, $, api, sortStudents,
   TSTUDENTS, USERS_ROWS, GROUP_MEMBERS, GROUPS_LIST, TCLASSES,
   RANK, TYPES, TYPE_LABEL, ADMIN, BQT
 } from './common.js';
@@ -30,7 +30,7 @@ export const userFull = em => {
   return u ? (u.FullName || em || '—') : (em || '—');
 };
 export const teachersOf = grp => GROUP_MEMBERS.filter(m => m.GroupName === grp).map(m => String(m.Email).toLowerCase());
-export const activeStudents = cls => TSTUDENTS.filter(s => s.CurrentClass === cls && String(s.Status || 'Hoạt động').toLowerCase().trim() === 'hoạt động');
+export const activeStudents = cls => sortStudents(TSTUDENTS.filter(s => s.CurrentClass === cls && String(s.Status || 'Hoạt động').toLowerCase().trim() === 'hoạt động'));
 
 export function badgeStatus(st) {
   const s = String(st || '').trim();

@@ -1,207 +1,205 @@
 /* =====================================================================
    SỔ THIẾU NHI — admin/index.js
-   Giáo viên · Nhóm · Phân công · Lớp · Nghỉ lễ · Quyền truy cập · Chuyển năm.
+   Huynh trưởng · Nhóm · Lớp · Nghỉ lễ · Chuyển năm.
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, setState, SESSIONS, TSTUDENTS, TCLASSES, THOLIDAYS, USERS_ROWS, GROUPS_LIST, GROUP_MEMBERS, year, normSunday, isAdmin, fillSel, fillYears, fillYearSelects } from '../shared/common.js';
-import { groupBadge, badgeStatus, userFull, activeStudents, expandLocal, highestGroup } from '../shared/ui.js';
+import { initCommon, $, api, esc, toast, setState, SESSIONS, TYPES, TCLASSES, THOLIDAYS, USERS_ROWS, GROUPS_LIST, GROUP_MEMBERS, year, normSunday, defaultWeek, fillSel } from '../shared/common.js';
+import { groupBadge, badgeStatus, activeStudents } from '../shared/ui.js';
 
 await initCommon();
 
-const te = await api('getTeachers');
-const [st, cl, hol] = await Promise.all([
-  api('getStudents'),
-  api('getClasses'),
-  api('getHolidays', {schoolYear: year()})
-]);
-setState({TSTUDENTS: st.students || [], TCLASSES: cl.classes || [], THOLIDAYS: hol.holidays || [],
-  USERS_ROWS: te.users || [], GROUP_MEMBERS: te.members || [], GROUPS_LIST: te.groups || []});
-fillYearSelects('hol-nam');
-fillSel('hol-session', [{v:'', t:'— Cả tuần —'}].concat(SESSIONS.map(s => ({v:s}))));
+const emLower = e => String(e == null ? '' : e).trim().toLowerCase();
+const fullName = u => [u.SaintName, u.FullName].filter(Boolean).join(' ');
+// Bỏ dấu (NFD tách + \p{M}) + đ→d → gõ "nguyen van a" hay "đức" vẫn khớp "Nguyễn Văn A"/"Đức".
+const viKey = s => String(s == null ? '' : s).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/đ/g, 'd');
+const hay = u => viKey([u.SaintName, u.FullName].filter(Boolean).join(' ') + ' ' + u.Email + ' ' + u.SDT);
+const chip = g => '<span class="badge ' + (TYPES[g.Type] || 'b-class') + '">' + esc(g.GroupName || '') + '</span>';
+const userGroups = em => {
+  const e = emLower(em);
+  return GROUPS_LIST.filter(g => GROUP_MEMBERS.some(m => m.GroupName === g.GroupName && emLower(m.Email) === e));
+};
+const groupNames = em => userGroups(em).map(g => g.GroupName);
 
 async function hydrate() {
-  const te2 = await api('getTeachers');
-  const [st2, cl2, hol2] = await Promise.all([
-    api('getStudents'), api('getClasses'), api('getHolidays', {schoolYear: year()})
-  ]);
-  setState({TSTUDENTS: st2.students || [], TCLASSES: cl2.classes || [], THOLIDAYS: hol2.holidays || [],
-    USERS_ROWS: te2.users || [], GROUP_MEMBERS: te2.members || [], GROUPS_LIST: te2.groups || []});
+  const te = await api('getTeachers');
+  const [st, cl, hol] = await Promise.all([api('getStudents'), api('getClasses'), api('getHolidays')]);
+  setState({TSTUDENTS: st.students || [], TCLASSES: cl.classes || [], THOLIDAYS: hol.holidays || [],
+    USERS_ROWS: te.users || [], GROUP_MEMBERS: te.members || [], GROUPS_LIST: te.groups || []});
 }
+await hydrate();
 
-/* ---------- Giáo viên (users) ---------- */
+/* ---------- Huynh trưởng ---------- */
 function renderUs() {
-  if (!isAdmin()) return;
-  $('us-tbody').innerHTML = USERS_ROWS.map(u => {
-    const groups = GROUP_MEMBERS.filter(m => String(m.Email).toLowerCase() === String(u.Email).toLowerCase())
-      .map(m => GROUPS_LIST.find(g => g.GroupName === m.GroupName)).filter(Boolean);
-    const locked = u.Status !== 'Hoạt động';
-    return '<tr><td class="p-2 border">' + esc(u.Email) + '</td><td class="p-2 border font-medium">' + esc(u.FullName || '') + '</td>' +
-      '<td class="p-2 border">' + (groups.map(groupBadge).join('') || '<span class="text-slate-400">—</span>') + '</td>' +
-      '<td class="p-2 border text-center">' + badgeStatus(u.Status) + '</td>' +
-      '<td class="p-2 border text-center">' + (locked
-        ? '<button data-email="' + esc(u.Email) + '" data-activate="1" class="block-user bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg">✓ Mở khóa</button>'
-        : '<button data-email="' + esc(u.Email) + '" data-activate="0" class="block-user bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg">🔒 Khóa</button>') + '</td></tr>';
-  }).join('');
-}
-async function toggleBlock(email, activate) {
-  if (!isAdmin()) return;
-  const next = USERS_ROWS.map(u => String(u.Email).toLowerCase() === String(email).toLowerCase()
-    ? Object.assign({}, u, {Status: activate ? 'Hoạt động' : 'Ngưng hoạt động'}) : u);
-  try { await api('saveUsers', {users: next}); setState({USERS_ROWS: next}); }
-  catch (e) { return toast(e.message); }
-  toast(activate ? 'Đã mở khóa.' : 'Đã khóa.');
-  renderUs(); renderPerm();
-}
-async function addUser() {
-  if (!isAdmin()) return;
-  const email = prompt('Email Google:');
-  if (!email) return;
-  const name = prompt('Họ và tên:');
-  if (!name) return;
-  const next = USERS_ROWS.concat([{Email: email.trim(), SaintName: '', FullName: name.trim(), Status: 'Hoạt động'}]);
-  try { await api('saveUsers', {users: next}); setState({USERS_ROWS: next}); }
-  catch (e) { return toast(e.message); }
-  toast('Đã thêm người dùng.');
-  renderUs();
+  const q = viKey($('us-q').value);
+  const rows = USERS_ROWS.filter(u => !q || hay(u).includes(q));
+  $('us-tbody').innerHTML = rows.length
+    ? rows.map(u => '<tr><td class="p-2 border text-center">' + esc(u.Id) + '</td>' +
+        '<td class="p-2 border text-xs">' + esc(u.Email) + '</td>' +
+        '<td class="p-2 border font-medium">' + esc(fullName(u)) + '</td>' +
+        '<td class="p-2 border text-center">' + esc(u.SDT || '') + '</td>' +
+        '<td class="p-2 border">' + (userGroups(u.Email).map(chip).join('') || '<span class="text-slate-400">—</span>') + '</td>' +
+        '<td class="p-2 border text-center">' + badgeStatus(u.Status) + '</td>' +
+        '<td class="p-2 border text-center whitespace-nowrap">' +
+          '<button data-email="' + esc(u.Email) + '" class="edit-user bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs px-3 py-1.5 rounded-lg">✏️ Sửa</button></td></tr>').join('')
+    : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Không có người dùng khớp.</td></tr>';
 }
 
 /* ---------- Nhóm ---------- */
 function renderGroups() {
-  if (!isAdmin()) return;
   $('grp-tbody').innerHTML = GROUPS_LIST.map(g => '<tr><td class="p-2 border font-medium">' + esc(g.GroupName) + '</td>' +
     '<td class="p-2 border">' + groupBadge(g) + '</td><td class="p-2 border text-xs">' + esc(g.Scope || '') + '</td></tr>').join('');
 }
 
-/* ---------- Phân công ---------- */
-let ASG_VIEW = [];
-function renderAsg() {
-  if (!isAdmin()) return;
-  fillSel('asg-group', GROUPS_LIST.map(g => ({v:g.GroupName})));
-  fillSel('asg-user', USERS_ROWS.filter(u => u.Status === 'Hoạt động').map(u => ({v:u.Email})));
-  ASG_VIEW = GROUP_MEMBERS.filter(m => m.GroupName === $('asg-group').value);
-  $('asg-tbody').innerHTML = ASG_VIEW.length
-    ? ASG_VIEW.map((m, i) => '<tr><td class="p-2 border font-medium">' + esc(userFull(m.Email)) + '</td>' +
-        '<td class="p-2 border text-xs">' + esc(m.Email) + '</td>' +
-        '<td class="p-2 border text-center"><button data-i="' + i + '" class="del-member bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg">🗑</button></td></tr>').join('')
-    : '<tr><td colspan="3" class="p-4 text-center text-slate-400">Chưa có thành viên.</td></tr>';
-}
-async function addMember() {
-  if (!isAdmin()) return;
-  const g = $('asg-group').value, em = String($('asg-user').value || '').toLowerCase();
-  if (!g || !em) return toast('Chọn nhóm và giáo viên.');
-  if (GROUP_MEMBERS.some(m => m.GroupName === g && String(m.Email).toLowerCase() === em)) return toast('Đã có trong nhóm này.');
-  const next = GROUP_MEMBERS.concat([{GroupName: g, Email: em}]);
-  try { await api('saveGroupMembers', {members: next}); setState({GROUP_MEMBERS: next}); }
-  catch (e) { return toast(e.message); }
-  toast('Đã thêm.');
-  renderAsg(); renderUs(); renderPerm();
-}
-async function delMember(i) {
-  if (!isAdmin()) return;
-  const m = ASG_VIEW[i]; if (!m) return;
-  const next = GROUP_MEMBERS.filter(x => !(x.GroupName === m.GroupName && String(x.Email).toLowerCase() === String(m.Email).toLowerCase()));
-  try { await api('saveGroupMembers', {members: next}); setState({GROUP_MEMBERS: next}); }
-  catch (e) { return toast(e.message); }
-  toast('Đã xóa.');
-  renderAsg(); renderUs(); renderPerm();
-}
-
 /* ---------- Lớp ---------- */
 function renderCls() {
-  if (!isAdmin()) return;
-  $('cls-tbody').innerHTML = TCLASSES.map((c, i) => {
-    const n = activeStudents(c.ClassName).length;
-    return '<tr><td class="p-2 border text-center">' + (i + 1) + '</td><td class="p-2 border font-medium">' + esc(c.ClassName) + '</td>' +
-      '<td class="p-2 border">' + esc(c.Grade || '') + '</td><td class="p-2 border text-center">' + n + '</td></tr>';
-  }).join('');
+  $('cls-tbody').innerHTML = TCLASSES.map((c, i) => '<tr><td class="p-2 border text-center">' + (i + 1) + '</td>' +
+    '<td class="p-2 border font-medium">' + esc(c.ClassName) + '</td>' +
+    '<td class="p-2 border">' + esc(c.Grade || '') + '</td><td class="p-2 border text-center">' + activeStudents(c.ClassName).length + '</td></tr>').join('');
 }
 
 /* ---------- Nghỉ lễ ---------- */
+const holLabel = s => s || '— Cả tuần —';
 function renderHolidays() {
-  if (!isAdmin()) return;
-  const nam = $('hol-nam').value;
-  const list = THOLIDAYS.filter(h => String(h.SchoolYear) === nam).sort((a, b) => String(a.WeekOf).localeCompare(String(b.WeekOf)));
+  const list = THOLIDAYS.sort((a, b) => String(a.weekOf).localeCompare(String(b.weekOf)) || String(a.session).localeCompare(String(b.session)));
   $('hol-tbody').innerHTML = list.length
-    ? list.map(h => '<tr><td class="p-2 border">' + esc(h.WeekOf) + '</td><td class="p-2 border">' + esc(h.Session || '— Cả tuần —') + '</td><td class="p-2 border">' + esc(h.Reason || '') + '</td></tr>').join('')
-    : '<tr><td colspan="3" class="p-4 text-center text-slate-400">Chưa có ngày nghỉ cho năm ' + esc(nam) + '.</td></tr>';
+    ? list.map((h, i) => '<tr><td class="p-2 border">' + esc(h.weekOf) + '</td>' +
+        '<td class="p-2 border text-center">' + esc(holLabel(h.session)) + '</td>' +
+        '<td class="p-2 border">' + esc(h.reason) + '</td>' +
+        '<td class="p-2 border text-center"><button data-i="' + i + '" class="hol-del bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg">🗑</button></td></tr>').join('')
+    : '<tr><td colspan="4" class="p-4 text-center text-slate-400">Chưa có ngày nghỉ cho năm hiện tại.</td></tr>';
 }
 async function addHoliday() {
-  if (!isAdmin()) return;
-  const nam = $('hol-nam').value, wk = $('hol-week').value;
+  const wk = $('hol-week').value;
   if (!wk) return toast('Chọn tuần (Chủ Nhật) cho ngày nghỉ.');
+  const reason = $('hol-reason').value.trim();
+  if (!reason) return toast('Nhập lý do nghỉ.');
   const ses = $('hol-session').value;
-  const reason = prompt('Lý do nghỉ (ví dụ: Mùa Chay):');
-  if (!reason) return;
-  if (THOLIDAYS.some(h => h.SchoolYear === nam && h.WeekOf === wk && (h.Session || '') === ses)) return toast('Ngày nghỉ này đã tồn tại.');
-  const next = THOLIDAYS.concat([{SchoolYear: nam, WeekOf: wk, Session: ses, Reason: reason.trim()}]);
-  try { await api('saveHolidays', {schoolYear: nam, holidays: next.filter(h => String(h.SchoolYear) === nam)}); setState({THOLIDAYS: next}); }
+  if (THOLIDAYS.some(h => h.weekOf === wk && (h.session || '') === ses)) return toast('Ngày nghỉ tuần này đã có.');
+  const next = THOLIDAYS.concat([{weekOf: wk, session: ses, reason}]);
+  try { await api('saveHolidays', {holidays: next}); setState({THOLIDAYS: next}); }
   catch (e) { return toast(e.message); }
+  $('hol-reason').value = '';
+  renderHolidays();
   toast('Đã thêm ngày nghỉ.');
-  renderHolidays();
 }
-async function delHoliday() {
-  if (!isAdmin()) return;
-  const nam = $('hol-nam').value, wk = $('hol-week').value, ses = $('hol-session').value;
-  if (!wk) return toast('Chọn tuần cần xóa.');
-  if (!confirm('Xóa ngày nghỉ tuần ' + wk + '?')) return;
-  const next = THOLIDAYS.filter(h => !(String(h.SchoolYear) === nam && h.WeekOf === wk && (h.Session || '') === ses));
-  try { await api('saveHolidays', {schoolYear: nam, holidays: next.filter(h => String(h.SchoolYear) === nam)}); setState({THOLIDAYS: next}); }
+async function delHoliday(i) {
+  const h = THOLIDAYS[i];
+  if (!h) return;
+  if (!confirm('Xóa ngày nghỉ ' + holLabel(h.session) + ' tuần ' + h.weekOf + '?')) return;
+  const next = THOLIDAYS.filter((_, j) => j !== i);
+  try { await api('saveHolidays', {holidays: next}); setState({THOLIDAYS: next}); }
   catch (e) { return toast(e.message); }
-  toast('Đã xóa.');
   renderHolidays();
+  toast('Đã xóa ngày nghỉ.');
 }
 
-/* ---------- Quyền truy cập ---------- */
-function renderPerm() {
-  if (!isAdmin()) return;
-  const groups = GROUPS_LIST;
-  $('perm-head').innerHTML = '<tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center"><th class="p-3">Giáo viên</th><th class="p-3">Cấp</th><th class="p-3">Phạm vi</th>' +
-    groups.map(g => '<th class="p-3">' + esc(g.GroupName) + '</th>').join('') + '</tr>';
-  $('perm-body').innerHTML = USERS_ROWS.map(u => {
-    const em = String(u.Email).toLowerCase();
-    const gs = groups.filter(g => GROUP_MEMBERS.some(m => m.GroupName === g.GroupName && String(m.Email).toLowerCase() === em));
-    const scope = expandLocal(gs);
-    const hi = highestGroup(gs);
-    return '<tr><td class="p-2 border"><div class="font-medium">' + esc(u.FullName || u.Email) + '</div><div class="text-xs text-slate-400">' + esc(u.Email) + '</div></td>' +
-      '<td class="p-2 border text-center">' + (hi ? groupBadge(hi) : '<span class="text-slate-400">—</span>') + '</td>' +
-      '<td class="p-2 border text-xs">' + (scope.length ? esc(scope.join(', ')) : '<span class="text-slate-400">—</span>') + '</td>' +
-      groups.map(g => '<td class="p-2 border text-center">' + (GROUP_MEMBERS.some(m => m.GroupName === g.GroupName && String(m.Email).toLowerCase() === em) ? '<span class="text-emerald-600 font-bold">✓</span>' : '<span class="text-slate-300">·</span>') + '</td>').join('') + '</tr>';
-  }).join('');
+/* ---------- User modal ---------- */
+function groupCbs(email) {
+  const sel = new Set(groupNames(email));
+  $('us-m-groups').innerHTML = GROUPS_LIST.length
+    ? GROUPS_LIST.map(g => '<label class="flex items-center gap-2 text-sm rounded px-2 py-1 cursor-pointer hover:bg-slate-100">' +
+        '<input type="checkbox" class="us-g-cb" value="' + esc(g.GroupName) + '"' + (sel.has(g.GroupName) ? ' checked' : '') + '>' +
+        esc(g.GroupName) + '</label>').join('')
+    : '<span class="text-xs text-slate-400">Chưa có nhóm nào trong Groups.</span>';
+}
+function openUser(email) {
+  const u = email ? USERS_ROWS.find(x => emLower(x.Email) === emLower(email)) : null;
+  $('us-m-title').textContent = u ? 'Cập Nhật Huynh trưởng / Người Dùng' : 'Thêm Huynh trưởng / Người Dùng';
+  $('us-m-email').disabled = !!u;
+  $('us-m-email').value = u ? u.Email : '';
+  $('us-m-saint').value = u ? (u.SaintName || '') : '';
+  $('us-m-full').value = u ? (u.FullName || '') : '';
+  $('us-m-sdt').value = u ? (u.SDT || '') : '';
+  $('us-m-status').value = u ? (u.Status || 'Hoạt động') : 'Hoạt động';
+  groupCbs(email);
+  $('us-modal').classList.add('open');
+  $('us-m-email').focus();
+}
+function closeUser() { $('us-modal').classList.remove('open'); }
+const sameSet = (a, b) => a.length === b.length && a.every(x => b.includes(x));
+async function saveUserModal() {
+  const email = emLower($('us-m-email').value);
+  if (!email) return toast('Nhập Email Google.');
+  if (!$('us-m-full').value.trim()) return toast('Nhập Họ và tên.');
+  const user = {email, saintName: $('us-m-saint').value.trim(), fullName: $('us-m-full').value.trim(),
+    sdt: $('us-m-sdt').value.trim(), status: $('us-m-status').value};
+  let saved;
+  try { saved = (await api('saveUser', {user})).user; }
+  catch (e) { return toast(e.message); }
+  const i = USERS_ROWS.findIndex(u => emLower(u.Email) === email);
+  if (i >= 0) USERS_ROWS[i] = saved; else USERS_ROWS.push(saved);
+  const groups = [...document.querySelectorAll('#us-m-groups .us-g-cb:checked')].map(cb => cb.value);
+  if (!sameSet(groupNames(email), groups)) {
+    try {
+      await api('saveGroupMembers', {assignments: [{email, groups}]});
+      setState({GROUP_MEMBERS: GROUP_MEMBERS.filter(m => emLower(m.Email) !== email)
+        .concat(groups.map(g => ({GroupName: g, Email: email})))});
+    }
+    catch (e) { toast('Đã lưu hồ sơ, nhưng lỗi khi lưu nhóm: ' + e.message); }
+  }
+  closeUser();
+  renderUs();
+  toast('Đã lưu.');
 }
 
 /* ---------- Chuyển năm ---------- */
-async function startYear() {
-  if (!isAdmin()) return;
-  const next = prompt('Năm học mới (dạng YYYY-YYYY), ví dụ 2027-2028:');
-  if (!next) return;
-  if (!/^\d{4}-\d{4}$/.test(next.trim())) return toast('Định dạng năm phải là YYYY-YYYY.');
-  if (!confirm('Chuyển sang ' + next.trim() + '?\n- Chốt học bạ năm ' + year() + '\n- Thăng lớp (lớp cuối → Tốt nghiệp)\nHành động không thể hoàn tác.')) return;
-  try { await api('startSchoolYear', {newYear: next.trim()}); }
+const nextYear = y => { const [a, b] = String(y).split('-'); return (+a + 1) + '-' + (+b + 1); };
+function openYear() {
+  $('yr-old').textContent = year();
+  $('yr-new').textContent = nextYear(year());
+  $('sy-start').value = '';
+  $('year-modal').classList.add('open');
+}
+function closeYear() { $('year-modal').classList.remove('open'); }
+async function confirmYear() {
+  const start = $('sy-start').value;
+  if (!start) return toast('Chọn ngày bắt đầu năm học mới (Chủ Nhật).');
+  const nw = nextYear(year());
+  if (!confirm('Chuyển sang năm học ' + nw + '?\n\n' +
+    '① Chốt điểm + chuyên cần năm ' + year() + ' vào AcademicYear (học bạ).\n' +
+    '② Xóa sạch Attendance, TeacherAttendance, Holidays.\n' +
+    '③ Thiếu nhi đang Hoạt động tự lên lớp kế tiếp; lớp cuối giữ nguyên.\n' +
+    '\nHành động phá hủy — không thể hoàn tác.')) return;
+  try { await api('startSchoolYear', {attendanceStartDate: start}); }
   catch (e) { return toast(e.message); }
-  toast('Đã chuyển năm học.');
-  setState({YEAR: next.trim()});
+  closeYear();
+  setState({YEAR: nw});
   await hydrate();
-  fillYearSelects('hol-nam');
-  renderAsg(); renderUs(); renderGroups(); renderCls(); renderHolidays(); renderPerm();
+  renderAll();
+  toast('Đã chuyển sang năm học ' + nw + '.');
 }
 
 /* ---------- Sự kiện ---------- */
-$('us-add').addEventListener('click', addUser);
+$('us-q').addEventListener('input', renderUs);
+$('us-add').addEventListener('click', () => openUser());
 $('us-tbody').addEventListener('click', e => {
-  const btn = e.target.closest('.block-user');
-  if (btn) toggleBlock(btn.dataset.email, btn.dataset.activate === '1');
+  const b = e.target.closest('.edit-user');
+  if (b) openUser(b.dataset.email);
 });
-$('asg-group').addEventListener('change', renderAsg);
-$('asg-add').addEventListener('click', addMember);
-$('asg-tbody').addEventListener('click', e => {
-  const btn = e.target.closest('.del-member');
-  if (btn) delMember(+btn.dataset.i);
-});
-$('hol-nam').addEventListener('change', renderHolidays);
 $('hol-week').addEventListener('change', () => normSunday($('hol-week')));
 $('hol-add').addEventListener('click', addHoliday);
-$('hol-del').addEventListener('click', delHoliday);
-$('year-start').addEventListener('click', startYear);
+$('hol-tbody').addEventListener('click', e => {
+  const b = e.target.closest('.hol-del');
+  if (b) delHoliday(+b.dataset.i);
+});
+$('year-open').addEventListener('click', openYear);
 
-renderAsg(); renderUs(); renderGroups(); renderCls(); renderHolidays(); renderPerm();
+const um = $('us-modal');
+um.addEventListener('click', e => { if (e.target === um) closeUser(); });
+um.querySelector('.btn-cancel').addEventListener('click', closeUser);
+um.querySelector('.btn-save').addEventListener('click', saveUserModal);
+um.addEventListener('keydown', e => { if (e.key === 'Escape') closeUser(); });
+
+const ym = $('year-modal');
+ym.addEventListener('click', e => { if (e.target === ym) closeYear(); });
+ym.querySelector('.btn-cancel').addEventListener('click', closeYear);
+$('sy-confirm').addEventListener('click', confirmYear);
+ym.addEventListener('keydown', e => { if (e.key === 'Escape') closeYear(); });
+
+function renderAll() { renderUs(); renderGroups(); renderCls(); renderHolidays(); }
+
+/* ---------- Khởi động ---------- */
+fillSel('hol-session', [{v: '', t: '— Cả tuần —'}].concat(SESSIONS.map(s => ({v: s}))));
+$('hol-week').value = defaultWeek();
+renderAll();

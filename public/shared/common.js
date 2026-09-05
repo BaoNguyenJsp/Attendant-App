@@ -93,12 +93,27 @@ export async function api(action, body) {
     let j;
     try { j = await r.json(); }
     catch (e) { throw new Error('Máy chủ trả về lỗi (HTTP ' + r.status + '). Vui lòng thử lại.'); }
-    if (!r.ok || j.status === 'error') throw new Error(j.message || 'Lỗi máy chủ');
+    if (!r.ok || j.status === 'error') { const e = new Error(j.message || 'Lỗi máy chủ'); e.status = r.status; throw e; }
     return j;
   } finally {
     pendingApi--;
     hideLoading();
   }
+}
+
+/* ---------- Sắp xếp roster: Lớp (thứ tự Classes) > Giới tính (Nữ trước) > Họ tên ---------- */
+const gRank = v => { const g = String(v || '').normalize('NFC').trim().toLowerCase(); return g === 'nữ' ? 0 : g === 'nam' ? 1 : 2; };
+export function sortStudents(rows) {
+  const cm = {};
+  TCLASSES.forEach((c, i) => cm[c.ClassName] = i);
+  return rows.slice().sort((a, b) => {
+    const ca = cm[a.CurrentClass] != null ? cm[a.CurrentClass] : 1e9;
+    const cb = cm[b.CurrentClass] != null ? cm[b.CurrentClass] : 1e9;
+    if (ca !== cb) return ca - cb;
+    const ga = gRank(a.Gender), gb = gRank(b.Gender);
+    if (ga !== gb) return ga - gb;
+    return String(a.FullName || '').localeCompare(String(b.FullName || ''), 'vi');
+  });
 }
 
 export function fillSel(selId, items, value) {
@@ -151,8 +166,8 @@ const NAV = [
   ['/giangday/', '📕 Giảng dạy', ''],
   ['/diemdanh/', '✅ Chuyên cần', ''],
   ['/hocba/', '🎓 Học tập', ''],
-  ['/hocsinh/', '👥 Học sinh', ''],
-  ['/giaovien/', '🧑‍🏫 Giáo viên', 'exec-only'],
+  ['/hocsinh/', '👥 Thiếu nhi', ''],
+  ['/giaovien/', '🧑‍🏫 Huynh trưởng', 'exec-only'],
   ['/admin/', '⚙ Quản trị', 'admin-only'],
 ];
 
@@ -203,10 +218,12 @@ export async function initCommon() {
   const q = new URLSearchParams(location.search);
   if (q.get('login') === 'denied') return location.replace('/login/?login=denied');
   if (q.get('login') === 'error') return location.replace('/login/?login=error&msg=' + encodeURIComponent(q.get('msg') || ''));
+  // Chưa đăng nhập (401) = bình thường → về gate sạch, không báo lỗi.
+  const deny = e => e.status === 401 ? '/login/' : '/login/?login=error&msg=' + encodeURIComponent(e.message);
   try { cur = (await api('getUser')).session; }
-  catch (e) { return location.replace('/login/?login=error&msg=' + encodeURIComponent(e.message)); }
+  catch (e) { return location.replace(deny(e)); }
   try { YEAR = ((await api('getConfig')).config || {}).CurrentSchoolYear || YEAR; }
-  catch (e) { return location.replace('/login/?login=error&msg=' + encodeURIComponent(e.message)); }
+  catch (e) { return location.replace(deny(e)); }
 
   const role = document.body.dataset.role;
   if (role === 'admin' && !isAdmin()) return location.replace('/');

@@ -13,6 +13,8 @@ let editingClass = null, editingRec = null, TEACHING_BY_CLASS = {};
 // File giữ lại (URL đã lưu) vs file chờ upload, tách riêng theo cột GLV/TBM.
 let planKeep = [], planAdd = [], revKeep = [], revAdd = [];
 const FPLAN = 'GLV', FTBM = 'TBM';
+// Lịch sử cập nhật: phân trang server-side (Drive lookup folder chỉ cho 1 trang).
+const HIST_PAGE = 8; let histPage = 1;
 
 // Badge trên thẻ lớp: text = đuôi file (PDF/DOCX…), hover = tên file thật.
 const badgeLinks = (url, names, rev) => {
@@ -65,7 +67,7 @@ async function renderCards() {
   }).join('');
 }
 
-async function renderGDStats() {
+async function renderFreq() {
   let recs = [];
   try { recs = (await api('getTeaching', {schoolYear: year()})).records || []; }
   catch (e) { return toast(e.message); }
@@ -75,9 +77,14 @@ async function renderGDStats() {
   $('gd-freq').innerHTML = freq.length
     ? freq.map(([em, cnt]) => '<li class="flex justify-between py-1"><span class="text-slate-600">' + esc(glvLabel(em)) + '</span><span class="freq-count">' + cnt + ' tuần</span></li>').join('')
     : '<p class="text-slate-400">Chưa có dữ liệu.</p>';
-  let hist = [];
-  try { hist = (await api('getTeaching', {schoolYear: year(), recent: 8})).records || []; }
+}
+
+async function renderHist() {
+  const cls = $('gd-cls').value;
+  let j;
+  try { j = await api('getTeaching', {schoolYear: year(), page: histPage, pageSize: HIST_PAGE, className: cls || undefined}); }
   catch (e) { return toast(e.message); }
+  const hist = j.records || [], total = j.total || 0;
   $('gd-history').innerHTML = hist.length
     ? hist.map(r => '<tr>' +
       '<td>' + esc(r.WeekOf) + '</td><td>' + esc(r.ClassName) + '</td><td>' + esc(glvLabel(r.TeacherEmail)) + '</td>' +
@@ -87,6 +94,19 @@ async function renderGDStats() {
         (r.RevisedFolderUrl ? '<a class="file-badge reviewed" href="' + esc(r.RevisedFolderUrl) + '" target="_blank" rel="noopener" title="Mở thư mục bản chỉnh sửa (TBM)">✏️</a>' : '') +
       '</td><td>' + esc(userFull(r.UpdatedBy)) + '</td></tr>').join('')
     : '<tr><td colspan="6" class="text-slate-400">Chưa có dữ liệu.</td></tr>';
+  renderPager(total, histPage);
+}
+
+function renderPager(total, page) {
+  const pages = Math.max(1, Math.ceil(total / HIST_PAGE));
+  const from = total ? (page - 1) * HIST_PAGE + 1 : 0;
+  const to = Math.min(total, page * HIST_PAGE);
+  $('gd-pager').innerHTML =
+    '<span class="page-info">' + (total ? from + '–' + to + ' / ' + total + ' dòng' : '') + '</span>' +
+    '<span class="flex gap-2">' +
+    '<button class="btn-page" data-pg="prev"' + (page <= 1 ? ' disabled' : '') + '>‹ Trước</button>' +
+    '<button class="btn-page" data-pg="next"' + (page >= pages ? ' disabled' : '') + '>Sau ›</button>' +
+    '</span>';
 }
 
 /* ---------- Modal: giữ/xóa tệp GLV & TBM ---------- */
@@ -161,7 +181,7 @@ async function saveTeaching() {
     await api('saveTeaching', body);
     $('gd-modal').classList.remove('open');
     toast('Đã lưu giáo án.');
-    renderCards(); renderGDStats();
+    renderCards(); renderFreq(); renderHist();
   } catch (e) { toast(e.message); }
 }
 
@@ -187,5 +207,14 @@ addFiles($('f-plan'), FPLAN);
 addFiles($('f-rev'), FTBM);
 $('gd-week').addEventListener('change', () => { normSunday($('gd-week')); renderCards(); });
 $('cards').addEventListener('click', e => { const b = e.target.closest('.btn-update'); if (b) openModal(b.dataset.cls); });
+$('gd-cls').innerHTML = '<option value="">Tất cả các lớp</option>' +
+  TCLASSES.map(c => '<option value="' + esc(c.ClassName) + '">' + esc(c.ClassName) + '</option>').join('');
+$('gd-cls').addEventListener('change', () => { histPage = 1; renderHist(); });
+$('gd-pager').addEventListener('click', e => {
+  const b = e.target.closest('.btn-page');
+  if (!b || b.disabled) return;
+  histPage += b.dataset.pg === 'next' ? 1 : -1;
+  renderHist();
+});
 
-renderCards(); renderGDStats();
+renderCards(); renderFreq(); renderHist();

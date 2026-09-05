@@ -88,7 +88,7 @@ async function renderTL() {
   try { r = await api('searchByIdNumber', {idNumber: id}); }
   catch (e) { return out.innerHTML = '<p class="text-amber-600 font-medium">' + esc(e.message) + '</p>'; }
   const st = (r.students || [])[0];
-  if (!st) return out.innerHTML = '<p class="text-amber-600 font-medium">Không tìm thấy học sinh với số CCCD này.</p>';
+  if (!st) return out.innerHTML = '<p class="text-amber-600 font-medium">Không tìm thấy Thiếu nhi với số CCCD này.</p>';
   const abs = (r.absences || []).sort((a, b) => String(a.WeekOf).localeCompare(String(b.WeekOf)));
   out.innerHTML =
     '<div class="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4">' +

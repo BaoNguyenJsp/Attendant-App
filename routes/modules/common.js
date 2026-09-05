@@ -12,10 +12,10 @@ module.exports = {
       app.post('/api/' + a, proxy(a));
     }
 
-    // Ghi học sinh theo lớp (FR-AUTH-10)
+    // Ghi Thiếu nhi theo lớp (FR-AUTH-10)
     app.post('/api/saveStudent', authz.requireScopeWrite, proxy('saveStudent'));
 
-    // Tìm kiếm CCCD: chỉ trả nếu học sinh thuộc scope[] hoặc admin
+    // Tìm kiếm CCCD: chỉ trả nếu Thiếu nhi thuộc scope[] hoặc admin
     app.post('/api/searchByIdNumber', async (req, res, next) => {
       try {
         const data = await call('searchByIdNumber', req.body || {});

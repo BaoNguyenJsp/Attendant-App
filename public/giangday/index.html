@@ -39,13 +39,17 @@
         <ul class="freq-list" id="gd-freq"></ul>
       </div>
       <div class="card">
-        <h3 class="gd-title" style="margin-top:0">📋 Lịch sử cập nhật</h3>
+        <div class="hist-toolbar">
+          <h3 class="gd-title" style="margin-top:0">📋 Lịch sử cập nhật</h3>
+          <select id="gd-cls" class="border p-2 rounded-lg font-semibold" title="Lọc theo lớp"></select>
+        </div>
         <div class="tbl-scroll sticky">
           <table class="history-table">
             <thead><tr><th>Tuần</th><th>Lớp</th><th>Giáo lý viên</th><th>Nội dung</th><th>Thư mục</th><th>Người cập nhật</th></tr></thead>
             <tbody id="gd-history"></tbody>
           </table>
         </div>
+        <div class="pager" id="gd-pager"></div>
       </div>
     </div>
   </div>

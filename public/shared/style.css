@@ -52,6 +52,7 @@
   .print-area{box-shadow:none!important;border:1px solid #ddd}
   .tbl-scroll{max-height:none;overflow:visible}
   .tbl-scroll.sticky thead th{position:static}
+  .tbl-scroll .sticky-col{position:static}
 }
 
 /* ===== loading overlay ===== */
@@ -67,6 +68,27 @@ body[data-role]:not(.ready){visibility:hidden}
 body[data-role]:not(.ready) .loading-overlay{visibility:visible}
 
 /* ===== bảng cuộn dọc khi dài hơn khung (áp dụng được cho mọi bảng) ===== */
+table th{white-space:nowrap}
 .tbl-scroll{max-height:min(58vh,720px);overflow:auto;border:1px solid #cbd5e1;border-radius:8px}
 .tbl-scroll th,.tbl-scroll td{border:1px solid #e2e8f0}
-.tbl-scroll.sticky thead th{position:sticky;top:0;background:#1e3a8a;color:#fff;z-index:1}
+.tbl-scroll.sticky thead th{position:sticky;top:0;background:#1e3a8a;color:#fff;z-index:2}
+/* cột cuối (nút Thao tác) dính bên phải khi cuộn ngang */
+.tbl-scroll .sticky-col{position:sticky;right:0;background:#fff;z-index:1;box-shadow:-3px 0 4px -4px rgba(15,23,42,.35)}
+.tbl-scroll.sticky thead th.sticky-col{background:#1e3a8a;z-index:3}
+
+/* ===== modal dùng chung ===== */
+.modal{display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:100;align-items:flex-start;justify-content:center;padding:2rem 1rem;overflow-y:auto}
+.modal.open{display:flex}
+.modal-content{background:#fff;border-radius:14px;padding:1.5rem;max-width:34rem;width:100%;box-shadow:0 25px 50px -12px rgba(0,0,0,.4)}
+.modal-content h3{margin:0 0 1rem;color:#122548;font-size:1.1rem}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 .9rem}
+.form-group{margin-bottom:.85rem}
+.form-group label{display:block;font-size:.8rem;font-weight:700;color:#334155;margin-bottom:.3rem}
+.form-group input[type=text],.form-group input[type=date],.form-group select,.form-group textarea{width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:.5rem;font-size:.9rem;background:#fff}
+.form-group input:disabled{background:#f1f5f9;color:#64748b}
+.form-group.full{grid-column:1/-1}
+.modal-actions{display:flex;justify-content:flex-end;gap:.6rem;margin-top:1.1rem}
+.btn-cancel{background:#e2e8f0;color:#334155;border:none;border-radius:8px;padding:.6rem 1.1rem;font-weight:700;cursor:pointer}
+.btn-save{background:#27ae60;color:#fff;border:none;border-radius:8px;padding:.6rem 1.1rem;font-weight:700;cursor:pointer}
+.btn-save:hover{background:#1e8a4e}
+@media(max-width:640px){.form-grid{grid-template-columns:1fr}}

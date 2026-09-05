@@ -26,7 +26,7 @@
 .btn-update{margin-top:.7rem;width:100%;background:#1e3c72;color:#fff;border:none;border-radius:8px;padding:.55rem;font-weight:700;cursor:pointer}
 .btn-update:hover{background:#122548}
 .summary-badge{font-size:.85rem;color:#475569;background:#f1f5f9;padding:.4rem .8rem;border-radius:99px}
-.dashboard-grid{display:grid;grid-template-columns:1fr 2.2fr;gap:1rem}
+.dashboard-grid{gap:1rem}
 .freq-list{list-style:none;margin:0;padding:0}
 .freq-list li{display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px dashed #e2e8f0;font-size:.88rem}
 .freq-count{font-weight:800;color:#1e3c72}
@@ -43,3 +43,16 @@
 .btn-cancel{background:#e2e8f0;color:#334155;border:none;border-radius:8px;padding:.6rem 1.1rem;font-weight:700;cursor:pointer}
 .btn-save{background:#27ae60;color:#fff;border:none;border-radius:8px;padding:.6rem 1.1rem;font-weight:700;cursor:pointer}
 .btn-save:hover{background:#1e8a4e}
+
+/* ===== Thống kê theo lớp: lọc lớp + phân trang lịch sử ===== */
+.hist-toolbar{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem}
+.pager{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;margin-top:.8rem}
+.page-info{font-size:.8rem;color:#475569;font-weight:600}
+.btn-page{border:1px solid #cbd5e1;background:#fff;color:#1e3c72;border-radius:8px;padding:.35rem .85rem;font-size:.8rem;font-weight:700;cursor:pointer}
+.btn-page:hover:not(:disabled){background:#eff6ff}
+.btn-page:disabled{opacity:.4;cursor:not-allowed}
+
+/* mobile: xếp dọc 2 thẻ, bảng tự cuộn ngang (nhờ min-width của .history-table) */
+@media(max-width:960px){
+  .dashboard-grid{grid-template-columns:1fr}
+}

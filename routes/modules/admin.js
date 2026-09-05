@@ -7,7 +7,7 @@ module.exports = {
   register(app, ctx) {
     const { proxy, authz } = ctx;
     for (const a of [
-      'getUsers', 'saveUsers', 'getGroups', 'saveGroups',
+      'getUsers', 'saveUsers', 'saveUser', 'getGroups', 'saveGroups',
       'getGroupMembers', 'saveGroupMembers', 'saveClass',
       'saveHolidays', 'saveConfig', 'startSchoolYear',
     ]) {
