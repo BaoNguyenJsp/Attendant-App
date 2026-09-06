@@ -530,6 +530,7 @@ const ACTIONS = {
         const idKey = String(st.IdNumber).replace(/^['0]+/, '').trim();
         const o = recs[idKey];
         return { idNumber: st.IdNumber, saintName: st.SaintName || '', fullName: st.FullName,
+          photo: st.Photo || st.PhotoURL || st.Image || '',
           status: o ? o.AttendanceStatus : '', note: (o && o.Note) || '' };
       }),
       isHolidayWeek: !!isHoliday(holidays(year), b.weekOf, b.session) };

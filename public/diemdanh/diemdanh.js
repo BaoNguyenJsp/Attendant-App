@@ -26,9 +26,11 @@ async function renderDD() {
   const note = $('dd-holiday-note');
   if (r.isHolidayWeek) { note.style.display = 'block'; note.textContent = '⚠ Tuần này là ngày nghỉ đã khai báo trong mục Quản trị.'; }
   else note.style.display = 'none';
-  ddBase = (r.records || []).map(x => ({idNumber:x.idNumber, saintName:x.saintName || '', fullName:x.fullName, status:x.status || '', note:x.note || ''}));
+  ddBase = (r.records || []).map(x => ({idNumber:x.idNumber, saintName:x.saintName || '', fullName:x.fullName, photo:x.photo || '', status:x.status || '', note:x.note || ''}));
   ddState = ddBase.map(x => ({...x}));
   renderDDTable();
+  // Step 3: build reference descriptors trong background
+  buildReferenceDescriptors(ddBase, updateRefBadge).catch(e => console.warn('[face-scan] build refs error:', e.message));
 }
 function renderDDTable() {
   const tb = $('dd-tbody');
@@ -163,6 +165,233 @@ $('dd-buoi').addEventListener('change', renderDD);
 $('dd-markall').addEventListener('click', markAllPresent);
 $('dd-refresh').addEventListener('click', renderDD);
 $('dd-save').addEventListener('click', saveAttendance);
+
+/* ---------- Face Scan Modal (Step 1: UI skeleton, no detection yet) ---------- */
+const fsModal = $('fs-modal');
+const fsEmpty = $('fs-empty');
+const fsPreviewWrap = $('fs-preview-wrap');
+const fsImg = $('fs-img');
+const fsError = $('fs-error');
+const fsApply = $('fs-apply');
+let fsSelectedImage = null; // {src, source: 'file'|'url'}
+
+// Step 2: face-api.js model loader
+const FACEAPI_MODEL_URL = '/models';
+let fsModelsReady = false;
+let fsModelsLoading = null;
+
+async function loadFaceApiModels() {
+  if (fsModelsReady) return true;
+  if (fsModelsLoading) return fsModelsLoading;
+  fsModelsLoading = (async () => {
+    if (typeof faceapi === 'undefined') {
+      throw new Error('face-api.js chưa load xong. Kiểm tra kết nối CDN.');
+    }
+    await faceapi.nets.tinyFaceDetector.loadFromUri(FACEAPI_MODEL_URL);
+    await faceapi.nets.faceLandmark68Net.loadFromUri(FACEAPI_MODEL_URL);
+    await faceapi.nets.faceRecognitionNet.loadFromUri(FACEAPI_MODEL_URL);
+    fsModelsReady = true;
+    console.log('[face-scan] models loaded:', { tiny: true, landmark68: true, recognition: true });
+    return true;
+  })();
+  return fsModelsLoading;
+}
+
+// Step 3: Reference descriptor cache (idNumber → Float32Array(128))
+const refDescriptors = new Map();
+let refBuildInProgress = false;
+
+async function loadImageCORS(url, timeoutMs = 10000) {
+  // Try 1: <img crossOrigin="anonymous"> (clean canvas, descriptor chính xác nhất)
+  try {
+    const img = await loadImgElement(url, 'anonymous', timeoutMs);
+    return { img, tainted: false };
+  } catch (e1) {
+    // Try 2: fetch → blob → objectURL (vẫn giữ crossOrigin="anonymous")
+    try {
+      const r = await fetchWithTimeout(url, timeoutMs);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const blob = await r.blob();
+      const objUrl = URL.createObjectURL(blob);
+      try {
+        const img = await loadImgElement(objUrl, 'anonymous', timeoutMs);
+        return { img, tainted: false };
+      } finally {
+        URL.revokeObjectURL(objUrl);
+      }
+    } catch (e2) {
+      // Try 3: fallback no-cors (descriptor có thể kém chính xác do canvas tainted)
+      try {
+        const img = await loadImgElement(url, 'no-cors', timeoutMs);
+        console.warn('[face-scan] using no-cors fallback for', url, '→', e2.message);
+        return { img, tainted: true };
+      } catch (e3) {
+        throw new Error('Không tải được ảnh: ' + e3.message);
+      }
+    }
+  }
+}
+
+function loadImgElement(url, crossOrigin, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    if (crossOrigin === 'anonymous') img.crossOrigin = 'anonymous';
+    let done = false;
+    const t = setTimeout(() => { if (!done) { done = true; reject(new Error('timeout ' + timeoutMs + 'ms')); } }, timeoutMs);
+    img.onload = () => { if (!done) { done = true; clearTimeout(t); resolve(img); } };
+    img.onerror = () => { if (!done) { done = true; clearTimeout(t); reject(new Error('img load error')); } };
+    img.src = url;
+  });
+}
+
+function fetchWithTimeout(url, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), timeoutMs);
+    fetch(url, { signal: c.signal, mode: 'cors' })
+      .then(r => { clearTimeout(t); resolve(r); })
+      .catch(e => { clearTimeout(t); reject(e); });
+  });
+}
+
+async function computeReferenceDescriptor(photoUrl) {
+  const { img } = await loadImageCORS(photoUrl);
+  const opts = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+  const det = await faceapi.detectSingleFace(img, opts).withFaceLandmarks().withFaceDescriptor();
+  if (!det) return null;
+  return det.descriptor;
+}
+
+async function buildReferenceDescriptors(students, onProgress) {
+  if (refBuildInProgress) return;
+  refBuildInProgress = true;
+  refDescriptors.clear();
+  const list = students.filter(s => s.photo && s.photo.trim());
+  const total = list.length;
+  let done = 0, ok = 0, failed = 0;
+  const concurrency = 3;
+  for (let i = 0; i < list.length; i += concurrency) {
+    const chunk = list.slice(i, i + concurrency);
+    await Promise.all(chunk.map(async (s) => {
+      try {
+        const desc = await computeReferenceDescriptor(s.photo);
+        if (desc) { refDescriptors.set(s.idNumber, desc); ok++; }
+        else { failed++; console.warn('[face-scan] no face in', s.idNumber, s.photo); }
+      } catch (e) {
+        failed++;
+        console.warn('[face-scan] failed', s.idNumber, '→', e.message);
+      } finally {
+        done++;
+        if (onProgress) onProgress({ done, total, ok, failed });
+      }
+    }));
+  }
+  refBuildInProgress = false;
+  console.log('[face-scan] refs ready:', ok, '/', total, '(failed:', failed, ')');
+  if (refDescriptors.size > 0) {
+    const sampleId = refDescriptors.keys().next().value;
+    const sampleDesc = refDescriptors.get(sampleId);
+    console.log('[face-scan] sample:', sampleId, 'descriptor[0..4]=', Array.from(sampleDesc.slice(0, 5)));
+  }
+  return { ok, total, failed };
+}
+
+function updateRefBadge(state) {
+  const el = $('fs-status');
+  if (!el) return;
+  if (state.total === 0) { el.textContent = ''; el.className = ''; return; }
+  if (state.done < state.total) {
+    el.textContent = `⏳ ${state.done}/${state.total}`;
+    el.className = 'ml-2 text-xs font-bold text-blue-600';
+  } else {
+    if (state.failed === 0) { el.textContent = `✓ ${state.ok}/${state.total}`; el.className = 'ml-2 text-xs font-bold text-emerald-600'; }
+    else { el.textContent = `⚠ ${state.ok}/${state.total} (${state.failed} lỗi)`; el.className = 'ml-2 text-xs font-bold text-amber-600'; }
+  }
+}
+
+function fsOpen() {
+  fsModal.style.display = 'flex';
+  fsReset();
+  // Preload models in background khi user mở modal lần đầu
+  if (!fsModelsReady && !fsModelsLoading) {
+    loadFaceApiModels().catch(e => console.warn('[face-scan] preload failed:', e.message));
+  }
+}
+function fsClose() { fsModal.style.display = 'none'; fsReset(); }
+function fsReset() {
+  fsSelectedImage = null;
+  fsImg.removeAttribute('src');
+  fsPreviewWrap.style.display = 'none';
+  fsEmpty.style.display = 'block';
+  fsApply.disabled = true;
+  fsError.classList.add('hidden');
+  fsError.textContent = '';
+  const f = $('fs-file'); if (f) f.value = '';
+  const u = $('fs-url'); if (u) u.value = '';
+}
+function fsShowError(msg) {
+  fsError.classList.remove('hidden');
+  fsError.textContent = '⚠ ' + msg;
+}
+function fsShowPreview(src, source) {
+  fsSelectedImage = { src, source };
+  fsImg.src = src;
+  fsImg.onload = () => {
+    fsPreviewWrap.style.display = 'block';
+    fsEmpty.style.display = 'none';
+    fsApply.disabled = false;
+    $('fs-stats').textContent = 'Kích thước: ' + fsImg.naturalWidth + ' × ' + fsImg.naturalHeight + ' px';
+  };
+  fsImg.onerror = () => fsShowError('Không tải được ảnh. Kiểm tra link Drive đã share "Anyone with the link" chưa.');
+}
+function fsConvertDriveUrl(u) {
+  // /file/d/ID/view → /uc?export=view&id=ID
+  const m = u.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (m) return 'https://drive.google.com/uc?export=view&id=' + m[1];
+  // /open?id=ID → /uc?export=view&id=ID
+  const m2 = u.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (m2) return 'https://drive.google.com/uc?export=view&id=' + m2[1];
+  return u;
+}
+
+$('dd-facescan').addEventListener('click', fsOpen);
+$('fs-close').addEventListener('click', fsClose);
+$('fs-cancel').addEventListener('click', fsClose);
+fsModal.addEventListener('click', e => { if (e.target === fsModal) fsClose(); });
+$('fs-file').addEventListener('change', e => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) return fsShowError('File không phải ảnh.');
+  const reader = new FileReader();
+  reader.onload = ev => fsShowPreview(ev.target.result, 'file');
+  reader.onerror = () => fsShowError('Không đọc được file.');
+  reader.readAsDataURL(file);
+});
+$('fs-load-url').addEventListener('click', () => {
+  const raw = $('fs-url').value.trim();
+  if (!raw) return fsShowError('Chưa nhập URL.');
+  const url = fsConvertDriveUrl(raw);
+  fsShowPreview(url, 'url');
+});
+$('fs-apply').addEventListener('click', async () => {
+  if (!fsSelectedImage) return;
+  // Step 2: chỉ test load models xong chưa.
+  // Step 3+ sẽ compute reference descriptors; Step 5 sẽ detect ảnh lớp + match.
+  try {
+    fsApply.disabled = true;
+    fsApply.textContent = '⏳ Đang tải models...';
+    await loadFaceApiModels();
+    // Test detect trên chính ảnh preview để confirm pipeline chạy
+    const det = await faceapi.detectAllFaces(fsImg, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }));
+    toast('Step 2 OK — models loaded. Phát hiện ' + det.length + ' mặt trong ảnh preview.');
+    console.log('[face-scan] test detections:', det);
+  } catch (e) {
+    fsShowError(e.message);
+  } finally {
+    fsApply.disabled = false;
+    fsApply.textContent = '🤖 Quét & Gợi ý';
+  }
+});
 $('dd-tbody').addEventListener('change', e => {
   const cb = e.target.closest('.attendance-checkbox');
   if (cb) handleCheck(+cb.dataset.i, cb.dataset.which);
