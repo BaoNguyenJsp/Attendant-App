@@ -16,6 +16,41 @@ fillSessions('dd-buoi');
 
 let ddBase = [], ddState = [];
 
+/* ---------- Tab Navigation & Lazy Cache Control ---------- */
+const tabCache = {
+  't-dd': false,
+  't-tl': true, // Tra cứu CCCD runs on manual user input, no auto-load needed
+  't-tk': false,
+  't-toandoan': false
+};
+
+function invalidateStatsCache() {
+  tabCache['t-tk'] = false;
+  tabCache['t-toandoan'] = false;
+}
+
+async function switchTab(tabId) {
+  document.querySelectorAll('[data-pane]').forEach(pane => pane.style.display = 'none');
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+
+  const targetPane = document.getElementById(tabId);
+  const targetBtn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
+  if (targetPane) targetPane.style.display = 'block';
+  if (targetBtn) targetBtn.classList.add('active');
+
+  if (!tabCache[tabId]) {
+    if (tabId === 't-dd') await renderDD();
+    else if (tabId === 't-tk') await renderTK();
+    else if (tabId === 't-toandoan') await renderToanDoan();
+    tabCache[tabId] = true;
+  }
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
+});
+
+/* ---------- Điểm Danh ---------- */
 async function renderDD() {
   if (!$('dd-week').value) $('dd-week').value = defaultWeek();
   const cls = $('dd-lop').value;
@@ -30,6 +65,7 @@ async function renderDD() {
   ddState = ddBase.map(x => ({...x}));
   renderDDTable();
 }
+
 function renderDDTable() {
   const tb = $('dd-tbody');
   tb.innerHTML = ddState.map((s, i) => {
@@ -46,6 +82,7 @@ function renderDDTable() {
   }).join('');
   calcDD();
 }
+
 function handleCheck(i, which) {
   const row = $('dd-tbody').querySelector('tr[data-i="' + i + '"]');
   if (row) ddState[i].note = row.querySelector('input[type="text"]').value || '';
@@ -54,20 +91,26 @@ function handleCheck(i, which) {
   renderDDTable();
   markDirty();
 }
+
 function noteInput(i) {
   const row = $('dd-tbody').querySelector('tr[data-i="' + i + '"]');
   if (row) ddState[i].note = row.querySelector('input[type="text"]').value || '';
   markDirty();
 }
+
 function markAllPresent() { ddState.forEach(s => s.status = 'Hiện diện'); renderDDTable(); markDirty(); }
+
 function markDirty() {
   const a = JSON.stringify(ddState.map(x => ({...x}))), b = JSON.stringify(ddBase.map(x => ({...x})));
   $('dd-dirty').textContent = a !== b ? '⚠ Có thay đổi chưa lưu' : '';
+  $('dd-dirty').style.display = a !== b ? 'inline-block' : 'none';
 }
+
 function calcDD() {
   const total = ddState.length, present = ddState.filter(s => s.status === 'Hiện diện').length, perm = ddState.filter(s => s.status === 'Có phép').length;
   $('dd-summary').textContent = 'Sĩ số ' + total + ' · Có mặt ' + present + ' · Có phép ' + perm + ' · Vắng ' + (total - present - perm);
 }
+
 async function saveAttendance() {
   const body = {schoolYear: year(), weekOf: $('dd-week').value, session: $('dd-buoi').value, className: $('dd-lop').value,
     records: ddState.map(x => ({idNumber:x.idNumber, status:x.status || '', note:x.note || ''}))};
@@ -76,10 +119,10 @@ async function saveAttendance() {
   ddBase = ddState.map(x => ({...x}));
   markDirty();
   toast('Đã lưu điểm danh.');
-  renderTK(); renderToanDoan();
+  invalidateStatsCache(); // Sets t-tk and t-toandoan to dirty without fetching right away
 }
 
-/* ---------- Trích lục ---------- */
+/* ---------- Trích Lục ---------- */
 async function renderTL() {
   const id = $('tl-id').value.trim();
   const out = $('tl-out');
@@ -109,8 +152,9 @@ async function renderTL() {
         : '<tr><td colspan="4" class="p-4 text-center text-slate-400">Không có buổi vắng trong năm học này.</td></tr>') + '</tbody></table></div>';
 }
 
-/* ---------- Thống kê điểm danh ---------- */
+/* ---------- Thống Kê ---------- */
 const pct = (p, m) => m ? Math.round(p / m * 100) + '%' : '—';
+
 async function renderTK() {
   const cls = $('tk-lop').value;
   if (!cls) return;
@@ -127,6 +171,7 @@ async function renderTK() {
       }).join('')
     : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có dữ liệu.</td></tr>';
 }
+
 async function renderToanDoan() {
   let r;
   try { r = await api('getClassAttendanceStats', {wholeDeanery: true}); }
@@ -146,7 +191,6 @@ async function renderToanDoan() {
       '<td class="p-2 border text-center">' + size + '</td>' +
       SESSIONS.map((s, i) => '<td class="p-2 border text-center">' + pct(sess[i], (max[s] || 0) * size) + '</td>').join('') +
       '<td class="p-2 border text-center font-bold">' + pct(total, overall) + '</td>' +
-      // ponytail: Xếp loại tạm = rankBadge theo tỉ lệ chung lớp (≥85 Tốt, ≥70 Khá). Logic thật ghi sau (req 10).
       '<td class="p-2 border text-center">' + rankBadge(overall ? Math.round(total / overall * 100) : null) + '</td></tr>';
   });
   $('td-tbody').innerHTML = body || '<tr><td colspan="8" class="p-4 text-center text-slate-400">Chưa có dữ liệu.</td></tr>';
@@ -156,13 +200,14 @@ async function renderToanDoan() {
   $('td-thu').textContent = pct(thu, (max[SESSIONS[3]] || 0) * n);
 }
 
-/* ---------- Sự kiện ---------- */
-$('dd-lop').addEventListener('change', renderDD);
-$('dd-week').addEventListener('change', () => { normSunday($('dd-week')); renderDD(); });
-$('dd-buoi').addEventListener('change', renderDD);
+/* ---------- Event Listeners ---------- */
+$('dd-lop').addEventListener('change', async () => { tabCache['t-dd'] = false; await renderDD(); tabCache['t-dd'] = true; });
+$('dd-week').addEventListener('change', async () => { normSunday($('dd-week')); tabCache['t-dd'] = false; await renderDD(); tabCache['t-dd'] = true; });
+$('dd-buoi').addEventListener('change', async () => { tabCache['t-dd'] = false; await renderDD(); tabCache['t-dd'] = true; });
 $('dd-markall').addEventListener('click', markAllPresent);
-$('dd-refresh').addEventListener('click', renderDD);
+$('dd-refresh').addEventListener('click', async () => { tabCache['t-dd'] = false; await renderDD(); tabCache['t-dd'] = true; });
 $('dd-save').addEventListener('click', saveAttendance);
+
 $('dd-tbody').addEventListener('change', e => {
   const cb = e.target.closest('.attendance-checkbox');
   if (cb) handleCheck(+cb.dataset.i, cb.dataset.which);
@@ -171,12 +216,16 @@ $('dd-tbody').addEventListener('input', e => {
   const inp = e.target.closest('input[data-i]');
   if (inp) noteInput(+inp.dataset.i);
 });
+
 $('tl-search').addEventListener('click', renderTL);
 $('tl-excel').addEventListener('click', () => exportExcel('tl-table', 'Trích lục CCCD'));
-$('tk-lop').addEventListener('change', renderTK);
+
+$('tk-lop').addEventListener('change', async () => { tabCache['t-tk'] = false; await renderTK(); tabCache['t-tk'] = true; });
 $('tk-excel').addEventListener('click', () => exportExcel('tk-table', 'Thống kê chuyên cần lớp'));
 $('tk-print').addEventListener('click', () => window.print());
+
 $('td-excel').addEventListener('click', () => exportExcel('td-table', 'Thống kê toàn đoàn'));
 $('td-print').addEventListener('click', () => window.print());
 
-renderDD(); renderTK(); renderToanDoan();
+/* Initial Startup: Load first tab only */
+switchTab('t-dd');

@@ -556,45 +556,57 @@ getClassAttendanceStats: b => {
     const year = String(b.schoolYear || currentYear()).trim();
     const rawClassNames = b.className ? [b.className] : cachedRead('Classes').map(x => x.ClassName);
     const classNames = rawClassNames.map(c => String(c).normalize('NFC').trim());
+    const classSet = new Set(classNames);
     
+    // 1. Read sheet tabs ONCE into memory
+    const allStudents = cachedRead('Students');
+    const allAttendance = cachedRead('Attendance');
     const w = attendanceWindow(year);
     const maxTotal = SESSIONS.reduce((a, s) => a + (w.max[s] || 0), 0);
-    
-    // Establish a hard boundary for "now" to exclude future records
     const todayYmd = fmtDate(new Date());
-    
-    const att = cachedRead('Attendance').filter(r => {
-      const rYear = String(r.SchoolYear).trim();
-      const rClass = String(r.ClassName).normalize('NFC').trim();
-      const rSess = String(r.Session).normalize('NFC').trim();
-      const rWeek = String(r.WeekOf).trim();
-      
-      // Count records only if they match the year, class, are not holidays, and are <= today
-      return rYear === year && 
-             classNames.includes(rClass) && 
-             rWeek <= todayYmd &&
-             !isHoliday(w.nghi, r.WeekOf, rSess);
-    });
 
+    // 2. Pre-index Attendance data by (Normalized Student ID + Normalized Session)
     const by = {};
-    att.forEach(r => {
+    for (let i = 0; i < allAttendance.length; i++) {
+      const r = allAttendance[i];
+      if (String(r.SchoolYear).trim() !== year) continue;
+      
+      const rClass = String(r.ClassName).normalize('NFC').trim();
+      if (!classSet.has(rClass)) continue;
+
+      const rWeek = String(r.WeekOf).trim();
+      const rSess = String(r.Session).normalize('NFC').trim();
+      if (rWeek > todayYmd || isHoliday(w.nghi, r.WeekOf, rSess)) continue;
+
       const id = String(r.IdNumber).replace(/^['0]+/, '').trim();
-      const sess = String(r.Session).normalize('NFC').trim();
-      const key = id + '|' + sess;
-      by[key] = by[key] || [];
-      by[key].push(r);
+      const key = id + '|' + rSess;
+      (by[key] = by[key] || []).push(r);
+    }
+
+    // 3. Pre-index Active Students by Class Name
+    const activeByClass = {};
+    allStudents.forEach(st => {
+      if (String(st.Status).normalize('NFC').trim().toLowerCase() === 'hoạt động') {
+        const cls = String(st.CurrentClass).normalize('NFC').trim();
+        (activeByClass[cls] = activeByClass[cls] || []).push(st);
+      }
     });
 
+    // 4. Build response array fast without cache hits inside loops
     const stats = [];
     classNames.forEach(cls => {
-      activeStudents(cls).forEach(st => {
+      const students = (activeByClass[cls] || []).sort((a, b) => genderRank(a.Gender) - genderRank(b.Gender));
+      students.forEach(st => {
         const stId = String(st.IdNumber).replace(/^['0]+/, '').trim();
         const row = { className: cls, idNumber: st.IdNumber, fullName: st.FullName, present: {} };
         
         SESSIONS.forEach(ses => {
           const normSes = String(ses).normalize('NFC').trim();
-          const list = (by[stId + '|' + normSes] || []).filter(r => String(r.ClassName).normalize('NFC').trim() === cls);
-          row.present[ses] = list.filter(r => String(r.AttendanceStatus).normalize('NFC').trim().toLowerCase() === 'hiện diện').length;
+          const list = by[stId + '|' + normSes] || [];
+          row.present[ses] = list.filter(r => 
+            String(r.ClassName).normalize('NFC').trim() === cls && 
+            String(r.AttendanceStatus).normalize('NFC').trim().toLowerCase() === 'hiện diện'
+          ).length;
         });
         stats.push(row);
       });
