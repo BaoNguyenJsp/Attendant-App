@@ -464,6 +464,57 @@ function applyResultsToTable(matchResult) {
   return { ticked, review, reviewList, skipped };
 }
 
+// ========== Non-Maximum Suppression (NMS) để loại bỏ duplicate detections ==========
+// IoU (Intersection over Union): tính độ overlap giữa 2 bounding boxes
+function calculateIoU(box1, box2) {
+  const x1 = Math.max(box1.x, box2.x);
+  const y1 = Math.max(box1.y, box2.y);
+  const x2 = Math.min(box1.x + box1.width, box2.x + box2.width);
+  const y2 = Math.min(box1.y + box1.height, box2.y + box2.height);
+  
+  const intersection = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+  const area1 = box1.width * box1.height;
+  const area2 = box2.width * box2.height;
+  const union = area1 + area2 - intersection;
+  
+  return union > 0 ? intersection / union : 0;
+}
+
+// NMS: loại bỏ các detections overlap nhau (giữ detection có score cao hơn)
+function applyNMS(detections, iouThreshold = 0.4) {
+  if (detections.length === 0) return [];
+  
+  // Sort theo score giảm dần (score càng cao = confidence càng cao)
+  const sorted = detections
+    .map((det, idx) => ({ det, idx, score: det.detection.score }))
+    .sort((a, b) => b.score - a.score);
+  
+  const keep = [];
+  const suppressed = new Set();
+  
+  for (let i = 0; i < sorted.length; i++) {
+    if (suppressed.has(i)) continue;
+    
+    const current = sorted[i];
+    keep.push(current.det);
+    
+    // Suppress các boxes overlap với current box
+    for (let j = i + 1; j < sorted.length; j++) {
+      if (suppressed.has(j)) continue;
+      
+      const box1 = current.det.detection.box;
+      const box2 = sorted[j].det.detection.box;
+      const iou = calculateIoU(box1, box2);
+      
+      if (iou > iouThreshold) {
+        suppressed.add(j);
+      }
+    }
+  }
+  
+  return keep;
+}
+
 // Step 2: Core match — detect all faces in class photo, so khớp với ref descriptors.
 // Pure function, không đụng DOM. Trả array kết quả để Step 5 render.
 //
@@ -492,11 +543,12 @@ async function matchFaces(classImg, refs, opts = {}) {
   // Đảm bảo model đã load (idempotent — trả về ngay nếu đã ready)
   await loadFaceApiModels();
 
-  // ✅ Ảnh lớp nhiều người, mặt nhỏ → inputSize 608 + scoreThreshold 0.3 để tăng recall.
-  // Có thể tinh chỉnh qua opts nếu user cần. Ref descriptor vẫn build ở 320 (không liên quan).
+  // ✅ Ảnh lớp nhiều người, mặt nhỏ → inputSize 832 (max) + scoreThreshold 0.06 cân bằng recall/precision.
+  // scoreThreshold 0.06: đủ thấp để detect mặt xa/mờ ở hàng sau, đủ cao để tránh false positive.
+  // inputSize 832 là max của TinyFaceDetector, giúp detect mặt nhỏ nhất (~20-30px).
   const detectorOpts = new faceapi.TinyFaceDetectorOptions({
-    inputSize: opts.inputSize || 608,
-    scoreThreshold: opts.scoreThreshold || 0.3
+    inputSize: opts.inputSize || 832,
+    scoreThreshold: opts.scoreThreshold || 0.06
   });
 
   const detections = await faceapi
@@ -504,11 +556,16 @@ async function matchFaces(classImg, refs, opts = {}) {
     .withFaceLandmarks()
     .withFaceDescriptors();
 
+  // ✅ Non-Maximum Suppression (NMS): loại bỏ duplicate detections (overlap boxes)
+  // scoreThreshold thấp → nhiều overlapping boxes cho cùng 1 mặt → NMS giữ box tốt nhất
+  const filteredDetections = applyNMS(detections, 0.4); // IoU threshold 0.4
+  console.log(`detected ${detections.length} faces, after NMS: ${filteredDetections.length}`);
+
   // Tính khoảng cách: mỗi detection có 1 ref candidate tốt nhất (chưa khóa)
   // candidates = [{ detIdx, refId, distance }]
   const candidates = [];
-  for (let i = 0; i < detections.length; i++) {
-    const det = detections[i];
+  for (let i = 0; i < filteredDetections.length; i++) {
+    const det = filteredDetections[i];
     for (const [refId, ref] of refs) {
       const d = faceapi.euclideanDistance(det.descriptor, ref.descriptor);
       candidates.push({ detIdx: i, refId, refName: ref.studentName, distance: d });
@@ -521,7 +578,7 @@ async function matchFaces(classImg, refs, opts = {}) {
   // Greedy 1-to-1: mỗi detection chỉ match 1 ref, mỗi ref chỉ bị match 1 detection
   const usedDets = new Set();
   const usedRefs = new Set();
-  const detMatch = new Array(detections.length).fill(null); // {refId, refName, distance}
+  const detMatch = new Array(filteredDetections.length).fill(null); // {refId, refName, distance}
 
   for (const c of candidates) {
     if (usedDets.has(c.detIdx) || usedRefs.has(c.refId)) continue;
@@ -531,7 +588,7 @@ async function matchFaces(classImg, refs, opts = {}) {
   }
 
   // Build results: mỗi detection → 1 result
-  const results = detections.map((det, i) => {
+  const results = filteredDetections.map((det, i) => {
     const m = detMatch[i];
     const box = det.detection.box;
     let status, autoTick;
@@ -561,7 +618,7 @@ async function matchFaces(classImg, refs, opts = {}) {
     };
   });
 
-  return { detections: detections.length, results, error: null };
+  return { detections: filteredDetections.length, results, error: null };
 }
 
 // Step 3: Crop thumbnail khuôn mặt từ ảnh lớp theo box.
@@ -766,11 +823,12 @@ window.addEventListener('resize', () => {
 });
 function fsConvertDriveUrl(u) {
   // /file/d/ID/view hoặc /d/ID hoặc ?id=ID hoặc /open?id=ID → lh3 CDN (bypass COEP/CORP)
-  // ✅ Thêm =w800 để lấy thumbnail cho ảnh lớp (vừa đủ detect nhiều mặt, tránh ảnh gốc quá nặng).
+  // ✅ Thêm =w2000 cho ảnh lớp để mặt hàng sau có độ phân giải đủ cho detection.
+  // w1600 → w2000: tăng thêm ~0.3-0.5s load time nhưng giúp detect mặt nhỏ hơn (~20-30px).
   const m = u.match(/\/(?:file\/)?d\/([a-zA-Z0-9_-]+)/) || u.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-  if (m) return 'https://lh3.googleusercontent.com/d/' + m[1] + '=w800';
-  // Nếu đã là lh3 mà chưa có size thì thêm size lớn hơn (800 cho ảnh lớp)
-  if (u.includes('lh3.googleusercontent.com') && !/=[swh]\d+/.test(u)) return u + '=w800';
+  if (m) return 'https://lh3.googleusercontent.com/d/' + m[1] + '=w2000';
+  // Nếu đã là lh3 mà chưa có size thì thêm size lớn (2000 cho ảnh lớp)
+  if (u.includes('lh3.googleusercontent.com') && !/=[swh]\d+/.test(u)) return u + '=w2000';
   return u;
 }
 
@@ -829,6 +887,7 @@ $('fs-apply').addEventListener('click', async () => {
 
     if (detections === 0) {
       toast('⚠ Không phát hiện khuôn mặt nào trong ảnh. Thử ảnh khác rõ hơn.');
+      // KHÔNG set button "Đã xong" → giữ nguyên "🤖 Quét & Gợi ý" để user scan lại
       return;
     }
 
@@ -837,9 +896,19 @@ $('fs-apply').addEventListener('click', async () => {
 
     // Apply vào bảng điểm danh.
     const { ticked, review, reviewList, skipped } = applyResultsToTable(result);
+    
+    // Step 6: Vẽ canvas overlay khoanh vùng mặt trên ảnh preview (dù match hay không).
+    // Đợi 1 tick để img.clientWidth cập nhật sau khi DOM paint xong.
+    requestAnimationFrame(() => drawDetectionsOverlay(results));
+
+    // Step 6: KHÔNG tự đóng modal — user cần xem overlay để verify AI đúng.
+    // ✅ Chỉ set button "✓ Đã xong & Đóng" khi detect được ít nhất 1 mặt.
+    fsApply.disabled = false;
+    fsApply.textContent = '✓ Đã xong & Đóng';
+
+    // Thông báo kết quả
     if (ticked === 0 && review === 0) {
-      // Vẫn vẽ overlay để user thấy AI detect được những ai (không match ai trong lớp)
-      drawDetectionsOverlay(results);
+      // Không match ai nhưng vẫn vẽ overlay để user thấy AI detect được những ai
       toast('⚠ Phát hiện ' + detections + ' mặt nhưng không khớp HS nào trong lớp.');
       return;
     }
@@ -848,15 +917,6 @@ $('fs-apply').addEventListener('click', async () => {
     if (skipped.length) summary += ' (bỏ qua ' + skipped.length + ' đã tick trước)';
     toast(summary);
     console.log('[face-scan] result:', { ticked, review, reviewList, skipped });
-
-    // Step 6: Vẽ canvas overlay khoanh vùng mặt trên ảnh preview.
-    // Đợi 1 tick để img.clientWidth cập nhật sau khi DOM paint xong.
-    requestAnimationFrame(() => drawDetectionsOverlay(results));
-
-    // Step 6: KHÔNG tự đóng modal — user cần xem overlay để verify AI đúng.
-    // Đổi button text thành "✓ Đã xong & Đóng", user click mới đóng.
-    fsApply.disabled = false;
-    fsApply.textContent = '✓ Đã xong & Đóng';
   } catch (e) {
     console.error('[face-scan] error:', e);
     fsShowError(e.message);
