@@ -14,18 +14,19 @@ const FMAP = {'Quiz15_S1':'quiz15s1', 'Exam_S1':'exams1', 'Quiz15_S2':'quiz15s2'
 
 /* ---------- Tab Cache & Lazy Loading Engine ---------- */
 const tabCache = {
-  't-nh': false,
-  't-hbt': true, // Manual search tab
-  't-th': false,
-  't-kt': false
+  't-nhap': false,    // Updated key to match HTML data-tab="t-nhap"
+  't-hbt': true,     // Manual search tab
+  't-tonghop': false, // Updated key to match HTML data-tab="t-tonghop"
+  't-kt': false      // Khen thưởng tab
 };
 
 function invalidateSummaryCache() {
-  tabCache['t-th'] = false;
+  tabCache['t-tonghop'] = false;
   tabCache['t-kt'] = false;
 }
 
 async function switchTab(tabId) {
+  // 1. Update UI pane display and button active states
   document.querySelectorAll('[data-pane]').forEach(pane => pane.style.display = 'none');
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
 
@@ -34,14 +35,16 @@ async function switchTab(tabId) {
   if (targetPane) targetPane.style.display = 'block';
   if (targetBtn) targetBtn.classList.add('active');
 
+  // 2. Fetch data only if tab is dirty or not loaded yet
   if (!tabCache[tabId]) {
-    if (tabId === 't-nh') await renderNhap();
-    else if (tabId === 't-th') await renderTongHop();
+    if (tabId === 't-nhap') await renderNhap();
+    else if (tabId === 't-tonghop') await renderTongHop();
     else if (tabId === 't-kt') await renderKT();
     tabCache[tabId] = true;
   }
 }
 
+// Bind click events to tab navigation buttons
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
 });
@@ -55,7 +58,7 @@ const [st, cl, sc] = await Promise.all([
 
 setState({TSTUDENTS: st.students || [], TCLASSES: cl.classes || [], TSCORES: sc.scores || []});
 fillClasses('nh-lop', 'th-lop', 'kt-lop');
-$('nh-year').textContent = year();
+if ($('nh-year')) $('nh-year').textContent = year();
 
 // Populate school years
 let years = [year()];
@@ -86,10 +89,13 @@ const sumSort = (a, b) => (clsOrd[a.className] ?? 1e9) - (clsOrd[b.className] ??
 /* ---------- Nhập điểm ---------- */
 async function renderNhap() {
   const cls = $('nh-lop').value;
+  if (!cls) return;
   const sts = activeStudents(cls);
   const scoreMap = {};
   TSCORES.filter(s => s.SchoolYear === year() && s.ClassName === cls).forEach(s => scoreMap[s.IdNumber] = s);
   const tb = $('nh-tbody');
+  if (!tb) return;
+  
   tb.innerHTML = sts.length
     ? sts.map((st, i) => {
         const sc = scoreMap[st.IdNumber] || {};
@@ -118,7 +124,7 @@ async function saveScores() {
     setState({TSCORES: TSCORES.filter(s => !(s.SchoolYear === year() && s.ClassName === cls)).concat(r.students || [])});
   } catch (e) { return toast(e.message); }
   toast('Đã lưu điểm.');
-  invalidateSummaryCache(); // Flags t-th & t-kt as dirty without immediate network fetches
+  invalidateSummaryCache();
   await renderNhap();
 }
 
@@ -218,19 +224,18 @@ async function renderKT() {
 }
 
 /* ---------- Events ---------- */
-$('nh-lop').addEventListener('change', async () => { tabCache['t-nh'] = false; await renderNhap(); tabCache['t-nh'] = true; });
+$('nh-lop').addEventListener('change', async () => { tabCache['t-nhap'] = false; await renderNhap(); tabCache['t-nhap'] = true; });
 $('save-scores').addEventListener('click', saveScores);
 $('nh-template').addEventListener('click', e => { e.preventDefault(); downloadTemplate(); });
 $('nh-file').addEventListener('change', importScores);
 
 $('hbt-search').addEventListener('click', renderHBT);
 
-$('th-nam').addEventListener('change', async () => { tabCache['t-th'] = false; await renderTongHop(); tabCache['t-th'] = true; });
-$('th-lop').addEventListener('change', async () => { tabCache['t-th'] = false; await renderTongHop(); tabCache['t-th'] = true; });
+$('th-nam').addEventListener('change', async () => { tabCache['t-tonghop'] = false; await renderTongHop(); tabCache['t-tonghop'] = true; });
+$('th-lop').addEventListener('change', async () => { tabCache['t-tonghop'] = false; await renderTongHop(); tabCache['t-tonghop'] = true; });
 $('th-excel').addEventListener('click', () => exportExcel('th-table', 'Tổng hợp & xếp loại'));
 $('th-print').addEventListener('click', () => window.print());
 
-// Safe listener attachment for role-restricted button
 const btnToanDoan = $('th-toandoan');
 if (btnToanDoan) btnToanDoan.addEventListener('click', toanDoan);
 
@@ -239,5 +244,5 @@ $('kt-lop').addEventListener('change', async () => { tabCache['t-kt'] = false; a
 $('kt-excel').addEventListener('click', () => exportExcel('kt-table', 'Danh sách khen thưởng'));
 $('kt-print').addEventListener('click', () => window.print());
 
-/* Boot: Initial active tab load only */
-switchTab('t-nh');
+/* Boot: Loads active default tab 't-nhap' strictly on initialization */
+switchTab('t-nhap');
