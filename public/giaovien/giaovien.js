@@ -16,11 +16,11 @@ const NGANH = groups.filter(g => g.Type === 'Ngành');
 
 let gvddBase = [], gvddState = [];
 
-/* ---------- Fixed Tab Cache Map Keys ---------- */
+/* ---------- Fixed Tab Cache Map ---------- */
 const tabCache = {
-  't-gvdd': false,   // Corrected key to match HTML data-tab
+  't-gvdd': false,   // Matching HTML data-tab="t-gvdd"
   't-gvtrich': true, // Manual search tab
-  't-gvtk': false    // Corrected key to match HTML data-tab
+  't-gvtk': false    // Matching HTML data-tab="t-gvtk"
 };
 
 function invalidateStatsCache() {
@@ -67,14 +67,27 @@ function fillLop() {
 async function renderGVDD() {
   if (!isExec()) return;
   if (!$('gvdd-week').value) $('gvdd-week').value = defaultWeek();
+  normSunday($('gvdd-week'));
+
   const body = {sector: $('gvdd-nganh').value, weekOf: $('gvdd-week').value, session: $('gvdd-session').value};
   let r;
   try { r = await api('getTeacherAttendance', body); }
   catch (e) { return toast(e.message); }
+
   const note = $('gvdd-holiday-note');
   if (r.isHolidayWeek) { note.style.display = 'block'; note.textContent = '⚠ Tuần này là ngày nghỉ đã khai báo trong mục Quản trị.'; }
   else note.style.display = 'none';
-  gvddBase = (r.roster || []).map(x => ({id:x.id, email:x.email, fullName:x.fullName, saintName:x.saintName || '', className:x.className || '', status:x.status || '', note:x.note || ''}));
+
+  gvddBase = (r.roster || []).map(x => ({
+    id: x.id, 
+    email: x.email, 
+    fullName: x.fullName, 
+    saintName: x.saintName || '', 
+    className: x.className || '', 
+    status: (x.status === 'Hiện diện' || x.status === 'Có phép') ? x.status : '', 
+    note: x.note || ''
+  }));
+
   gvddState = gvddBase.map(x => ({...x}));
   renderGVDDTable();
 }
@@ -83,8 +96,9 @@ function renderGVDDTable() {
   const tb = $('gvdd-tbody');
   tb.innerHTML = gvddState.length
     ? gvddState.map((s, i) => {
-        const present = s.status === 'Hiện diện', permission = s.status === 'Có phép';
-        return '<tr data-i="' + i + '" class="' + (s.status === 'Vắng' ? 'bg-red-50' : '') + '">' +
+        const present = s.status === 'Hiện diện';
+        const permission = s.status === 'Có phép';
+        return '<tr data-i="' + i + '">' +
           '<td class="p-2 border text-center">' + esc(s.id) + '</td>' +
           '<td class="p-2 border text-xs">' + esc(s.email) + '</td>' +
           '<td class="p-2 border font-medium">' + esc([s.saintName, s.fullName].filter(Boolean).join(' ')) + '</td>' +
@@ -102,7 +116,13 @@ function handleTCheck(i, which) {
   const row = $('gvdd-tbody').querySelector('tr[data-i="' + i + '"]');
   if (row) gvddState[i].note = row.querySelector('input[type="text"]').value || '';
   const s = gvddState[i];
-  s.status = which === 'present' ? (s.status === 'Hiện diện' ? 'Vắng' : 'Hiện diện') : (s.status === 'Có phép' ? 'Vắng' : 'Có phép');
+  
+  if (which === 'present') {
+    s.status = s.status === 'Hiện diện' ? '' : 'Hiện diện';
+  } else if (which === 'permission') {
+    s.status = s.status === 'Có phép' ? '' : 'Có phép';
+  }
+
   renderGVDDTable();
   markDirtyGVDD();
 }
@@ -125,15 +145,30 @@ function markDirtyGVDD() {
 }
 
 function calcGVDD() {
-  const total = gvddState.length, present = gvddState.filter(s => s.status === 'Hiện diện').length, perm = gvddState.filter(s => s.status === 'Có phép').length;
+  const total = gvddState.length;
+  const present = gvddState.filter(s => s.status === 'Hiện diện').length;
+  const perm = gvddState.filter(s => s.status === 'Có phép').length;
   $('gvdd-summary').textContent = 'Sĩ số ' + total + ' · Có mặt ' + present + ' · Có phép ' + perm + ' · Vắng ' + (total - present - perm);
 }
 
 async function saveGVDD() {
-  const body = {sector: $('gvdd-nganh').value, weekOf: $('gvdd-week').value, session: $('gvdd-session').value,
-    records: gvddState.map(x => ({email:x.email, status:x.status || 'Vắng', note:x.note || ''}))};
+  normSunday($('gvdd-week'));
+  
+  // Filter active valid attendance records strictly
+  const validRecords = gvddState
+    .filter(x => x.status === 'Hiện diện' || x.status === 'Có phép')
+    .map(x => ({ email: x.email, status: x.status, note: x.note || '' }));
+
+  const body = {
+    sector: $('gvdd-nganh').value, 
+    weekOf: $('gvdd-week').value, 
+    session: $('gvdd-session').value,
+    records: validRecords
+  };
+
   try { await api('saveTeacherAttendance', body); }
   catch (e) { return toast(e.message); }
+
   gvddBase = gvddState.map(x => ({...x}));
   markDirtyGVDD();
   toast('Đã lưu điểm danh Huynh trưởng.');
@@ -241,5 +276,4 @@ fillSel('gvdd-session', TSESS.map(s => ({v:s})));
 fillLop();
 $('gvdd-week').value = defaultWeek();
 
-// Load active tab on startup
 switchTab('t-gvdd');

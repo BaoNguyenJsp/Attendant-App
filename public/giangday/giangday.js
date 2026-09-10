@@ -1,6 +1,5 @@
 /* =====================================================================
    SỔ THIẾU NHI — giangday/index.js
-   Giảng dạy: thẻ lớp theo tuần + thống kê tần suất/lịch sử + modal upload.
    ===================================================================== */
 'use strict';
 
@@ -10,19 +9,15 @@ import { userFull, fileLink } from '../shared/ui.js';
 await initCommon();
 
 let editingClass = null, editingRec = null, TEACHING_BY_CLASS = {};
-// File giữ lại (URL đã lưu) vs file chờ upload, tách riêng theo cột GLV/TBM.
 let planKeep = [], planAdd = [], revKeep = [], revAdd = [];
 const FPLAN = 'GLV', FTBM = 'TBM';
-// Lịch sử cập nhật: phân trang server-side (Drive lookup folder chỉ cho 1 trang).
 const HIST_PAGE = 8; let histPage = 1;
 
-// Cache flags to prevent eager auto-fetching on startup
 const sectionCache = {
   freqLoaded: false,
   histLoaded: false
 };
 
-// Badge trên thẻ lớp: text = đuôi file (PDF/DOCX…), hover = tên file thật.
 const badgeLinks = (url, names, rev) => {
   const ns = String(names || '').split('\n');
   return String(url || '').split(',').map(x => x.trim()).filter(f => /^https?:\/\//i.test(f))
@@ -35,7 +30,6 @@ const badgeLinks = (url, names, rev) => {
     }).join(' ');
 };
 
-// Tên GLV hiển thị = tên thánh trước họ tên, vd "Phaolô Nguyễn Văn A".
 const glvLabel = em => {
   const e = String(em || '').toLowerCase();
   const u = USERS_ROWS.find(x => String(x.Email).toLowerCase() === e);
@@ -44,13 +38,16 @@ const glvLabel = em => {
   return s ? s + ' ' + f : f;
 };
 
-/* ---------- Thẻ bài học theo tuần (Chỉ tải tuần hiện tại) ---------- */
+/* ---------- Cards (Active Week Only) ---------- */
 async function renderCards() {
   if (!$('gd-week').value) $('gd-week').value = defaultWeek();
+  normSunday($('gd-week'));
+  
   const wk = $('gd-week').value;
   let recs = [];
   try { recs = (await api('getTeaching', {schoolYear: year(), weekOf: wk})).records || []; }
   catch (e) { return toast(e.message); }
+  
   const byClass = {}; recs.forEach(r => byClass[r.ClassName] = r);
   TEACHING_BY_CLASS = byClass;
   $('gd-summary').textContent = Object.keys(byClass).length + '/' + TCLASSES.length + ' lớp đã cập nhật';
@@ -74,7 +71,7 @@ async function renderCards() {
   }).join('');
 }
 
-/* ---------- Thống kê tần suất (Lazy Load) ---------- */
+/* ---------- Frequency (Lazy Loaded) ---------- */
 async function renderFreq(force = false) {
   if (sectionCache.freqLoaded && !force) return;
   let recs = [];
@@ -89,7 +86,7 @@ async function renderFreq(force = false) {
   sectionCache.freqLoaded = true;
 }
 
-/* ---------- Lịch sử cập nhật (Phân trang server-side - Lazy Load) ---------- */
+/* ---------- History (Server Paginated - Lazy Loaded) ---------- */
 async function renderHist(force = false) {
   if (sectionCache.histLoaded && !force) return;
   const cls = $('gd-cls').value;
@@ -122,7 +119,7 @@ function renderPager(total, page) {
     '</span>';
 }
 
-/* ---------- Modal Upload & Modal Controls ---------- */
+/* ---------- Modals ---------- */
 const splitUrls = s => String(s || '').split(',').map(x => x.trim()).filter(x => /^https?:\/\//i.test(x));
 const splitNames = s => String(s || '').split('\n');
 const linkList = (urls, names) => {
@@ -193,7 +190,6 @@ async function saveTeaching() {
     $('gd-modal').classList.remove('open');
     toast('Đã lưu giáo án.');
     
-    // Invalidate sub-view caches so they refresh on demand
     sectionCache.freqLoaded = false;
     sectionCache.histLoaded = false;
 
@@ -201,7 +197,7 @@ async function saveTeaching() {
   } catch (e) { toast(e.message); }
 }
 
-/* ---------- Khởi tạo ---------- */
+/* ---------- Boot ---------- */
 const [cl, te] = await Promise.all([api('getClasses'), api('getTeachers')]);
 setState({TCLASSES: cl.classes || [], USERS_ROWS: te.users || [], GROUP_MEMBERS: te.members || [], GROUPS_LIST: te.groups || []});
 
@@ -240,7 +236,7 @@ $('gd-pager').addEventListener('click', e => {
   renderHist(true);
 });
 
-// Lazy load secondary views when scrolled into view
+// IntersectionObserver to fetch sub-views only when visible
 const observer = new IntersectionObserver((entries) => {
   entries.forEach(entry => {
     if (entry.isIntersecting) {
@@ -253,5 +249,4 @@ const observer = new IntersectionObserver((entries) => {
 if ($('gd-freq')) observer.observe($('gd-freq'));
 if ($('gd-history')) observer.observe($('gd-history'));
 
-/* Initial Boot: Render active week cards ONLY */
 await renderCards();

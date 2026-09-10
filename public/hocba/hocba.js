@@ -1,6 +1,5 @@
 /* =====================================================================
    SỔ THIẾU NHI — hocba/index.js
-   Nhập điểm theo lớp (năm hiện tại) + trích lục học bạ + tổng hợp & xếp loại + khen thưởng.
    ===================================================================== */
 'use strict';
 
@@ -12,12 +11,12 @@ await initCommon();
 const SCORE_FIELDS = ['Quiz15_S1', 'Exam_S1', 'Quiz15_S2', 'Exam_S2'];
 const FMAP = {'Quiz15_S1':'quiz15s1', 'Exam_S1':'exams1', 'Quiz15_S2':'quiz15s2', 'Exam_S2':'exams2'};
 
-/* ---------- Tab Cache & Lazy Loading Engine ---------- */
+/* ---------- Corrected Tab Mapping ---------- */
 const tabCache = {
-  't-nhap': false,    // Updated key to match HTML data-tab="t-nhap"
-  't-hbt': true,     // Manual search tab
-  't-tonghop': false, // Updated key to match HTML data-tab="t-tonghop"
-  't-kt': false      // Khen thưởng tab
+  't-nhap': false,    // Nhập điểm (Default active tab)
+  't-hbt': true,     // Tra cứu
+  't-tonghop': false, // Tổng hợp
+  't-kt': false      // Khen thưởng
 };
 
 function invalidateSummaryCache() {
@@ -26,7 +25,6 @@ function invalidateSummaryCache() {
 }
 
 async function switchTab(tabId) {
-  // 1. Update UI pane display and button active states
   document.querySelectorAll('[data-pane]').forEach(pane => pane.style.display = 'none');
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
 
@@ -35,7 +33,6 @@ async function switchTab(tabId) {
   if (targetPane) targetPane.style.display = 'block';
   if (targetBtn) targetBtn.classList.add('active');
 
-  // 2. Fetch data only if tab is dirty or not loaded yet
   if (!tabCache[tabId]) {
     if (tabId === 't-nhap') await renderNhap();
     else if (tabId === 't-tonghop') await renderTongHop();
@@ -44,7 +41,6 @@ async function switchTab(tabId) {
   }
 }
 
-// Bind click events to tab navigation buttons
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
 });
@@ -60,7 +56,6 @@ setState({TSTUDENTS: st.students || [], TCLASSES: cl.classes || [], TSCORES: sc.
 fillClasses('nh-lop', 'th-lop', 'kt-lop');
 if ($('nh-year')) $('nh-year').textContent = year();
 
-// Populate school years
 let years = [year()];
 try { 
   const r = await api('getYearOptions'); 
@@ -71,7 +66,6 @@ if (!years.includes(year())) years = [year(), ...years];
 fillSel('th-nam', years.map(y => ({v:y})), year());
 fillSel('kt-nam', years.map(y => ({v:y})), year());
 
-/* Sort helper for summary data */
 const clsOrd = {}; 
 TCLASSES.forEach((c, i) => clsOrd[c.ClassName] = i);
 const keyId = s => String(s || '').replace(/^['0]+/, '');
@@ -86,7 +80,7 @@ const sumSort = (a, b) => (clsOrd[a.className] ?? 1e9) - (clsOrd[b.className] ??
   || (gMap[keyId(a.idNumber)] ?? 2) - (gMap[keyId(b.idNumber)] ?? 2)
   || String(a.fullName || '').localeCompare(String(b.fullName || ''), 'vi');
 
-/* ---------- Nhập điểm ---------- */
+/* ---------- Nhập Điểm ---------- */
 async function renderNhap() {
   const cls = $('nh-lop').value;
   if (!cls) return;
@@ -170,10 +164,10 @@ async function importScores() {
   await saveScores();
 }
 
-/* ---------- Trích lục ---------- */
+/* ---------- Trích Lục ---------- */
 function renderHBT() { searchCard($('hbt-id').value.trim(), 'hbt-out'); }
 
-/* ---------- Tổng hợp & Khen thưởng ---------- */
+/* ---------- Tổng Hợp & Khen Thưởng ---------- */
 async function renderTongHop() {
   const yr = $('th-nam').value, cls = $('th-lop').value;
   const showRating = cur.tier === 'Lớp';
@@ -244,5 +238,5 @@ $('kt-lop').addEventListener('change', async () => { tabCache['t-kt'] = false; a
 $('kt-excel').addEventListener('click', () => exportExcel('kt-table', 'Danh sách khen thưởng'));
 $('kt-print').addEventListener('click', () => window.print());
 
-/* Boot: Loads active default tab 't-nhap' strictly on initialization */
+/* Boot default active tab */
 switchTab('t-nhap');

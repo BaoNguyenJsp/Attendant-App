@@ -1,6 +1,5 @@
 /* =====================================================================
    SỔ THIẾU NHI — diemdanh/index.js
-   Điểm danh theo (Lớp, Tuần, Buổi) + trích lục CCCD + thống kê lớp/toàn đoàn.
    ===================================================================== */
 'use strict';
 
@@ -16,10 +15,10 @@ fillSessions('dd-buoi');
 
 let ddBase = [], ddState = [];
 
-/* ---------- Tab Navigation & Lazy Cache Control ---------- */
+/* ---------- Tab Navigation & Cache Control ---------- */
 const tabCache = {
   't-dd': false,
-  't-tl': true, // Tra cứu CCCD runs on manual user input, no auto-load needed
+  't-tl': true,
   't-tk': false,
   't-toandoan': false
 };
@@ -53,15 +52,34 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 /* ---------- Điểm Danh ---------- */
 async function renderDD() {
   if (!$('dd-week').value) $('dd-week').value = defaultWeek();
+  normSunday($('dd-week'));
+  
   const cls = $('dd-lop').value;
   if (!cls) return toast('Chọn lớp.');
   let r;
-  try { r = await api('getAttendance', {schoolYear: year(), weekOf: $('dd-week').value, session: $('dd-buoi').value, className: cls}); }
-  catch (e) { return toast(e.message); }
+  try { 
+    r = await api('getAttendance', {
+      schoolYear: year(), 
+      weekOf: $('dd-week').value, 
+      session: $('dd-buoi').value, 
+      className: cls
+    }); 
+  } catch (e) { return toast(e.message); }
+
   const note = $('dd-holiday-note');
-  if (r.isHolidayWeek) { note.style.display = 'block'; note.textContent = '⚠ Tuần này là ngày nghỉ đã khai báo trong mục Quản trị.'; }
-  else note.style.display = 'none';
-  ddBase = (r.records || []).map(x => ({idNumber:x.idNumber, saintName:x.saintName || '', fullName:x.fullName, status:x.status || '', note:x.note || ''}));
+  if (r.isHolidayWeek) { 
+    note.style.display = 'block'; 
+    note.textContent = '⚠ Tuần này là ngày nghỉ đã khai báo trong mục Quản trị.'; 
+  } else note.style.display = 'none';
+
+  ddBase = (r.records || []).map(x => ({
+    idNumber: x.idNumber, 
+    saintName: x.saintName || '', 
+    fullName: x.fullName, 
+    status: (x.status === 'Hiện diện' || x.status === 'Có phép') ? x.status : '', 
+    note: x.note || ''
+  }));
+  
   ddState = ddBase.map(x => ({...x}));
   renderDDTable();
 }
@@ -69,8 +87,9 @@ async function renderDD() {
 function renderDDTable() {
   const tb = $('dd-tbody');
   tb.innerHTML = ddState.map((s, i) => {
-    const present = s.status === 'Hiện diện', permission = s.status === 'Có phép';
-    return '<tr data-i="' + i + '" class="' + (s.status === 'Vắng' ? 'bg-red-50' : '') + '">' +
+    const present = s.status === 'Hiện diện';
+    const permission = s.status === 'Có phép';
+    return '<tr data-i="' + i + '">' +
       '<td class="p-2 border text-center">' + (i + 1) + '</td>' +
       '<td class="p-2 border">' + esc(s.idNumber) + '</td>' +
       '<td class="p-2 border">' + esc(s.saintName) + '</td>' +
@@ -87,7 +106,13 @@ function handleCheck(i, which) {
   const row = $('dd-tbody').querySelector('tr[data-i="' + i + '"]');
   if (row) ddState[i].note = row.querySelector('input[type="text"]').value || '';
   const s = ddState[i];
-  s.status = which === 'present' ? (s.status === 'Hiện diện' ? 'Vắng' : 'Hiện diện') : (s.status === 'Có phép' ? 'Vắng' : 'Có phép');
+  
+  if (which === 'present') {
+    s.status = s.status === 'Hiện diện' ? '' : 'Hiện diện';
+  } else if (which === 'permission') {
+    s.status = s.status === 'Có phép' ? '' : 'Có phép';
+  }
+  
   renderDDTable();
   markDirty();
 }
@@ -98,7 +123,11 @@ function noteInput(i) {
   markDirty();
 }
 
-function markAllPresent() { ddState.forEach(s => s.status = 'Hiện diện'); renderDDTable(); markDirty(); }
+function markAllPresent() { 
+  ddState.forEach(s => s.status = 'Hiện diện'); 
+  renderDDTable(); 
+  markDirty(); 
+}
 
 function markDirty() {
   const a = JSON.stringify(ddState.map(x => ({...x}))), b = JSON.stringify(ddBase.map(x => ({...x})));
@@ -107,19 +136,44 @@ function markDirty() {
 }
 
 function calcDD() {
-  const total = ddState.length, present = ddState.filter(s => s.status === 'Hiện diện').length, perm = ddState.filter(s => s.status === 'Có phép').length;
+  const total = ddState.length;
+  const present = ddState.filter(s => s.status === 'Hiện diện').length;
+  const perm = ddState.filter(s => s.status === 'Có phép').length;
   $('dd-summary').textContent = 'Sĩ số ' + total + ' · Có mặt ' + present + ' · Có phép ' + perm + ' · Vắng ' + (total - present - perm);
 }
 
 async function saveAttendance() {
-  const body = {schoolYear: year(), weekOf: $('dd-week').value, session: $('dd-buoi').value, className: $('dd-lop').value,
-    records: ddState.map(x => ({idNumber:x.idNumber, status:x.status || '', note:x.note || ''}))};
-  try { await api('saveAttendance', body); }
-  catch (e) { return toast(e.message); }
+  normSunday($('dd-week'));
+  const targetWeek = $('dd-week').value;
+  const targetSession = $('dd-buoi').value;
+  const targetClass = $('dd-lop').value;
+
+  const validRecords = ddState
+    .filter(x => x.status === 'Hiện diện' || x.status === 'Có phép')
+    .map(x => ({
+      idNumber: x.idNumber, 
+      status: x.status, 
+      note: x.note || ''
+    }));
+
+  const body = {
+    schoolYear: year(), 
+    weekOf: targetWeek, 
+    session: targetSession, 
+    className: targetClass,
+    records: validRecords
+  };
+
+  try { 
+    await api('saveAttendance', body); 
+  } catch (e) { 
+    return toast(e.message); 
+  }
+
   ddBase = ddState.map(x => ({...x}));
   markDirty();
   toast('Đã lưu điểm danh.');
-  invalidateStatsCache(); // Sets t-tk and t-toandoan to dirty without fetching right away
+  invalidateStatsCache();
 }
 
 /* ---------- Trích Lục ---------- */
@@ -227,5 +281,5 @@ $('tk-print').addEventListener('click', () => window.print());
 $('td-excel').addEventListener('click', () => exportExcel('td-table', 'Thống kê toàn đoàn'));
 $('td-print').addEventListener('click', () => window.print());
 
-/* Initial Startup: Load first tab only */
+/* Boot */
 switchTab('t-dd');

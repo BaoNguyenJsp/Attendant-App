@@ -1,6 +1,5 @@
 /* =====================================================================
    SỔ THIẾU NHI — hocsinh/index.js
-   Danh sách đọc-only (Lớp > Giới tính Nữ trước), thêm/sửa qua modal.
    ===================================================================== */
 'use strict';
 
@@ -10,7 +9,6 @@ import { badgeStatus } from '../shared/ui.js';
 await initCommon();
 
 /* ---------- Initial Data Load ---------- */
-// Runs concurrently and leverages localStorage caching from common.js
 const [st, cl] = await Promise.all([
   api('getStudents'),
   api('getClasses')
@@ -88,7 +86,7 @@ async function saveModal() {
   }
 
   try {
-    const r = await api('saveStudent', body); // Note: saveStudent automatically purges 'getStudents' in common.js
+    const r = await api('saveStudent', body);
     const idx = TSTUDENTS.findIndex(s => s.IdNumber === body.idNumber);
     if (idx >= 0) TSTUDENTS[idx] = r.student; else TSTUDENTS.push(r.student);
   } catch (e) { 
@@ -100,11 +98,10 @@ async function saveModal() {
   renderHS();
 }
 
-/* ---------- Event Listeners ---------- */
+/* ---------- Events ---------- */
 $('hs-lop').addEventListener('change', renderHS);
 $('add-student').addEventListener('click', () => openModal());
 
-// Event delegation for editing a student
 $('hs-tbody').addEventListener('click', e => {
   const btn = e.target.closest('.edit-student');
   if (btn) openModal(btn.dataset.id);
@@ -116,5 +113,5 @@ m.querySelector('.btn-cancel').addEventListener('click', closeModal);
 m.querySelector('.btn-save').addEventListener('click', saveModal);
 m.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
-/* Initial Boot Render */
+/* Initial Boot */
 renderHS();

@@ -1,10 +1,5 @@
 /**
  * Sổ Thiếu Nhi — Apps Script dịch vụ lưu trữ (web app, chỉ doPost)
- *
- * DEPLOY: web app "Execute as: Me" + "Anyone with link". KHÔNG có doGet — Node
- * (server.js) phục vụ HTML; trình duyệt không bao giờ gọi thẳng đây. doPost từ
- * chối mọi request thiếu đúng SHARED_TOKEN (script property). Không phân quyền
- * tại đây — Node là lớp chặn chính, Apps Script chỉ đọc/ghi Sheet + Drive.
  */
 
 const TAB_HEADERS = {
@@ -27,7 +22,7 @@ const TEACHER_SESSIONS = [...SESSIONS, 'Họp Huynh Trưởng'];
 const XUDOAN = '__Xudoan__';
 const CACHE_TTL = 300;
 
-/* ---------- HTTP entry: chỉ doPost ---------- */
+/* ---------- HTTP Entry ---------- */
 function doPost(e) {
   let b;
   try { b = JSON.parse(e.postData.contents); } catch (err) { return out({ status: 'error', message: 'Body không hợp lệ.' }); }
@@ -43,7 +38,7 @@ function out(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
 }
 
-/* ---------- Helpers ---------- */
+/* ---------- Core Helpers ---------- */
 function ss() { return SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID')); }
 
 const fmtDate = d => {
@@ -196,37 +191,183 @@ function appendRows(name, rows) {
 
 function upsertRows(name, predicate, newRows) {
   const lock = LockService.getScriptLock();
-  lock.waitLock(20000); // Waits up to 20s for concurrent writers
+  lock.waitLock(20000);
   try {
     const sh = ss().getSheetByName(name);
     const values = sh.getDataRange().getValues();
     const head = values[0];
     const kept = [head];
-    
     values.slice(1).forEach(r => {
       const o = rowObj(head, r);
       if (!predicate(o)) kept.push(r);
     });
-    
     sh.clearContents();
     sh.getRange(1, 1, kept.length, head.length).setValues(kept);
-    
-    // Append new rows
-    if (newRows.length > 0) {
-      sh.getRange(sh.getLastRow() + 1, 1, newRows.length, head.length)
-        .setValues(newRows.map(r => head.map(h => {
-          const v = r[h] !== undefined ? r[h] : '';
-          return typeof v === 'string' && v.startsWith('=') ? "'" + v : v;
-        })));
+    appendRows(name, newRows);
+  } finally { lock.releaseLock(); }
+}
+
+/* HIGH-PERFORMANCE TARGETED ATTENDANCE UPSERT */
+function saveAttendanceOptimized(b) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  
+  try {
+    const sh = ss().getSheetByName('Attendance');
+    const values = sh.getDataRange().getValues();
+    if (values.length === 0) return { status: 'ok', records: [] };
+
+    const head = values[0];
+    const syIdx = head.indexOf('SchoolYear');
+    const wkIdx = head.indexOf('WeekOf');
+    const sesIdx = head.indexOf('Session');
+    const clsIdx = head.indexOf('ClassName');
+
+    const targetSY = String(b.schoolYear).trim();
+    const targetWk = String(b.weekOf).trim();
+    const targetSes = normText(b.session);
+    const targetCls = normText(b.className);
+
+    // Delete matching rows backwards to avoid index shifting
+    for (let r = values.length - 1; r >= 1; r--) {
+      const row = values[r];
+      if (String(row[syIdx]).trim() === targetSY &&
+          fmtDate(row[wkIdx]) === targetWk &&
+          normText(row[sesIdx]) === targetSes &&
+          normText(row[clsIdx]) === targetCls) {
+        sh.deleteRow(r + 1);
+      }
     }
-    
-    // CRITICAL: Force pending spreadsheet updates to commit before releasing lock
+
+    const newRows = (b.records || []).map(r => ({
+      SchoolYear: b.schoolYear,
+      WeekOf: b.weekOf,
+      Session: b.session,
+      IdNumber: String(r.idNumber).trim(),
+      ClassName: b.className,
+      AttendanceStatus: r.status,
+      Note: r.note || ''
+    }));
+
+    if (newRows.length > 0) {
+      const payload = newRows.map(r => head.map(h => {
+        const v = r[h] !== undefined ? r[h] : '';
+        return typeof v === 'string' && v.startsWith('=') ? "'" + v : v;
+      }));
+      
+      sh.getRange(sh.getLastRow() + 1, 1, payload.length, head.length).setValues(payload);
+    }
+
     SpreadsheetApp.flush();
-  } catch (err) {
-    throw new Error('Database write collision: ' + err.message);
-  } finally { 
+    bustCache(['Attendance']);
+    return { status: 'ok', records: newRows };
+  } finally {
     lock.releaseLock();
-    bustCache([name]);
+  }
+}
+
+/* HIGH-PERFORMANCE TARGETED TEACHER ATTENDANCE UPSERT */
+function saveTeacherAttendanceOptimized(b) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  
+  try {
+    const year = currentYear();
+    const sh = ss().getSheetByName('TeacherAttendance');
+    const values = sh.getDataRange().getValues();
+    if (values.length === 0) return { status: 'ok', records: [] };
+
+    const head = values[0];
+    const syIdx = head.indexOf('SchoolYear');
+    const wkIdx = head.indexOf('WeekOf');
+    const sesIdx = head.indexOf('Session');
+
+    const targetWk = String(b.weekOf).trim();
+    const targetSes = normText(b.session);
+
+    for (let r = values.length - 1; r >= 1; r--) {
+      const row = values[r];
+      if (String(row[syIdx]).trim() === year &&
+          fmtDate(row[wkIdx]) === targetWk &&
+          normText(row[sesIdx]) === targetSes) {
+        sh.deleteRow(r + 1);
+      }
+    }
+
+    const newRows = (b.records || []).map(r => ({
+      SchoolYear: year,
+      WeekOf: String(b.weekOf).trim(),
+      Session: normText(b.session),
+      TeacherEmail: String(r.email).trim(),
+      Status: r.status,
+      Note: r.note || ''
+    }));
+
+    if (newRows.length > 0) {
+      const payload = newRows.map(r => head.map(h => {
+        const v = r[h] !== undefined ? r[h] : '';
+        return typeof v === 'string' && v.startsWith('=') ? "'" + v : v;
+      }));
+      
+      sh.getRange(sh.getLastRow() + 1, 1, payload.length, head.length).setValues(payload);
+    }
+
+    SpreadsheetApp.flush();
+    bustCache(['TeacherAttendance']);
+    return { status: 'ok', records: newRows };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* HIGH-PERFORMANCE TARGETED SCORES UPSERT */
+function saveScoresOptimized(b) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  
+  try {
+    const sh = ss().getSheetByName('Scores');
+    const values = sh.getDataRange().getValues();
+    if (values.length === 0) return { status: 'ok', students: [] };
+
+    const head = values[0];
+    const syIdx = head.indexOf('SchoolYear');
+    const clsIdx = head.indexOf('ClassName');
+
+    const targetSY = String(b.schoolYear).trim();
+    const targetCls = normText(b.className);
+
+    for (let r = values.length - 1; r >= 1; r--) {
+      const row = values[r];
+      if (String(row[syIdx]).trim() === targetSY && normText(row[clsIdx]) === targetCls) {
+        sh.deleteRow(r + 1);
+      }
+    }
+
+    const rows = (b.students || []).map(s => ({
+      SchoolYear: b.schoolYear,
+      IdNumber: s.idNumber,
+      ClassName: b.className,
+      Quiz15_S1: s.quiz15s1 || '',
+      Exam_S1: s.exams1 || '',
+      Quiz15_S2: s.quiz15s2 || '',
+      Exam_S2: s.exams2 || ''
+    }));
+
+    if (rows.length > 0) {
+      const payload = rows.map(r => head.map(h => {
+        const v = r[h] !== undefined ? r[h] : '';
+        return typeof v === 'string' && v.startsWith('=') ? "'" + v : v;
+      }));
+      
+      sh.getRange(sh.getLastRow() + 1, 1, payload.length, head.length).setValues(payload);
+    }
+
+    SpreadsheetApp.flush();
+    bustCache(['Scores']);
+    return { status: 'ok', students: rows };
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -490,20 +631,7 @@ const ACTIONS = {
       isHolidayWeek: !!isHoliday(holidays(year), b.weekOf, b.session) };
   },
 
-  saveAttendance: b => {
-    const rows = (b.records || []).map(r => ({
-      SchoolYear: b.schoolYear, WeekOf: b.weekOf, Session: b.session,
-      IdNumber: String(r.idNumber).trim(),
-      ClassName: b.className, AttendanceStatus: r.status, Note: r.note || '',
-    }));
-    upsertRows('Attendance',
-      o => String(o.SchoolYear).trim() === String(b.schoolYear).trim() && 
-           String(o.WeekOf).trim() === String(b.weekOf).trim() &&
-           normText(o.Session) === normText(b.session) && 
-           normText(o.ClassName) === normText(b.className),
-      rows);
-    return { status: 'ok', records: rows };
-  },
+  saveAttendance: b => saveAttendanceOptimized(b),
 
   getClassAttendanceStats: b => {
     const year = String(b.schoolYear || currentYear()).trim();
@@ -653,15 +781,7 @@ const ACTIONS = {
     return { status: 'ok', scores };
   },
 
-  saveScores: b => {
-    const rows = (b.students || []).map(s => ({
-      SchoolYear: b.schoolYear, IdNumber: s.idNumber, ClassName: b.className,
-      Quiz15_S1: s.quiz15s1 || '', Exam_S1: s.exams1 || '',
-      Quiz15_S2: s.quiz15s2 || '', Exam_S2: s.exams2 || '',
-    }));
-    upsertRows('Scores', o => o.SchoolYear === b.schoolYear && o.ClassName === b.className, rows);
-    return { status: 'ok', students: rows };
-  },
+  saveScores: b => saveScoresOptimized(b),
 
   getSummary: b => {
     const year = b.schoolYear || currentYear();
@@ -739,19 +859,7 @@ const ACTIONS = {
     return { status: 'ok', roster, isHolidayWeek: !!isHoliday(holidays(year), b.weekOf, b.session) };
   },
 
-  saveTeacherAttendance: b => {
-    const year = currentYear();
-    const rows = (b.records || []).map(r => ({
-      SchoolYear: year, WeekOf: String(b.weekOf).trim(), Session: normText(b.session),
-      TeacherEmail: String(r.email).trim(), Status: r.status, Note: r.note || '',
-    }));
-    upsertRows('TeacherAttendance',
-      o => String(o.SchoolYear).trim() === year &&
-           String(o.WeekOf).trim() === String(b.weekOf).trim() &&
-           normText(o.Session) === normText(b.session),
-      rows);
-    return { status: 'ok', records: rows };
-  },
+  saveTeacherAttendance: b => saveTeacherAttendanceOptimized(b),
 
   getTeacherStats: b => {
     const year = currentYear();
@@ -760,25 +868,34 @@ const ACTIONS = {
     const todayYmd = fmtDate(new Date());
     const roster = rosterFor(b.sector).filter(u => !b.className || normText(u.className) === normText(b.className));
     const emails = new Set(roster.map(u => u.email.toLowerCase()));
+    
     const by = {};
-    cachedRead('TeacherAttendance').forEach(r => {
-      if (String(r.SchoolYear).trim() !== year || String(r.WeekOf).trim() > todayYmd) return;
+    const teacherAtt = cachedRead('TeacherAttendance');
+    for (let i = 0; i < teacherAtt.length; i++) {
+      const r = teacherAtt[i];
+      if (String(r.SchoolYear).trim() !== year || String(r.WeekOf).trim() > todayYmd) continue;
       const e = String(r.TeacherEmail || '').toLowerCase();
-      if (!emails.has(e) || isHoliday(w.nghi, r.WeekOf, r.Session)) return;
-      if (normText(r.Status).toLowerCase() !== 'hiện diện') return;
+      if (!emails.has(e) || isHoliday(w.nghi, r.WeekOf, r.Session)) continue;
+      if (normText(r.Status).toLowerCase() !== 'hiện diện') continue;
       const k = e + '|' + normText(r.Session);
       by[k] = (by[k] || 0) + 1;
-    });
+    }
 
     const taught = {};
     const seen = {};
-    readAll('Teaching').forEach(r => {
-      if (String(r.SchoolYear).trim() !== year) return;
+    const teachingList = cachedRead('Teaching');
+    for (let i = 0; i < teachingList.length; i++) {
+      const r = teachingList[i];
+      if (String(r.SchoolYear).trim() !== year) continue;
       const e = String(r.TeacherEmail || '').toLowerCase();
-      if (!e || !emails.has(e)) return;
+      if (!e || !emails.has(e)) continue;
       const k = e + '|' + r.WeekOf + '|' + r.ClassName;
-      if (!seen[k]) { seen[k] = true; taught[e] = (taught[e] || 0) + 1; }
-    });
+      if (!seen[k]) { 
+        seen[k] = true; 
+        taught[e] = (taught[e] || 0) + 1; 
+      }
+    }
+
     const stats = roster.map(u => {
       const e = u.email.toLowerCase();
       const present = {};
@@ -786,6 +903,7 @@ const ACTIONS = {
       return { id: u.id, email: u.email, fullName: u.fullName, className: u.className,
         taught: taught[e] || 0, present };
     });
+
     return { status: 'ok', max: w.max, maxTotal, stats };
   },
 

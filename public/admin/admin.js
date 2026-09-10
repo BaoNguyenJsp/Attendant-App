@@ -1,6 +1,5 @@
 /* =====================================================================
    SỔ THIẾU NHI — admin/index.js
-   Quản trị hệ thống: Huynh trưởng, Nhóm, Lớp, Nghỉ lễ & Chuyển năm học.
    ===================================================================== */
 'use strict';
 
@@ -9,19 +8,18 @@ import { groupBadge } from '../shared/ui.js';
 
 await initCommon();
 
-/* ---------- Tab Cache & Lazy Loading Engine ---------- */
+/* ---------- Corrected Tab Mapping ---------- */
 const tabCache = {
-  't-us': false,   // Huynh trưởng (Default active tab)
-  't-grp': false,  // Nhóm
-  't-cls': false,  // Lớp
-  't-hol': false,  // Nghỉ lễ
-  't-year': true   // Chuyển năm học (Manual trigger view)
+  't-us': false,    // Default tab: Huynh trưởng
+  't-grp': false,   // Nhóm
+  't-cls': false,   // Lớp
+  't-hol': false,   // Nghỉ lễ
+  't-year': true    // Chuyển năm
 };
 
 let ALL_USERS = [], ALL_MEMBERS = [], ALL_GROUPS = [], HOLIDAYS = [];
 
 async function switchTab(tabId) {
-  // 1. Toggle visibility of panes and tab button active states
   document.querySelectorAll('[data-pane]').forEach(pane => pane.style.display = 'none');
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
 
@@ -30,7 +28,6 @@ async function switchTab(tabId) {
   if (targetPane) targetPane.style.display = 'block';
   if (targetBtn) targetBtn.classList.add('active');
 
-  // 2. Fetch data only if tab is dirty or not loaded yet
   if (!tabCache[tabId]) {
     if (tabId === 't-us') await renderUsers();
     else if (tabId === 't-grp') await renderGroups();
@@ -40,12 +37,11 @@ async function switchTab(tabId) {
   }
 }
 
-// Bind click events to tab navigation buttons
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
 });
 
-/* ---------- 1. Quản lý Huynh Trưởng (t-us) ---------- */
+/* ---------- 1. Quản lý Huynh Trưởng ---------- */
 async function loadTeacherData() {
   let r;
   try { r = await api('getTeachers'); }
@@ -92,7 +88,7 @@ async function renderUsers() {
     : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Không tìm thấy Huynh trưởng khớp yêu cầu.</td></tr>';
 }
 
-/* ---------- 2. Quản lý Nhóm (t-grp) ---------- */
+/* ---------- 2. Quản lý Nhóm ---------- */
 async function renderGroups() {
   if (!ALL_GROUPS.length) await loadTeacherData();
   const tb = $('grp-tbody');
@@ -107,7 +103,7 @@ async function renderGroups() {
     : '<tr><td colspan="3" class="p-4 text-center text-slate-400">Chưa có nhóm nào được thiết lập.</td></tr>';
 }
 
-/* ---------- 3. Quản lý Lớp (t-cls) ---------- */
+/* ---------- 3. Quản lý Lớp ---------- */
 async function renderClasses() {
   let cl, st;
   try {
@@ -137,7 +133,7 @@ async function renderClasses() {
     : '<tr><td colspan="4" class="p-4 text-center text-slate-400">Chưa có danh sách lớp.</td></tr>';
 }
 
-/* ---------- 4. Quản lý Nghỉ Lễ (t-hol) ---------- */
+/* ---------- 4. Quản lý Nghỉ Lễ ---------- */
 async function renderHolidays() {
   if ($('hol-session') && !$('hol-session').children.length) {
     fillSel('hol-session', [{v:'', t:'Cả tuần'}].concat(SESSIONS.map(s => ({v:s}))));
@@ -174,7 +170,7 @@ async function saveHolidayList() {
   } catch (e) { toast(e.message); }
 }
 
-/* ---------- Events & Modals ---------- */
+/* ---------- Events ---------- */
 if ($('us-q')) {
   $('us-q').addEventListener('input', () => renderUsers());
 }
@@ -233,5 +229,5 @@ if (yearModal) {
   });
 }
 
-/* Boot: Loads active default tab 't-us' strictly on initialization */
+/* Boot default active tab */
 switchTab('t-us');
