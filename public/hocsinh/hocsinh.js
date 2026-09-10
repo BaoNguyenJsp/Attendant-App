@@ -9,22 +9,26 @@ import { badgeStatus } from '../shared/ui.js';
 
 await initCommon();
 
+/* ---------- Initial Data Load ---------- */
+// Runs concurrently and leverages localStorage caching from common.js
 const [st, cl] = await Promise.all([
   api('getStudents'),
   api('getClasses')
 ]);
+
 setState({TSTUDENTS: st.students || [], TCLASSES: cl.classes || []});
 fillClasses('hs-lop');
 
 let editingId = null;
 
+/* ---------- Render Roster ---------- */
 function renderHS() {
   const cls = $('hs-lop').value;
   const sts = sortStudents(TSTUDENTS.filter(s => s.CurrentClass === cls));
   $('hs-tbody').innerHTML = sts.length
     ? sts.map(st => '<tr data-id="' + esc(st.IdNumber) + '" class="cursor-pointer hover:bg-slate-50">' +
         '<td class="p-2 border text-center whitespace-nowrap">' + esc(st.IdNumber) + '</td>' +
-        '<td class="p-2 border">' + esc(st.FullName) + '</td>' +
+        '<td class="p-2 border font-medium">' + esc(st.FullName) + '</td>' +
         '<td class="p-2 border text-center">' + esc(st.Gender || '') + '</td>' +
         '<td class="p-2 border text-center whitespace-nowrap">' + esc(st.DateOfBirth || '') + '</td>' +
         '<td class="p-2 border text-center whitespace-nowrap">' + esc(st.EnrollYear || '') + '</td>' +
@@ -35,6 +39,7 @@ function renderHS() {
     : '<tr><td colspan="8" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi trong lớp ' + esc(cls) + '.</td></tr>';
 }
 
+/* ---------- Modal Controls ---------- */
 function openModal(id) {
   editingId = id || null;
   const st = editingId ? TSTUDENTS.find(s => s.IdNumber === editingId) : null;
@@ -50,7 +55,7 @@ function openModal(id) {
   $('m-father').value = st ? (st.Father || '') : '';
   $('m-mother').value = st ? (st.Mother || '') : '';
   $('m-note').value = st ? (st.Note || '') : '';
-  // Lớp mặc định = lớp đang lọc; chỉ đổi khi thêm/sửa cần chuyển lớp.
+
   const mcls = $('m-class');
   mcls.innerHTML = $('hs-lop').innerHTML;
   mcls.value = st ? (st.CurrentClass || $('hs-lop').value) : $('hs-lop').value;
@@ -58,7 +63,10 @@ function openModal(id) {
   $('m-fullname').focus();
 }
 
-function closeModal() { $('hs-modal').classList.remove('open'); editingId = null; }
+function closeModal() { 
+  $('hs-modal').classList.remove('open'); 
+  editingId = null; 
+}
 
 async function saveModal() {
   const body = {
@@ -74,27 +82,39 @@ async function saveModal() {
     mother: $('m-mother').value.trim(),
     note: $('m-note').value.trim(),
   };
-  if (!body.idNumber || !body.fullName || !body.className) return toast('Nhập Số CCCD, Họ và tên và chọn Lớp.');
+
+  if (!body.idNumber || !body.fullName || !body.className) {
+    return toast('Nhập Số CCCD, Họ và tên và chọn Lớp.');
+  }
+
   try {
-    const r = await api('saveStudent', body);
+    const r = await api('saveStudent', body); // Note: saveStudent automatically purges 'getStudents' in common.js
     const idx = TSTUDENTS.findIndex(s => s.IdNumber === body.idNumber);
     if (idx >= 0) TSTUDENTS[idx] = r.student; else TSTUDENTS.push(r.student);
-  } catch (e) { return toast(e.message); }
+  } catch (e) { 
+    return toast(e.message); 
+  }
+
   closeModal();
   toast('Đã lưu.');
   renderHS();
 }
 
+/* ---------- Event Listeners ---------- */
 $('hs-lop').addEventListener('change', renderHS);
 $('add-student').addEventListener('click', () => openModal());
+
+// Event delegation for editing a student
 $('hs-tbody').addEventListener('click', e => {
   const btn = e.target.closest('.edit-student');
   if (btn) openModal(btn.dataset.id);
 });
+
 const m = $('hs-modal');
 m.addEventListener('click', e => { if (e.target === m) closeModal(); });
 m.querySelector('.btn-cancel').addEventListener('click', closeModal);
 m.querySelector('.btn-save').addEventListener('click', saveModal);
 m.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
+/* Initial Boot Render */
 renderHS();

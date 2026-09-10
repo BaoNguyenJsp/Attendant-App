@@ -12,30 +12,78 @@ await initCommon();
 const SCORE_FIELDS = ['Quiz15_S1', 'Exam_S1', 'Quiz15_S2', 'Exam_S2'];
 const FMAP = {'Quiz15_S1':'quiz15s1', 'Exam_S1':'exams1', 'Quiz15_S2':'quiz15s2', 'Exam_S2':'exams2'};
 
+/* ---------- Tab Cache & Lazy Loading Engine ---------- */
+const tabCache = {
+  't-nh': false,
+  't-hbt': true, // Manual search tab
+  't-th': false,
+  't-kt': false
+};
+
+function invalidateSummaryCache() {
+  tabCache['t-th'] = false;
+  tabCache['t-kt'] = false;
+}
+
+async function switchTab(tabId) {
+  document.querySelectorAll('[data-pane]').forEach(pane => pane.style.display = 'none');
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+
+  const targetPane = document.getElementById(tabId);
+  const targetBtn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
+  if (targetPane) targetPane.style.display = 'block';
+  if (targetBtn) targetBtn.classList.add('active');
+
+  if (!tabCache[tabId]) {
+    if (tabId === 't-nh') await renderNhap();
+    else if (tabId === 't-th') await renderTongHop();
+    else if (tabId === 't-kt') await renderKT();
+    tabCache[tabId] = true;
+  }
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
+});
+
+/* ---------- Data Initialization ---------- */
 const [st, cl, sc] = await Promise.all([
-  api('getStudents'), api('getClasses'),
+  api('getStudents'), 
+  api('getClasses'),
   api('getScores', {schoolYear: year()})
 ]);
+
 setState({TSTUDENTS: st.students || [], TCLASSES: cl.classes || [], TSCORES: sc.scores || []});
 fillClasses('nh-lop', 'th-lop', 'kt-lop');
 $('nh-year').textContent = year();
-// Năm học dropdown = mọi năm có dữ liệu (AcademicYear ∪ Attendance ∪ Scores), sớm nhất trước.
+
+// Populate school years
 let years = [year()];
-try { const r = await api('getYearOptions'); if (r.years && r.years.length) years = r.years; } catch (e) {}
+try { 
+  const r = await api('getYearOptions'); 
+  if (r.years && r.years.length) years = r.years; 
+} catch (e) {}
+
 if (!years.includes(year())) years = [year(), ...years];
 fillSel('th-nam', years.map(y => ({v:y})), year());
 fillSel('kt-nam', years.map(y => ({v:y})), year());
 
-/* Bảng tổng hợp từ getSummary: xếp Lớp (theo sheet Classes) rồi Giới tính (Nữ trước) rồi Họ tên. */
-const clsOrd = {}; TCLASSES.forEach((c, i) => clsOrd[c.ClassName] = i);
+/* Sort helper for summary data */
+const clsOrd = {}; 
+TCLASSES.forEach((c, i) => clsOrd[c.ClassName] = i);
 const keyId = s => String(s || '').replace(/^['0]+/, '');
 const gMap = {};
-TSTUDENTS.forEach(st => { const g = String(st.Gender || '').normalize('NFC').trim().toLowerCase(); gMap[keyId(st.IdNumber)] = g === 'nữ' ? 0 : g === 'nam' ? 1 : 2; });
+
+TSTUDENTS.forEach(st => { 
+  const g = String(st.Gender || '').normalize('NFC').trim().toLowerCase(); 
+  gMap[keyId(st.IdNumber)] = g === 'nữ' ? 0 : g === 'nam' ? 1 : 2; 
+});
+
 const sumSort = (a, b) => (clsOrd[a.className] ?? 1e9) - (clsOrd[b.className] ?? 1e9)
   || (gMap[keyId(a.idNumber)] ?? 2) - (gMap[keyId(b.idNumber)] ?? 2)
   || String(a.fullName || '').localeCompare(String(b.fullName || ''), 'vi');
 
-/* ---------- Nhập điểm (luôn theo năm học hiện tại) ---------- */
+/* ---------- Nhập điểm ---------- */
 async function renderNhap() {
   const cls = $('nh-lop').value;
   const sts = activeStudents(cls);
@@ -53,6 +101,7 @@ async function renderNhap() {
       }).join('')
     : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi trong lớp ' + esc(cls) + '.</td></tr>';
 }
+
 async function saveScores() {
   const cls = $('nh-lop').value;
   const students = [];
@@ -69,10 +118,11 @@ async function saveScores() {
     setState({TSCORES: TSCORES.filter(s => !(s.SchoolYear === year() && s.ClassName === cls)).concat(r.students || [])});
   } catch (e) { return toast(e.message); }
   toast('Đã lưu điểm.');
-  renderNhap();
+  invalidateSummaryCache(); // Flags t-th & t-kt as dirty without immediate network fetches
+  await renderNhap();
 }
 
-/* ---------- Nhập điểm bằng file Excel (khóa = Số CCCD) ---------- */
+/* ---------- Excel Import ---------- */
 function downloadTemplate() {
   const cls = $('nh-lop').value;
   const aoa = [['Số CCCD', 'Tên thánh', 'Họ và tên', "Điểm 15' HK1", 'Kiểm tra HK1', "Điểm 15' HK2", 'Kiểm tra HK2']];
@@ -81,6 +131,7 @@ function downloadTemplate() {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Điểm');
   XLSX.writeFile(wb, 'Khung_nhap_diem_' + cls + '.xlsx');
 }
+
 async function importScores() {
   const f = $('nh-file').files[0];
   $('nh-file').value = '';
@@ -110,13 +161,13 @@ async function importScores() {
   updates.forEach(({tr, vals}) => tr.querySelectorAll('[data-f]').forEach((inp, i) => { inp.value = vals[i]; }));
   const msg = skipped ? ' — bỏ qua ' + skipped + ' CCCD không thuộc lớp.' : '';
   toast('Đã nhập ' + updates.length + ' Thiếu nhi' + msg);
-  saveScores();
+  await saveScores();
 }
 
 /* ---------- Trích lục ---------- */
 function renderHBT() { searchCard($('hbt-id').value.trim(), 'hbt-out'); }
 
-/* ---------- Tổng hợp & khen thưởng ---------- */
+/* ---------- Tổng hợp & Khen thưởng ---------- */
 async function renderTongHop() {
   const yr = $('th-nam').value, cls = $('th-lop').value;
   const showRating = cur.tier === 'Lớp';
@@ -135,6 +186,7 @@ async function renderTongHop() {
         (showRating ? '<td class="p-2 border text-center">' + (x.rating ? esc(x.rating) : '—') + '</td>' : '') + '</tr>').join('')
     : '<tr><td colspan="' + heads.length + '" class="p-4 text-center text-slate-400">Chưa có dữ liệu.</td></tr>';
 }
+
 async function toanDoan() {
   if (!isExec()) return;
   let r;
@@ -150,6 +202,7 @@ async function toanDoan() {
     '</tbody></table><script>window.print()<\/script></body></html>');
   w.document.close();
 }
+
 async function renderKT() {
   const yr = $('kt-nam').value, cls = $('kt-lop').value;
   let r;
@@ -164,20 +217,27 @@ async function renderKT() {
     : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi đạt chuẩn.</td></tr>';
 }
 
-/* ---------- Sự kiện ---------- */
-$('nh-lop').addEventListener('change', renderNhap);
+/* ---------- Events ---------- */
+$('nh-lop').addEventListener('change', async () => { tabCache['t-nh'] = false; await renderNhap(); tabCache['t-nh'] = true; });
 $('save-scores').addEventListener('click', saveScores);
 $('nh-template').addEventListener('click', e => { e.preventDefault(); downloadTemplate(); });
 $('nh-file').addEventListener('change', importScores);
+
 $('hbt-search').addEventListener('click', renderHBT);
-$('th-nam').addEventListener('change', renderTongHop);
-$('th-lop').addEventListener('change', renderTongHop);
+
+$('th-nam').addEventListener('change', async () => { tabCache['t-th'] = false; await renderTongHop(); tabCache['t-th'] = true; });
+$('th-lop').addEventListener('change', async () => { tabCache['t-th'] = false; await renderTongHop(); tabCache['t-th'] = true; });
 $('th-excel').addEventListener('click', () => exportExcel('th-table', 'Tổng hợp & xếp loại'));
 $('th-print').addEventListener('click', () => window.print());
-$('th-toandoan').addEventListener('click', toanDoan);
-$('kt-nam').addEventListener('change', renderKT);
-$('kt-lop').addEventListener('change', renderKT);
+
+// Safe listener attachment for role-restricted button
+const btnToanDoan = $('th-toandoan');
+if (btnToanDoan) btnToanDoan.addEventListener('click', toanDoan);
+
+$('kt-nam').addEventListener('change', async () => { tabCache['t-kt'] = false; await renderKT(); tabCache['t-kt'] = true; });
+$('kt-lop').addEventListener('change', async () => { tabCache['t-kt'] = false; await renderKT(); tabCache['t-kt'] = true; });
 $('kt-excel').addEventListener('click', () => exportExcel('kt-table', 'Danh sách khen thưởng'));
 $('kt-print').addEventListener('click', () => window.print());
 
-renderNhap(); renderTongHop(); renderKT();
+/* Boot: Initial active tab load only */
+switchTab('t-nh');

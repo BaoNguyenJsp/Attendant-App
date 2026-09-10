@@ -16,6 +16,12 @@ const FPLAN = 'GLV', FTBM = 'TBM';
 // Lịch sử cập nhật: phân trang server-side (Drive lookup folder chỉ cho 1 trang).
 const HIST_PAGE = 8; let histPage = 1;
 
+// Cache flags to prevent eager auto-fetching on startup
+const sectionCache = {
+  freqLoaded: false,
+  histLoaded: false
+};
+
 // Badge trên thẻ lớp: text = đuôi file (PDF/DOCX…), hover = tên file thật.
 const badgeLinks = (url, names, rev) => {
   const ns = String(names || '').split('\n');
@@ -38,6 +44,7 @@ const glvLabel = em => {
   return s ? s + ' ' + f : f;
 };
 
+/* ---------- Thẻ bài học theo tuần (Chỉ tải tuần hiện tại) ---------- */
 async function renderCards() {
   if (!$('gd-week').value) $('gd-week').value = defaultWeek();
   const wk = $('gd-week').value;
@@ -67,7 +74,9 @@ async function renderCards() {
   }).join('');
 }
 
-async function renderFreq() {
+/* ---------- Thống kê tần suất (Lazy Load) ---------- */
+async function renderFreq(force = false) {
+  if (sectionCache.freqLoaded && !force) return;
   let recs = [];
   try { recs = (await api('getTeaching', {schoolYear: year()})).records || []; }
   catch (e) { return toast(e.message); }
@@ -77,9 +86,12 @@ async function renderFreq() {
   $('gd-freq').innerHTML = freq.length
     ? freq.map(([em, cnt]) => '<li class="flex justify-between py-1"><span class="text-slate-600">' + esc(glvLabel(em)) + '</span><span class="freq-count">' + cnt + ' tuần</span></li>').join('')
     : '<p class="text-slate-400">Chưa có dữ liệu.</p>';
+  sectionCache.freqLoaded = true;
 }
 
-async function renderHist() {
+/* ---------- Lịch sử cập nhật (Phân trang server-side - Lazy Load) ---------- */
+async function renderHist(force = false) {
+  if (sectionCache.histLoaded && !force) return;
   const cls = $('gd-cls').value;
   let j;
   try { j = await api('getTeaching', {schoolYear: year(), page: histPage, pageSize: HIST_PAGE, className: cls || undefined}); }
@@ -95,6 +107,7 @@ async function renderHist() {
       '</td><td>' + esc(userFull(r.UpdatedBy)) + '</td></tr>').join('')
     : '<tr><td colspan="6" class="text-slate-400">Chưa có dữ liệu.</td></tr>';
   renderPager(total, histPage);
+  sectionCache.histLoaded = true;
 }
 
 function renderPager(total, page) {
@@ -109,9 +122,8 @@ function renderPager(total, page) {
     '</span>';
 }
 
-/* ---------- Modal: giữ/xóa tệp GLV & TBM ---------- */
+/* ---------- Modal Upload & Modal Controls ---------- */
 const splitUrls = s => String(s || '').split(',').map(x => x.trim()).filter(x => /^https?:\/\//i.test(x));
-// File đã lưu = cặp {url, name}; LessonPlanNames/RevisedPlanNames lưu 1 tên/dòng theo thứ tự URL.
 const splitNames = s => String(s || '').split('\n');
 const linkList = (urls, names) => {
   const n = splitNames(names);
@@ -172,8 +184,7 @@ async function saveTeaching() {
     schoolYear: year(), weekOf: wk, className: editingClass, lessonContent: lesson
   };
   try {
-    const [up, ur] = [await upload(planAdd, FPLAN), await upload(revAdd, FTBM)];
-    // URL cách nhau dấu phẩy; tên file ghi song song (1 tên/dòng) để UI hiển thị đúng từng link.
+    const [up, ur] = await Promise.all([upload(planAdd, FPLAN), upload(revAdd, FTBM)]);
     body.lessonPlanUrl = planKeep.map(k => k.url).concat(up).join(',');
     body.lessonPlanNames = planKeep.map(k => k.name).concat(planAdd.map(f => f.name)).join('\n');
     body.revisedPlanUrl = revKeep.map(k => k.url).concat(ur).join(',');
@@ -181,7 +192,12 @@ async function saveTeaching() {
     await api('saveTeaching', body);
     $('gd-modal').classList.remove('open');
     toast('Đã lưu giáo án.');
-    renderCards(); renderFreq(); renderHist();
+    
+    // Invalidate sub-view caches so they refresh on demand
+    sectionCache.freqLoaded = false;
+    sectionCache.histLoaded = false;
+
+    await renderCards();
   } catch (e) { toast(e.message); }
 }
 
@@ -205,16 +221,37 @@ gdModal.querySelector('.btn-cancel').addEventListener('click', () => gdModal.cla
 gdModal.querySelector('.btn-save').addEventListener('click', () => saveTeaching());
 addFiles($('f-plan'), FPLAN);
 addFiles($('f-rev'), FTBM);
+
 $('gd-week').addEventListener('change', () => { normSunday($('gd-week')); renderCards(); });
 $('cards').addEventListener('click', e => { const b = e.target.closest('.btn-update'); if (b) openModal(b.dataset.cls); });
+
 $('gd-cls').innerHTML = '<option value="">Tất cả các lớp</option>' +
   TCLASSES.map(c => '<option value="' + esc(c.ClassName) + '">' + esc(c.ClassName) + '</option>').join('');
-$('gd-cls').addEventListener('change', () => { histPage = 1; renderHist(); });
+
+$('gd-cls').addEventListener('change', () => { 
+  histPage = 1; 
+  renderHist(true); 
+});
+
 $('gd-pager').addEventListener('click', e => {
   const b = e.target.closest('.btn-page');
   if (!b || b.disabled) return;
   histPage += b.dataset.pg === 'next' ? 1 : -1;
-  renderHist();
+  renderHist(true);
 });
 
-renderCards(); renderFreq(); renderHist();
+// Lazy load secondary views when scrolled into view
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      if (entry.target.id === 'gd-freq') renderFreq();
+      if (entry.target.id === 'gd-history') renderHist();
+    }
+  });
+}, { threshold: 0.1 });
+
+if ($('gd-freq')) observer.observe($('gd-freq'));
+if ($('gd-history')) observer.observe($('gd-history'));
+
+/* Initial Boot: Render active week cards ONLY */
+await renderCards();

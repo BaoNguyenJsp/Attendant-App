@@ -1,7 +1,5 @@
 /* =====================================================================
    SỔ THIẾU NHI — giaovien/index.js
-   Điểm danh Huynh trưởng theo (Ngành, Tuần, Buổi 5 buổi) + trích lục tên/email
-   + thống kê theo Ngành/Lớp (mọi buổi + Họp Huynh Trưởng + Tỉ lệ hiện diện).
    ===================================================================== */
 'use strict';
 
@@ -10,7 +8,6 @@ import { initCommon, $, api, esc, toast, SESSIONS, cur, year, defaultWeek, normS
 await initCommon();
 
 const TSESS = [...SESSIONS, 'Họp Huynh Trưởng'];
-
 const XUDOAN = '__Xudoan__';
 
 const { users = [], groups = [] } = await api('getTeachers');
@@ -19,7 +16,38 @@ const NGANH = groups.filter(g => g.Type === 'Ngành');
 
 let gvddBase = [], gvddState = [];
 
-/* ---------- Selects: Ngành (admin: mọi Ngành + Xứ đoàn; BQT: ngành mình) ---------- */
+/* ---------- Fixed Tab Cache Map Keys ---------- */
+const tabCache = {
+  't-gvdd': false,   // Corrected key to match HTML data-tab
+  't-gvtrich': true, // Manual search tab
+  't-gvtk': false    // Corrected key to match HTML data-tab
+};
+
+function invalidateStatsCache() {
+  tabCache['t-gvtk'] = false;
+}
+
+async function switchTab(tabId) {
+  document.querySelectorAll('[data-pane]').forEach(pane => pane.style.display = 'none');
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+
+  const targetPane = document.getElementById(tabId);
+  const targetBtn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
+  if (targetPane) targetPane.style.display = 'block';
+  if (targetBtn) targetBtn.classList.add('active');
+
+  if (!tabCache[tabId]) {
+    if (tabId === 't-gvdd') await renderGVDD();
+    else if (tabId === 't-gvtk') await renderGVTK();
+    tabCache[tabId] = true;
+  }
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
+});
+
+/* ---------- Selects ---------- */
 function fillNganh(id) {
   const opts = isAdmin()
     ? NGANH.map(g => ({v:g.GroupName, t:g.GroupName})).concat([{v:XUDOAN, t:'Xứ đoàn'}])
@@ -27,6 +55,7 @@ function fillNganh(id) {
   fillSel(id, opts);
   if ($(id).options.length) $(id).selectedIndex = 0;
 }
+
 function fillLop() {
   const g = $('gvtk-nganh').value;
   const grp = NGANH.find(x => x.GroupName === g);
@@ -49,6 +78,7 @@ async function renderGVDD() {
   gvddState = gvddBase.map(x => ({...x}));
   renderGVDDTable();
 }
+
 function renderGVDDTable() {
   const tb = $('gvdd-tbody');
   tb.innerHTML = gvddState.length
@@ -67,6 +97,7 @@ function renderGVDDTable() {
     : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có Huynh trưởng trong phạm vi này.</td></tr>';
   calcGVDD();
 }
+
 function handleTCheck(i, which) {
   const row = $('gvdd-tbody').querySelector('tr[data-i="' + i + '"]');
   if (row) gvddState[i].note = row.querySelector('input[type="text"]').value || '';
@@ -75,24 +106,29 @@ function handleTCheck(i, which) {
   renderGVDDTable();
   markDirtyGVDD();
 }
+
 function noteTInput(i) {
   const row = $('gvdd-tbody').querySelector('tr[data-i="' + i + '"]');
   if (row) gvddState[i].note = row.querySelector('input[type="text"]').value || '';
   markDirtyGVDD();
 }
+
 function markAllGVDD() {
   gvddState.forEach(s => s.status = 'Hiện diện');
   renderGVDDTable();
   markDirtyGVDD();
 }
+
 function markDirtyGVDD() {
   const a = JSON.stringify(gvddState.map(x => ({...x}))), b = JSON.stringify(gvddBase.map(x => ({...x})));
   $('gvdd-dirty').style.display = a !== b ? 'inline-block' : 'none';
 }
+
 function calcGVDD() {
   const total = gvddState.length, present = gvddState.filter(s => s.status === 'Hiện diện').length, perm = gvddState.filter(s => s.status === 'Có phép').length;
   $('gvdd-summary').textContent = 'Sĩ số ' + total + ' · Có mặt ' + present + ' · Có phép ' + perm + ' · Vắng ' + (total - present - perm);
 }
+
 async function saveGVDD() {
   const body = {sector: $('gvdd-nganh').value, weekOf: $('gvdd-week').value, session: $('gvdd-session').value,
     records: gvddState.map(x => ({email:x.email, status:x.status || 'Vắng', note:x.note || ''}))};
@@ -101,10 +137,10 @@ async function saveGVDD() {
   gvddBase = gvddState.map(x => ({...x}));
   markDirtyGVDD();
   toast('Đã lưu điểm danh Huynh trưởng.');
-  renderGVTK();
+  invalidateStatsCache();
 }
 
-/* ---------- Trích lục (không có CCCD → tra theo tên/email) ---------- */
+/* ---------- Trích lục ---------- */
 async function showTrich(u) {
   const out = $('gvtrich-out');
   out.innerHTML = '<p class="text-slate-500 text-sm">Đang tra cứu…</p>';
@@ -130,6 +166,7 @@ async function showTrich(u) {
         '<td class="p-2 border">' + esc(a.Note) + '</td></tr>').join('')
         : '<tr><td colspan="4" class="p-4 text-center text-slate-400">Không có buổi vắng trong năm học này.</td></tr>') + '</tbody></table></div>';
 }
+
 async function renderTrich() {
   const q = $('gvtrich-q').value.trim().toLowerCase();
   const out = $('gvtrich-out');
@@ -144,6 +181,7 @@ async function renderTrich() {
 
 /* ---------- Thống kê ---------- */
 const pct = (p, m) => m ? Math.round(p / m * 100) + '%' : '—';
+
 async function renderGVTK() {
   if (!isExec()) return;
   const lop = $('gvtk-lop').value;
@@ -165,13 +203,14 @@ async function renderGVTK() {
     : '<tr><td colspan="11" class="p-4 text-center text-slate-400">Chưa có Huynh trưởng trong phạm vi này.</td></tr>';
 }
 
-/* ---------- Sự kiện ---------- */
-$('gvdd-nganh').addEventListener('change', renderGVDD);
-$('gvdd-week').addEventListener('change', () => { normSunday($('gvdd-week')); renderGVDD(); });
-$('gvdd-session').addEventListener('change', renderGVDD);
-$('gvdd-refresh').addEventListener('click', renderGVDD);
+/* ---------- Events ---------- */
+$('gvdd-nganh').addEventListener('change', async () => { tabCache['t-gvdd'] = false; await renderGVDD(); tabCache['t-gvdd'] = true; });
+$('gvdd-week').addEventListener('change', async () => { normSunday($('gvdd-week')); tabCache['t-gvdd'] = false; await renderGVDD(); tabCache['t-gvdd'] = true; });
+$('gvdd-session').addEventListener('change', async () => { tabCache['t-gvdd'] = false; await renderGVDD(); tabCache['t-gvdd'] = true; });
+$('gvdd-refresh').addEventListener('click', async () => { tabCache['t-gvdd'] = false; await renderGVDD(); tabCache['t-gvdd'] = true; });
 $('gvdd-markall').addEventListener('click', markAllGVDD);
 $('gvdd-save').addEventListener('click', saveGVDD);
+
 $('gvdd-tbody').addEventListener('change', e => {
   const cb = e.target.closest('.attendance-checkbox');
   if (cb) handleTCheck(+cb.dataset.i, cb.dataset.which);
@@ -180,6 +219,7 @@ $('gvdd-tbody').addEventListener('input', e => {
   const inp = e.target.closest('input[data-i]');
   if (inp) noteTInput(+inp.dataset.i);
 });
+
 $('gvtrich-q').addEventListener('keydown', e => { if (e.key === 'Enter') renderTrich(); });
 $('gvtrich-search').addEventListener('click', renderTrich);
 $('gvtrich-out').addEventListener('click', e => {
@@ -188,15 +228,18 @@ $('gvtrich-out').addEventListener('click', e => {
   const u = USERS.find(x => String(x.Email).toLowerCase() === String(b.dataset.email).toLowerCase());
   if (u) showTrich(u);
 });
-$('gvtk-nganh').addEventListener('change', () => { fillLop(); renderGVTK(); });
-$('gvtk-lop').addEventListener('change', renderGVTK);
+
+$('gvtk-nganh').addEventListener('change', async () => { fillLop(); tabCache['t-gvtk'] = false; await renderGVTK(); tabCache['t-gvtk'] = true; });
+$('gvtk-lop').addEventListener('change', async () => { tabCache['t-gvtk'] = false; await renderGVTK(); tabCache['t-gvtk'] = true; });
 $('gvtk-excel').addEventListener('click', () => exportExcel('gvtk-table', 'Thống kê Huynh trưởng'));
 $('gvtk-print').addEventListener('click', () => window.print());
 
-/* ---------- Khởi động ---------- */
+/* ---------- Boot ---------- */
 fillNganh('gvdd-nganh');
 fillNganh('gvtk-nganh');
 fillSel('gvdd-session', TSESS.map(s => ({v:s})));
 fillLop();
 $('gvdd-week').value = defaultWeek();
-renderGVDD(); renderGVTK();
+
+// Load active tab on startup
+switchTab('t-gvdd');

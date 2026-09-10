@@ -82,8 +82,41 @@ function hideLoading() {
 // Hiện overlay ngay từ đầu (trước request đầu tiên) để không lộ khoảng trống khi trang chưa sẵn sàng.
 if (document.body && document.body.dataset.role) { makeOverlay(); overlay.classList.add('active'); }
 
+/* ---------- Client API Caching Engine ---------- */
+const apiCache = new Map();
+
+// Endpoints that are safe to cache on the client side
+const CACHEABLE_ACTIONS = new Set(['getConfig', 'getClasses', 'getStudents', 'getTeachers']);
+
+// Invalidation map: Mutations automatically clear their related read cache
+const CACHE_INVALIDATIONS = {
+  'saveConfig': ['getConfig'],
+  'startSchoolYear': ['getConfig', 'getClasses', 'getStudents'],
+  'saveClass': ['getClasses'],
+  'saveStudent': ['getStudents'],
+  'saveUser': ['getTeachers'],
+  'saveGroupMembers': ['getTeachers']
+};
+
+export function clearApiCache(action) {
+  if (action) apiCache.delete(action);
+  else apiCache.clear();
+}
+
 /* ---------- API ---------- */
 export async function api(action, body) {
+  const isCacheable = CACHEABLE_ACTIONS.has(action) && (!body || Object.keys(body).length === 0);
+  
+  // Return cached result if available
+  if (isCacheable && apiCache.has(action)) {
+    return JSON.parse(JSON.stringify(apiCache.get(action)));
+  }
+
+  // Auto-bust related caches on write mutations
+  if (CACHE_INVALIDATIONS[action]) {
+    CACHE_INVALIDATIONS[action].forEach(act => apiCache.delete(act));
+  }
+
   pendingApi++;
   showLoading();
   try {
@@ -94,6 +127,12 @@ export async function api(action, body) {
     try { j = await r.json(); }
     catch (e) { throw new Error('Máy chủ trả về lỗi (HTTP ' + r.status + '). Vui lòng thử lại.'); }
     if (!r.ok || j.status === 'error') { const e = new Error(j.message || 'Lỗi máy chủ'); e.status = r.status; throw e; }
+    
+    // Store in cache if cacheable
+    if (isCacheable) {
+      apiCache.set(action, JSON.parse(JSON.stringify(j)));
+    }
+
     return j;
   } finally {
     pendingApi--;

@@ -12,10 +12,35 @@ import {
   RANK, TYPES, TYPE_LABEL, ADMIN, BQT
 } from './common.js';
 
+/* ---------- Pre-Indexed Caches for Fast Lookups ---------- */
+let userEmailMap = null;
+let groupMembersMap = null;
+
+function ensureUserMap() {
+  if (!userEmailMap || userEmailMap.size !== USERS_ROWS.length) {
+    userEmailMap = new Map();
+    USERS_ROWS.forEach(u => {
+      if (u.Email) userEmailMap.set(String(u.Email).toLowerCase(), u.FullName || u.Email);
+    });
+  }
+}
+
+function ensureGroupMembersMap() {
+  if (!groupMembersMap) {
+    groupMembersMap = new Map();
+    GROUP_MEMBERS.forEach(m => {
+      const grp = m.GroupName;
+      if (!groupMembersMap.has(grp)) groupMembersMap.set(grp, []);
+      if (m.Email) groupMembersMap.get(grp).push(String(m.Email).toLowerCase());
+    });
+  }
+}
+
 /* ---------- Công thức điểm ---------- */
 export const dtbHK = (q, e) => { const a = num(q), b = num(e); return (a != null && b != null) ? (a + 2*b) / 3 : null; };
 export const dtbNam = (h1, h2) => { const a = num(h1), b = num(h2); if (a != null && b != null) return (a + 2*b) / 3; if (a != null) return a; if (b != null) return b; return null; };
 export const xepLoai = n => n == null ? '' : (n >= 8 ? 'Giỏi' : (n >= 6.5 ? 'Tiên tiến' : 'Trung bình'));
+
 export function normSummary(r) {
   const h1 = num(r.avgH1), h2 = num(r.avgH2);
   const avgYear = num(r.avgYear) != null ? num(r.avgYear) : dtbNam(h1, h2);
@@ -25,45 +50,64 @@ export function normSummary(r) {
 
 /* ---------- Dữ liệu dùng chung ---------- */
 export const userFull = em => {
-  const e = String(em || '').toLowerCase();
-  const u = USERS_ROWS.find(x => String(x.Email).toLowerCase() === e);
-  return u ? (u.FullName || em || '—') : (em || '—');
+  if (!em) return '—';
+  ensureUserMap();
+  const e = String(em).toLowerCase();
+  return userEmailMap.get(e) || em || '—';
 };
-export const teachersOf = grp => GROUP_MEMBERS.filter(m => m.GroupName === grp).map(m => String(m.Email).toLowerCase());
+
+export const teachersOf = grp => {
+  ensureGroupMembersMap();
+  return groupMembersMap.get(grp) || [];
+};
+
 export const activeStudents = cls => sortStudents(TSTUDENTS.filter(s => s.CurrentClass === cls && String(s.Status || 'Hoạt động').toLowerCase().trim() === 'hoạt động'));
+
+const STATUS_MAP = {
+  'Hiện diện': 'bg-emerald-100 text-emerald-700',
+  'Có phép': 'bg-amber-100 text-amber-700',
+  'Vắng': 'bg-red-100 text-red-700',
+  'Hoạt động': 'bg-blue-100 text-blue-700',
+  'Tốt nghiệp': 'bg-slate-200 text-slate-600',
+  'Ngưng hoạt động': 'bg-red-100 text-red-700'
+};
 
 export function badgeStatus(st) {
   const s = String(st || '').trim();
-  const map = {
-    'Hiện diện': 'bg-emerald-100 text-emerald-700',
-    'Có phép': 'bg-amber-100 text-amber-700',
-    'Vắng': 'bg-red-100 text-red-700',
-    'Hoạt động': 'bg-blue-100 text-blue-700',
-    'Tốt nghiệp': 'bg-slate-200 text-slate-600',
-    'Ngưng hoạt động': 'bg-red-100 text-red-700'
-  };
-  const c = map[s] || 'bg-slate-100 text-slate-500';
+  const c = STATUS_MAP[s] || 'bg-slate-100 text-slate-500';
   return '<span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold ' + c + '">' + esc(s || '—') + '</span>';
 }
+
 export function fileLink(url, names, rev) {
   if (!url) return '';
-  // Tên mỗi file lưu 1/dòng, song song với thứ tự URL; thiếu (dữ liệu cũ) → nhãn mặc định.
   const ns = String(names || '').split('\n');
-  // Chỉ link http/https — chặn javascript:/data: URI lọt vào href (lưu qua saveTeaching).
-  return String(url).split(',').map(x => x.trim()).filter(f => /^https?:\/\//i.test(f))
-    .map((f, i) => '<a class="file-link' + (rev ? ' reviewed' : '') + '" href="' + esc(f) + '" target="_blank" rel="noopener">' +
-      esc((ns[i] || '').trim() || (rev ? '✏️ Bản sửa' : '📄 Giáo án')) + '</a>').join(' ');
+  const urls = String(url).split(',');
+  const result = [];
+
+  for (let i = 0; i < urls.length; i++) {
+    const f = urls[i].trim();
+    if (/^https?:\/\//i.test(f)) {
+      const name = (ns[i] || '').trim();
+      const label = name || (rev ? '✏️ Bản sửa' : '📄 Giáo án');
+      result.push('<a class="file-link' + (rev ? ' reviewed' : '') + '" href="' + esc(f) + '" target="_blank" rel="noopener">' + esc(label) + '</a>');
+    }
+  }
+  return result.join(' ');
 }
+
 export function groupBadge(g) {
   const t = (g && (g.Type || g.type)) || '';
   return '<span class="badge ' + (TYPES[t] || 'b-class') + '">' + esc(TYPE_LABEL[t] || t || '—') + '</span>';
 }
+
 export function highestGroup(gs) {
   let best = null, rank = 0;
   (gs || []).forEach(g => { const r = RANK[g.Type || g.type] || 0; if (r > rank) { rank = r; best = g; } });
   return best;
 }
+
 export const highestType = gs => { const g = highestGroup(gs); return g ? (g.Type || g.type) : null; };
+
 export function expandLocal(gs) {
   if (!gs || !gs.length) return [];
   if (gs.some(g => (g.Type || g.type) === ADMIN)) return TCLASSES.map(c => c.ClassName);
@@ -71,8 +115,7 @@ export function expandLocal(gs) {
   gs.forEach(g => {
     const t = g.Type || g.type, sc = String(g.Scope || g.scope || '');
     const cs = sc.split(',').map(x => x.trim()).filter(Boolean);
-    if (t === 'Lớp') { if (sc) cs.forEach(c => out.add(c)); }
-    else if (t === 'Ngành') cs.forEach(c => out.add(c));
+    if (t === 'Lớp' || t === 'Ngành') cs.forEach(c => out.add(c));
     else if (t === BQT) {
       GROUPS_LIST.filter(gr => gr.Type === 'Ngành' && cs.includes(gr.GroupName))
         .forEach(gr => String(gr.Scope || '').split(',').map(x => x.trim()).filter(Boolean).forEach(c => out.add(c)));
@@ -80,6 +123,7 @@ export function expandLocal(gs) {
   });
   return [...out];
 }
+
 export const rankBadge = avg => avg == null ? '—' : (avg >= 85 ? '<span class="badge b-admin">Tốt</span>' : (avg >= 70 ? '<span class="badge b-sector">Khá</span>' : '<span class="badge b-class">Cần cải thiện</span>'));
 
 /* ---------- Trích lục ---------- */
@@ -96,6 +140,7 @@ export async function searchCard(id, outId) {
     '<div class="text-sm text-slate-600 mt-1">' + esc(st.IdNumber) + ' · ' + esc(st.CurrentClass || '') + '</div>' +
     (r.academic ? academicBlock(r.academic) : scoresBlock(r.scores)) + '</div>';
 }
+
 export function scoresBlock(scores) {
   const list = (scores || []).slice().sort((a, b) => String(b.SchoolYear).localeCompare(String(a.SchoolYear)));
   if (!list.length) return '';
@@ -110,7 +155,7 @@ export function scoresBlock(scores) {
         '<td class="border p-1 text-center font-bold">' + fmt1(n) + '</td><td class="border p-1 text-center">' + (xepLoai(n) || '—') + '</td></tr>';
     }).join('') + '</tbody></table>';
 }
-// Học bạ theo AcademicYear (bản chốt): mỗi năm 1 dòng như bảng Tổng hợp — HK1/HK2/ĐTB năm/%CC/xếp loại.
+
 export function academicBlock(rows) {
   const list = (rows || []).slice().sort((a, b) => String(b.SchoolYear).localeCompare(String(a.SchoolYear)));
   if (!list.length) return '';
