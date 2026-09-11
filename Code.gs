@@ -1,5 +1,6 @@
 /**
  * Sổ Thiếu Nhi — Apps Script dịch vụ lưu trữ (web app, chỉ doPost)
+ * Dynamic Per-Class Attendance Tab Support
  */
 
 const TAB_HEADERS = {
@@ -51,6 +52,10 @@ const normId = s => String(s ?? '').replace(/^['0]+/, '').trim();
 const numId = v => { const n = +v; return Number.isFinite(n) ? n : 0; };
 const normText = s => String(s ?? '').normalize('NFC').trim();
 
+function getAttSheetName(className) {
+  return className ? ('Att_' + normText(className)) : 'Attendance';
+}
+
 function genderRank(v) {
   const g = String(v ?? '').normalize('NFC').trim().toLowerCase();
   return g === 'nữ' ? 0 : g === 'nam' ? 1 : 2;
@@ -82,17 +87,17 @@ function rowObj(head, r) {
 }
 
 function ensureHeader(name) {
-  const want = TAB_HEADERS[name];
+  const want = TAB_HEADERS[name] || TAB_HEADERS.Attendance;
   if (!want) return false;
   const sh = ss().getSheetByName(name);
   if (!sh) return false;
-  const cur0 = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(c => String(c ?? ''));
+  const cur0 = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(c => String(c ?? ''));
   if (want.every(h => cur0.includes(h))) return false;
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   let changed = false;
   try {
-    const cur = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(c => String(c ?? ''));
+    const cur = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(c => String(c ?? ''));
     for (let i = 0; i < want.length; i++) {
       if (cur[i] === want[i] || cur.includes(want[i])) continue;
       sh.insertColumns(i + 1);
@@ -107,7 +112,7 @@ function ensureHeader(name) {
 function readAll(name) {
   let sh = ss().getSheetByName(name);
   if (!sh) {
-    const h = TAB_HEADERS[name];
+    const h = TAB_HEADERS[name] || (name.startsWith('Att_') ? TAB_HEADERS.Attendance : null);
     if (!h) throw new Error('Missing tab: ' + name);
     sh = ss().insertSheet(name);
     sh.getRange(1, 1, 1, h.length).setValues([h]);
@@ -115,11 +120,26 @@ function readAll(name) {
   ensureHeader(name);
   const values = sh.getDataRange().getValues();
   const head = values.shift();
+  if (!head) return [];
   if (name === 'Users' && values.some(r => String(r[0]) !== '' && !String(r[TAB_HEADERS.Users.indexOf('Id')] ?? '').trim())) {
     backfillUsersId();
     return readAll(name);
   }
   return values.filter(r => String(r[0]) !== '').map(r => rowObj(head, r));
+}
+
+function readAllAttendanceForClasses(classNames) {
+  let records = [];
+  classNames.forEach(c => {
+    const sheetName = getAttSheetName(c);
+    if (ss().getSheetByName(sheetName)) {
+      records = records.concat(cachedRead(sheetName));
+    }
+  });
+  if (records.length === 0 && ss().getSheetByName('Attendance')) {
+    records = cachedRead('Attendance').filter(r => classNames.includes(normText(r.ClassName)));
+  }
+  return records;
 }
 
 function backfillUsersId() {
@@ -179,7 +199,12 @@ function cachedRead(name) {
 function bustCache(names) { CacheService.getScriptCache().removeAll(names.map(n => 'tab_' + n + '_n')); }
 
 function appendRows(name, rows) {
-  const sh = ss().getSheetByName(name);
+  let sh = ss().getSheetByName(name);
+  if (!sh) {
+    const h = TAB_HEADERS[name] || TAB_HEADERS.Attendance;
+    sh = ss().insertSheet(name);
+    sh.getRange(1, 1, 1, h.length).setValues([h]);
+  }
   const head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
   sh.getRange(sh.getLastRow() + 1, 1, rows.length, head.length)
     .setValues(rows.map(r => head.map(h => {
@@ -193,7 +218,12 @@ function upsertRows(name, predicate, newRows) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    const sh = ss().getSheetByName(name);
+    let sh = ss().getSheetByName(name);
+    if (!sh) {
+      const h = TAB_HEADERS[name] || TAB_HEADERS.Attendance;
+      sh = ss().insertSheet(name);
+      sh.getRange(1, 1, 1, h.length).setValues([h]);
+    }
     const values = sh.getDataRange().getValues();
     const head = values[0];
     const kept = [head];
@@ -207,13 +237,21 @@ function upsertRows(name, predicate, newRows) {
   } finally { lock.releaseLock(); }
 }
 
-/* HIGH-PERFORMANCE TARGETED ATTENDANCE UPSERT */
+/* HIGH-PERFORMANCE TARGETED CLASS ATTENDANCE UPSERT */
 function saveAttendanceOptimized(b) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   
   try {
-    const sh = ss().getSheetByName('Attendance');
+    const targetCls = normText(b.className);
+    const targetSheetName = b.targetSheet || getAttSheetName(targetCls);
+    let sh = ss().getSheetByName(targetSheetName);
+
+    if (!sh) {
+      sh = ss().insertSheet(targetSheetName);
+      sh.getRange(1, 1, 1, TAB_HEADERS.Attendance.length).setValues([TAB_HEADERS.Attendance]);
+    }
+
     const values = sh.getDataRange().getValues();
     if (values.length === 0) return { status: 'ok', records: [] };
 
@@ -226,41 +264,45 @@ function saveAttendanceOptimized(b) {
     const targetSY = String(b.schoolYear).trim();
     const targetWk = String(b.weekOf).trim();
     const targetSes = normText(b.session);
-    const targetCls = normText(b.className);
 
-    // Delete matching rows backwards to avoid index shifting
-    for (let r = values.length - 1; r >= 1; r--) {
+    // 1. Filter out old matching records IN-MEMORY
+    const keptRows = [head];
+    for (let r = 1; r < values.length; r++) {
       const row = values[r];
-      if (String(row[syIdx]).trim() === targetSY &&
-          fmtDate(row[wkIdx]) === targetWk &&
-          normText(row[sesIdx]) === targetSes &&
-          normText(row[clsIdx]) === targetCls) {
-        sh.deleteRow(r + 1);
+      const isTarget = String(row[syIdx]).trim() === targetSY &&
+                       fmtDate(row[wkIdx]) === targetWk &&
+                       normText(row[sesIdx]) === targetSes &&
+                       (clsIdx < 0 || normText(row[clsIdx]) === targetCls);
+      if (!isTarget && String(row[0]) !== '') {
+        keptRows.push(row);
       }
     }
 
-    const newRows = (b.records || []).map(r => ({
-      SchoolYear: b.schoolYear,
-      WeekOf: b.weekOf,
-      Session: b.session,
-      IdNumber: String(r.idNumber).trim(),
-      ClassName: b.className,
-      AttendanceStatus: r.status,
-      Note: r.note || ''
-    }));
-
-    if (newRows.length > 0) {
-      const payload = newRows.map(r => head.map(h => {
-        const v = r[h] !== undefined ? r[h] : '';
+    // 2. Append new records to memory array
+    const newRecords = b.records || [];
+    newRecords.forEach(r => {
+      const rowMap = {
+        SchoolYear: b.schoolYear,
+        WeekOf: b.weekOf,
+        Session: b.session,
+        IdNumber: String(r.idNumber).trim(),
+        ClassName: b.className,
+        AttendanceStatus: r.status,
+        Note: r.note || ''
+      };
+      keptRows.push(head.map(h => {
+        const v = rowMap[h] !== undefined ? rowMap[h] : '';
         return typeof v === 'string' && v.startsWith('=') ? "'" + v : v;
       }));
-      
-      sh.getRange(sh.getLastRow() + 1, 1, payload.length, head.length).setValues(payload);
-    }
+    });
+
+    // 3. Write back to individual sheet
+    sh.clearContents();
+    sh.getRange(1, 1, keptRows.length, head.length).setValues(keptRows);
 
     SpreadsheetApp.flush();
-    bustCache(['Attendance']);
-    return { status: 'ok', records: newRows };
+    bustCache([targetSheetName, 'Attendance']);
+    return { status: 'ok', records: newRecords };
   } finally {
     lock.releaseLock();
   }
@@ -337,35 +379,38 @@ function saveScoresOptimized(b) {
     const targetSY = String(b.schoolYear).trim();
     const targetCls = normText(b.className);
 
-    for (let r = values.length - 1; r >= 1; r--) {
+    // Filter in-memory
+    const keptRows = [head];
+    for (let r = 1; r < values.length; r++) {
       const row = values[r];
-      if (String(row[syIdx]).trim() === targetSY && normText(row[clsIdx]) === targetCls) {
-        sh.deleteRow(r + 1);
+      const isTarget = String(row[syIdx]).trim() === targetSY && normText(row[clsIdx]) === targetCls;
+      if (!isTarget && String(row[0]) !== '') {
+        keptRows.push(row);
       }
     }
 
-    const rows = (b.students || []).map(s => ({
-      SchoolYear: b.schoolYear,
-      IdNumber: s.idNumber,
-      ClassName: b.className,
-      Quiz15_S1: s.quiz15s1 || '',
-      Exam_S1: s.exams1 || '',
-      Quiz15_S2: s.quiz15s2 || '',
-      Exam_S2: s.exams2 || ''
-    }));
+    // Add updated scores
+    const newStudents = b.students || [];
+    newStudents.forEach(s => {
+      const rowMap = {
+        SchoolYear: b.schoolYear,
+        IdNumber: s.idNumber,
+        ClassName: b.className,
+        Quiz15_S1: s.quiz15s1 || '',
+        Exam_S1: s.exams1 || '',
+        Quiz15_S2: s.quiz15s2 || '',
+        Exam_S2: s.exams2 || ''
+      };
+      keptRows.push(head.map(h => rowMap[h] !== undefined ? rowMap[h] : ''));
+    });
 
-    if (rows.length > 0) {
-      const payload = rows.map(r => head.map(h => {
-        const v = r[h] !== undefined ? r[h] : '';
-        return typeof v === 'string' && v.startsWith('=') ? "'" + v : v;
-      }));
-      
-      sh.getRange(sh.getLastRow() + 1, 1, payload.length, head.length).setValues(payload);
-    }
+    // Single-batch atomic write
+    sh.clearContents();
+    sh.getRange(1, 1, keptRows.length, head.length).setValues(keptRows);
 
     SpreadsheetApp.flush();
     bustCache(['Scores']);
-    return { status: 'ok', students: rows };
+    return { status: 'ok', students: newStudents };
   } finally {
     lock.releaseLock();
   }
@@ -421,7 +466,8 @@ function sundayOf(ymd) {
 }
 
 function attendanceWindow(year) {
-  const allAtt = cachedRead('Attendance').filter(r => r.SchoolYear === year);
+  const allClasses = cachedRead('Classes').map(c => c.ClassName);
+  const allAtt = readAllAttendanceForClasses(allClasses);
   const nghi = holidays(year);
   let startYmd = config().AttendanceStartDate;
   if (!startYmd) {
@@ -460,7 +506,7 @@ function rosterFor(sector) {
       const u = active[String(m.Email || '').toLowerCase()];
       if (u) out[String(u.Email).toLowerCase()] = { email: u.Email, fullName: u.FullName || '', saintName: u.SaintName || '', className: '', id: numId(u.Id) };
     });
-    return Object.values(out).sort((a, b) => (a.id - b.id) || String(a.fullName).localeCompare(String(b.fullName), 'vi'));
+    return Object.values(out).sort((a, b) => (a.id - b.id) || String(a.fullName).localeCompare(String(a.fullName), 'vi'));
   }
   const sectorClasses = new Set();
   cachedRead('Groups').forEach(g => {
@@ -478,7 +524,7 @@ function rosterFor(sector) {
     const u = active[String(m.Email || '').toLowerCase()];
     if (u) out[String(u.Email).toLowerCase()] = { email: u.Email, fullName: u.FullName || '', saintName: u.SaintName || '', className: cls, id: numId(u.Id) };
   });
-  return Object.values(out).sort((a, b) => (a.id - b.id) || String(a.fullName).localeCompare(String(b.fullName), 'vi'));
+  return Object.values(out).sort((a, b) => (a.id - b.id) || String(a.fullName).localeCompare(String(a.fullName), 'vi'));
 }
 
 function dtbHK(q, e) { return (q == null || q === '' || e == null || e === '') ? null : (+q + 2 * +e) / 3; }
@@ -510,7 +556,9 @@ function summaryRows(classNames, year) {
   const maxTotal = SESSIONS.reduce((a, s) => a + (w.max[s] || 0), 0);
   const coBy = {};
   const todayYmd = fmtDate(new Date());
-  cachedRead('Attendance').forEach(r => {
+  
+  const allAtt = readAllAttendanceForClasses(classNames);
+  allAtt.forEach(r => {
     if (r.SchoolYear !== year || !classNames.includes(r.ClassName)) return;
     if (String(r.WeekOf) > todayYmd || isHoliday(w.nghi, r.WeekOf, r.Session)) return;
     if (r.AttendanceStatus === 'Hiện diện') coBy[normId(r.IdNumber)] = (coBy[normId(r.IdNumber)] || 0) + 1;
@@ -611,16 +659,18 @@ const ACTIONS = {
     const week = String(b.weekOf).trim();
     const sess = normText(b.session);
     const cls = normText(b.className);
+    const sheetName = b.targetSheet || getAttSheetName(cls);
     
     const recs = {};
-    cachedRead('Attendance').forEach(r => {
-      if (String(r.SchoolYear).trim() === year && 
-          String(r.WeekOf).trim() === week && 
-          normText(r.Session) === sess && 
-          normText(r.ClassName) === cls) {
-        recs[normId(r.IdNumber)] = r;
-      }
-    });
+    if (ss().getSheetByName(sheetName)) {
+      cachedRead(sheetName).forEach(r => {
+        if (String(r.SchoolYear).trim() === year && 
+            String(r.WeekOf).trim() === week && 
+            normText(r.Session) === sess) {
+          recs[normId(r.IdNumber)] = r;
+        }
+      });
+    }
     
     return { status: 'ok',
       records: activeStudents(b.className).map(st => {
@@ -637,10 +687,9 @@ const ACTIONS = {
     const year = String(b.schoolYear || currentYear()).trim();
     const rawClassNames = b.className ? [b.className] : cachedRead('Classes').map(x => x.ClassName);
     const classNames = rawClassNames.map(c => normText(c));
-    const classSet = new Set(classNames);
     
     const allStudents = cachedRead('Students');
-    const allAttendance = cachedRead('Attendance');
+    const allAttendance = readAllAttendanceForClasses(classNames);
     const w = attendanceWindow(year);
     const maxTotal = SESSIONS.reduce((a, s) => a + (w.max[s] || 0), 0);
     const todayYmd = fmtDate(new Date());
@@ -649,9 +698,6 @@ const ACTIONS = {
     for (let i = 0; i < allAttendance.length; i++) {
       const r = allAttendance[i];
       if (String(r.SchoolYear).trim() !== year) continue;
-      
-      const rClass = normText(r.ClassName);
-      if (!classSet.has(rClass)) continue;
 
       const rWeek = String(r.WeekOf).trim();
       const rSess = normText(r.Session);
@@ -791,7 +837,7 @@ const ACTIONS = {
 
   getYearOptions: () => {
     const set = new Set([currentYear()]);
-    ['AcademicYear', 'Attendance', 'Scores'].forEach(t =>
+    ['AcademicYear', 'Scores'].forEach(t =>
       cachedRead(t).forEach(r => { if (r.SchoolYear) set.add(String(r.SchoolYear).trim()); }));
     return { status: 'ok', years: [...set].sort() };
   },
@@ -801,7 +847,8 @@ const ACTIONS = {
     const st = cachedRead('Students').find(s => normId(s.IdNumber) === id);
     if (!st) return { status: 'ok', students: [], attendance: [], scores: [], absences: [] };
     
-    const att = cachedRead('Attendance').filter(r => normId(r.IdNumber) === id);
+    const allClasses = cachedRead('Classes').map(c => c.ClassName);
+    const att = readAllAttendanceForClasses(allClasses).filter(r => normId(r.IdNumber) === id);
     const year = currentYear();
     const w = attendanceWindow(year);
     const present = {};
@@ -981,7 +1028,15 @@ const ACTIONS = {
     upsertRows('AcademicYear', o => String(o.SchoolYear) === oldYear,
       summaryRows(order, oldYear).map(r => ({ SchoolYear: oldYear, IdNumber: r.idNumber, ClassName: r.className,
         HK1Score: r.avgH1, HK2Score: r.avgH2, YearScore: r.avgYear, YearAttendant: r.attendancePct, Status: r.rating })));
-    ['Attendance', 'TeacherAttendance', 'Holidays'].forEach(n => upsertRows(n, () => true, []));
+    
+    // Clear attendance per class
+    order.forEach(c => {
+      const sheetName = getAttSheetName(c);
+      if (ss().getSheetByName(sheetName)) upsertRows(sheetName, () => true, []);
+    });
+    if (ss().getSheetByName('Attendance')) upsertRows('Attendance', () => true, []);
+    
+    ['TeacherAttendance', 'Holidays'].forEach(n => upsertRows(n, () => true, []));
     const st = cachedRead('Students').map(s => {
       if (String(s.Status).toLowerCase() !== 'hoạt động') return s;
       const i = order.indexOf(s.CurrentClass);

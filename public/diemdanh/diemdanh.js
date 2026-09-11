@@ -1,5 +1,5 @@
 /* =====================================================================
-   SỔ THIẾU NHI — diemdanh/index.js
+   SỔ THIẾU NHI — diemdanh/index.js (Targeting Per-Class Sheets)
    ===================================================================== */
 'use strict';
 
@@ -14,6 +14,11 @@ fillClasses('dd-lop', 'tk-lop');
 fillSessions('dd-buoi');
 
 let ddBase = [], ddState = [];
+
+/* ---------- Helper: Get Class Sheet Name ---------- */
+function getClassSheetName(className) {
+  return `Att_${className}`;
+}
 
 /* ---------- Tab Navigation & Cache Control ---------- */
 const tabCache = {
@@ -62,7 +67,8 @@ async function renderDD() {
       schoolYear: year(), 
       weekOf: $('dd-week').value, 
       session: $('dd-buoi').value, 
-      className: cls
+      className: cls,
+      targetSheet: getClassSheetName(cls) // Pass individual class sheet name
     }); 
   } catch (e) { return toast(e.message); }
 
@@ -161,6 +167,7 @@ async function saveAttendance() {
     weekOf: targetWeek, 
     session: targetSession, 
     className: targetClass,
+    targetSheet: getClassSheetName(targetClass), // Target individual class sheet for saves
     records: validRecords
   };
 
@@ -213,7 +220,13 @@ async function renderTK() {
   const cls = $('tk-lop').value;
   if (!cls) return;
   let r;
-  try { r = await api('getClassAttendanceStats', {schoolYear: year(), className: cls}); }
+  try { 
+    r = await api('getClassAttendanceStats', {
+      schoolYear: year(), 
+      className: cls,
+      targetSheet: getClassSheetName(cls)
+    }); 
+  }
   catch (e) { return toast(e.message); }
   const rows = r.stats || [], max = r.max || {}, maxTotal = r.maxTotal || 0;
   $('tk-tbody').innerHTML = rows.length
