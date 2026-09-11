@@ -306,13 +306,13 @@ function shell() {
   const links = NAV.map(n => '<a class="nav-link' + (n[2] ? ' ' + n[2] : '') + '" href="' + n[0] + '">' + n[1] + '</a>').join('');
   const logout = '<a class="nav-logout" href="/auth/logout">🔒 Đăng xuất</a>';
   const brand = '<a href="/" class="flex items-center gap-2.5 no-underline">' +
+    '<label for="menu-toggle" class="menu-hamburger md:hidden" aria-label="Mở menu">☰</label>' +
     '<img src="../../logo.png" alt="TNTT Nghĩa Hòa" class="h-9 w-9 rounded-lg">' +
     '<span class="text-blue-900 font-extrabold text-sm sm:text-base leading-tight">Quản lý học vụ TNTT Nghĩa Hòa</span></a>';
   let html = '<input type="checkbox" id="menu-toggle" class="menu-toggle">' +
     '<nav class="sticky top-0 z-40 bg-white/95 backdrop-blur shadow-sm border-b border-slate-200">' +
     '<div class="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap">' + brand +
     '<div class="hidden md:flex items-center gap-1">' + links + logout + '</div>' +
-    '<label for="menu-toggle" class="menu-hamburger md:hidden" aria-label="Mở menu">☰</label>' +
     '</div></nav>' +
     '<label for="menu-toggle" class="menu-backdrop" aria-hidden="true"></label>' +
     '<aside class="menu-drawer">' +
