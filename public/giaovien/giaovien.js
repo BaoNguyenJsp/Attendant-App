@@ -1,5 +1,5 @@
 /* =====================================================================
-   SỔ THIẾU NHI — giaovien/index.js
+   SỔ THIẾU NHI — giaovien/index.js (Teacher Management)
    ===================================================================== */
 'use strict';
 
@@ -14,13 +14,15 @@ const { users = [], groups = [] } = await api('getTeachers');
 const USERS = users;
 const NGANH = groups.filter(g => g.Type === 'Ngành');
 
+let weekCache = [];
+let currentSession = '';
 let gvddBase = [], gvddState = [];
 
 /* ---------- Fixed Tab Cache Map ---------- */
 const tabCache = {
-  't-gvdd': false,   // Matching HTML data-tab="t-gvdd"
-  't-gvtrich': true, // Manual search tab
-  't-gvtk': false    // Matching HTML data-tab="t-gvtk"
+  't-gvdd': false,   
+  't-gvtrich': true, 
+  't-gvtk': false    
 };
 
 function invalidateStatsCache() {
@@ -69,7 +71,7 @@ async function renderGVDD() {
   if (!$('gvdd-week').value) $('gvdd-week').value = defaultWeek();
   normSunday($('gvdd-week'));
 
-  const body = {sector: $('gvdd-nganh').value, weekOf: $('gvdd-week').value, session: $('gvdd-session').value};
+  const body = {sector: $('gvdd-nganh').value, weekOf: $('gvdd-week').value};
   let r;
   try { r = await api('getTeacherAttendance', body); }
   catch (e) { return toast(e.message); }
@@ -78,18 +80,42 @@ async function renderGVDD() {
   if (r.isHolidayWeek) { note.style.display = 'block'; note.textContent = '⚠ Tuần này là ngày nghỉ đã khai báo trong mục Quản trị.'; }
   else note.style.display = 'none';
 
-  gvddBase = (r.roster || []).map(x => ({
-    id: x.id, 
-    email: x.email, 
-    fullName: x.fullName, 
-    saintName: x.saintName || '', 
-    className: x.className || '', 
-    status: (x.status === 'Hiện diện' || x.status === 'Có phép') ? x.status : '', 
-    note: x.note || ''
-  }));
+  weekCache = r.recordsByTeacher || [];
+  currentSession = $('gvdd-session').value;
+  renderSessionFromCache();
+}
+
+function syncStateToCache() {
+  if (!currentSession) return;
+  weekCache.forEach(u => {
+    const uiRec = gvddState.find(s => s.email === u.email);
+    if (uiRec) {
+      if (!u.sessions) u.sessions = {};
+      u.sessions[currentSession] = { status: uiRec.status, note: uiRec.note };
+    }
+  });
+}
+
+function renderSessionFromCache() {
+  gvddBase = weekCache.map(x => {
+    const sData = (x.sessions && x.sessions[currentSession]) || {};
+    let rawSt = sData.status || '';
+    let st = (rawSt === 'Hiện diện' || rawSt === 'Có phép' || rawSt === 'Có mặt' || rawSt === 'Vắng có phép') ? (rawSt === 'Có mặt' ? 'Hiện diện' : rawSt === 'Vắng có phép' ? 'Có phép' : rawSt) : '';
+    
+    return {
+      id: x.id, 
+      email: x.email, 
+      fullName: x.fullName, 
+      saintName: x.saintName || '', 
+      className: x.className || '', 
+      status: st, 
+      note: sData.note || ''
+    };
+  });
 
   gvddState = gvddBase.map(x => ({...x}));
   renderGVDDTable();
+  markDirtyGVDD();
 }
 
 function renderGVDDTable() {
@@ -148,22 +174,17 @@ function calcGVDD() {
   const total = gvddState.length;
   const present = gvddState.filter(s => s.status === 'Hiện diện').length;
   const perm = gvddState.filter(s => s.status === 'Có phép').length;
-  $('gvdd-summary').textContent = 'Sĩ số ' + total + ' · Có mặt ' + present + ' · Có phép ' + perm + ' · Vắng ' + (total - present - perm);
+  $('gvdd-summary').textContent = 'Sĩ số ' + total + ' · Hiện diện ' + present + ' · Có phép ' + perm + ' · Vắng ' + (total - present - perm);
 }
 
 async function saveGVDD() {
   normSunday($('gvdd-week'));
-  
-  // Filter active valid attendance records strictly
-  const validRecords = gvddState
-    .filter(x => x.status === 'Hiện diện' || x.status === 'Có phép')
-    .map(x => ({ email: x.email, status: x.status, note: x.note || '' }));
+  syncStateToCache(); // Sync the active screen to cache before saving
 
   const body = {
     sector: $('gvdd-nganh').value, 
     weekOf: $('gvdd-week').value, 
-    session: $('gvdd-session').value,
-    records: validRecords
+    records: weekCache // Send the entire week with all sessions
   };
 
   try { await api('saveTeacherAttendance', body); }
@@ -171,7 +192,7 @@ async function saveGVDD() {
 
   gvddBase = gvddState.map(x => ({...x}));
   markDirtyGVDD();
-  toast('Đã lưu điểm danh Huynh trưởng.');
+  toast('Đã lưu điểm danh Huynh trưởng cho cả tuần.');
   invalidateStatsCache();
 }
 
@@ -241,7 +262,14 @@ async function renderGVTK() {
 /* ---------- Events ---------- */
 $('gvdd-nganh').addEventListener('change', async () => { tabCache['t-gvdd'] = false; await renderGVDD(); tabCache['t-gvdd'] = true; });
 $('gvdd-week').addEventListener('change', async () => { normSunday($('gvdd-week')); tabCache['t-gvdd'] = false; await renderGVDD(); tabCache['t-gvdd'] = true; });
-$('gvdd-session').addEventListener('change', async () => { tabCache['t-gvdd'] = false; await renderGVDD(); tabCache['t-gvdd'] = true; });
+
+// SWITCH SESSION INSTANTLY (Syncs current screen, then loads new session without API call)
+$('gvdd-session').addEventListener('change', () => { 
+  syncStateToCache();
+  currentSession = $('gvdd-session').value;
+  renderSessionFromCache(); 
+});
+
 $('gvdd-refresh').addEventListener('click', async () => { tabCache['t-gvdd'] = false; await renderGVDD(); tabCache['t-gvdd'] = true; });
 $('gvdd-markall').addEventListener('click', markAllGVDD);
 $('gvdd-save').addEventListener('click', saveGVDD);

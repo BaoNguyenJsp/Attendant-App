@@ -1,5 +1,5 @@
 /* =====================================================================
-   SỔ THIẾU NHI — diemdanh/index.js (Targeting Per-Class Sheets)
+   SỔ THIẾU NHI — diemdanh/index.js
    ===================================================================== */
 'use strict';
 
@@ -13,14 +13,10 @@ setState({TCLASSES: classes || []});
 fillClasses('dd-lop', 'tk-lop');
 fillSessions('dd-buoi');
 
+let weekCache = [];
+let currentSession = '';
 let ddBase = [], ddState = [];
 
-/* ---------- Helper: Get Class Sheet Name ---------- */
-function getClassSheetName(className) {
-  return `Att_${className}`;
-}
-
-/* ---------- Tab Navigation & Cache Control ---------- */
 const tabCache = {
   't-dd': false,
   't-tl': true,
@@ -66,9 +62,7 @@ async function renderDD() {
     r = await api('getAttendance', {
       schoolYear: year(), 
       weekOf: $('dd-week').value, 
-      session: $('dd-buoi').value, 
-      className: cls,
-      targetSheet: getClassSheetName(cls) // Pass individual class sheet name
+      className: cls
     }); 
   } catch (e) { return toast(e.message); }
 
@@ -78,16 +72,39 @@ async function renderDD() {
     note.textContent = '⚠ Tuần này là ngày nghỉ đã khai báo trong mục Quản trị.'; 
   } else note.style.display = 'none';
 
-  ddBase = (r.records || []).map(x => ({
-    idNumber: x.idNumber, 
-    saintName: x.saintName || '', 
-    fullName: x.fullName, 
-    status: (x.status === 'Hiện diện' || x.status === 'Có phép') ? x.status : '', 
-    note: x.note || ''
-  }));
-  
+  weekCache = r.recordsByStudent || [];
+  currentSession = $('dd-buoi').value;
+  renderSessionFromCache();
+}
+
+function syncStateToCache() {
+  if (!currentSession) return;
+  weekCache.forEach(student => {
+    const uiRec = ddState.find(s => s.idNumber === student.idNumber);
+    if (uiRec) {
+      if (!student.sessions) student.sessions = {};
+      student.sessions[currentSession] = { status: uiRec.status, note: uiRec.note };
+    }
+  });
+}
+
+function renderSessionFromCache() {
+  ddBase = weekCache.map(x => {
+    const sData = (x.sessions && x.sessions[currentSession]) || {};
+    let rawSt = sData.status || '';
+    let st = (rawSt === 'Hiện diện' || rawSt === 'Có phép' || rawSt === 'Có mặt' || rawSt === 'Vắng có phép') ? (rawSt === 'Có mặt' ? 'Hiện diện' : rawSt === 'Vắng có phép' ? 'Có phép' : rawSt) : '';
+    return {
+      idNumber: x.idNumber,
+      saintName: x.saintName || '',
+      fullName: x.fullName,
+      status: st,
+      note: sData.note || ''
+    };
+  });
+
   ddState = ddBase.map(x => ({...x}));
   renderDDTable();
+  markDirty();
 }
 
 function renderDDTable() {
@@ -145,30 +162,18 @@ function calcDD() {
   const total = ddState.length;
   const present = ddState.filter(s => s.status === 'Hiện diện').length;
   const perm = ddState.filter(s => s.status === 'Có phép').length;
-  $('dd-summary').textContent = 'Sĩ số ' + total + ' · Có mặt ' + present + ' · Có phép ' + perm + ' · Vắng ' + (total - present - perm);
+  $('dd-summary').textContent = 'Sĩ số ' + total + ' · Hiện diện ' + present + ' · Có phép ' + perm + ' · Vắng ' + (total - present - perm);
 }
 
 async function saveAttendance() {
   normSunday($('dd-week'));
-  const targetWeek = $('dd-week').value;
-  const targetSession = $('dd-buoi').value;
-  const targetClass = $('dd-lop').value;
-
-  const validRecords = ddState
-    .filter(x => x.status === 'Hiện diện' || x.status === 'Có phép')
-    .map(x => ({
-      idNumber: x.idNumber, 
-      status: x.status, 
-      note: x.note || ''
-    }));
+  syncStateToCache(); // Sync the active screen to cache before saving
 
   const body = {
     schoolYear: year(), 
-    weekOf: targetWeek, 
-    session: targetSession, 
-    className: targetClass,
-    targetSheet: getClassSheetName(targetClass), // Target individual class sheet for saves
-    records: validRecords
+    weekOf: $('dd-week').value, 
+    className: $('dd-lop').value,
+    records: weekCache // Send the entire week with all sessions
   };
 
   try { 
@@ -179,7 +184,7 @@ async function saveAttendance() {
 
   ddBase = ddState.map(x => ({...x}));
   markDirty();
-  toast('Đã lưu điểm danh.');
+  toast('Đã lưu điểm danh cho cả tuần.');
   invalidateStatsCache();
 }
 
@@ -187,18 +192,18 @@ async function saveAttendance() {
 async function renderTL() {
   const id = $('tl-id').value.trim();
   const out = $('tl-out');
-  if (!id) return out.innerHTML = '<p class="text-amber-600 font-medium">Nhập số CCCD.</p>';
+  if (!id) return out.innerHTML = '<p class="text-amber-600 font-medium">Nhập Mã số Thiếu nhi.</p>';
   let r;
   try { r = await api('searchByIdNumber', {idNumber: id}); }
   catch (e) { return out.innerHTML = '<p class="text-amber-600 font-medium">' + esc(e.message) + '</p>'; }
   const st = (r.students || [])[0];
-  if (!st) return out.innerHTML = '<p class="text-amber-600 font-medium">Không tìm thấy Thiếu nhi với số CCCD này.</p>';
+  if (!st) return out.innerHTML = '<p class="text-amber-600 font-medium">Không tìm thấy Thiếu nhi này.</p>';
   const abs = (r.absences || []).sort((a, b) => String(a.WeekOf).localeCompare(String(b.WeekOf)));
   out.innerHTML =
     '<div class="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4">' +
       '<h3 class="text-lg font-extrabold text-blue-900">' + esc((st.SaintName ? st.SaintName + ' ' : '') + st.FullName) + '</h3>' +
       '<dl class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm mt-2">' +
-        '<div><dt class="text-xs font-bold text-slate-500 uppercase">Số CCCD</dt><dd class="font-semibold">' + esc(st.IdNumber) + '</dd></div>' +
+        '<div><dt class="text-xs font-bold text-slate-500 uppercase">Mã Số</dt><dd class="font-semibold">' + esc(st.IdNumber) + '</dd></div>' +
         '<div><dt class="text-xs font-bold text-slate-500 uppercase">Tình trạng</dt><dd class="font-semibold">' + esc(st.Status) + '</dd></div>' +
         '<div><dt class="text-xs font-bold text-slate-500 uppercase">Lớp</dt><dd class="font-semibold">' + esc(st.CurrentClass) + '</dd></div>' +
       '</dl></div>' +
@@ -220,13 +225,7 @@ async function renderTK() {
   const cls = $('tk-lop').value;
   if (!cls) return;
   let r;
-  try { 
-    r = await api('getClassAttendanceStats', {
-      schoolYear: year(), 
-      className: cls,
-      targetSheet: getClassSheetName(cls)
-    }); 
-  }
+  try { r = await api('getClassAttendanceStats', {schoolYear: year(), className: cls}); }
   catch (e) { return toast(e.message); }
   const rows = r.stats || [], max = r.max || {}, maxTotal = r.maxTotal || 0;
   $('tk-tbody').innerHTML = rows.length
@@ -270,7 +269,14 @@ async function renderToanDoan() {
 /* ---------- Event Listeners ---------- */
 $('dd-lop').addEventListener('change', async () => { tabCache['t-dd'] = false; await renderDD(); tabCache['t-dd'] = true; });
 $('dd-week').addEventListener('change', async () => { normSunday($('dd-week')); tabCache['t-dd'] = false; await renderDD(); tabCache['t-dd'] = true; });
-$('dd-buoi').addEventListener('change', async () => { tabCache['t-dd'] = false; await renderDD(); tabCache['t-dd'] = true; });
+
+// SWITCH SESSION INSTANTLY (Syncs current screen, then loads new session without API call)
+$('dd-buoi').addEventListener('change', () => {
+  syncStateToCache();
+  currentSession = $('dd-buoi').value;
+  renderSessionFromCache();
+});
+
 $('dd-markall').addEventListener('click', markAllPresent);
 $('dd-refresh').addEventListener('click', async () => { tabCache['t-dd'] = false; await renderDD(); tabCache['t-dd'] = true; });
 $('dd-save').addEventListener('click', saveAttendance);

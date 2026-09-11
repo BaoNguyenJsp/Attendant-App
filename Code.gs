@@ -1,6 +1,6 @@
 /**
  * Sổ Thiếu Nhi — Apps Script dịch vụ lưu trữ (web app, chỉ doPost)
- * Dynamic Per-Class Attendance Tab Support
+ * Hybrid 1-Week-Per-Row Attendance Support (12 Cols Student / 14 Cols Teacher)
  */
 
 const TAB_HEADERS = {
@@ -9,17 +9,27 @@ const TAB_HEADERS = {
   GroupMembers:      ['GroupName', 'Email'],
   Classes:           ['ClassName', 'Grade'],
   Students:          ['IdNumber', 'SaintName', 'FullName', 'DateOfBirth', 'Gender', 'Father', 'Mother', 'CurrentClass', 'EnrollYear', 'Status', 'Note'],
-  Attendance:        ['SchoolYear', 'WeekOf', 'Session', 'IdNumber', 'ClassName', 'AttendanceStatus', 'Note'],
-  TeacherAttendance: ['SchoolYear', 'WeekOf', 'Session', 'TeacherEmail', 'Status', 'Note'],
   Teaching:          ['SchoolYear', 'WeekOf', 'ClassName', 'TeacherEmail', 'LessonContent', 'LessonPlanUrl', 'LessonPlanNames', 'RevisedPlanUrl', 'RevisedPlanNames', 'UpdatedBy'],
   Scores:            ['SchoolYear', 'IdNumber', 'ClassName', 'Quiz15_S1', 'Exam_S1', 'Quiz15_S2', 'Exam_S2'],
   Config:            ['Key', 'Value'],
   Holidays:          ['SchoolYear', 'WeekOf', 'Session', 'Reason'],
   AcademicYear:      ['SchoolYear', 'IdNumber', 'ClassName', 'HK1Score', 'HK2Score', 'YearScore', 'YearAttendant', 'Status'],
+  Attendance:        ['SchoolYear', 'WeekOf', 'IdNumber', 'ClassName', 'LeChuaNhat_Status', 'LeChuaNhat_Note', 'HocGiaoLy_Status', 'HocGiaoLy_Note', 'ChauThanhThe_Status', 'ChauThanhThe_Note', 'LeThu5_Status', 'LeThu5_Note'],
+  TeacherAttendance: ['SchoolYear', 'WeekOf', 'TeacherEmail', 'ClassName', 'LeChuaNhat_Status', 'LeChuaNhat_Note', 'HocGiaoLy_Status', 'HocGiaoLy_Note', 'ChauThanhThe_Status', 'ChauThanhThe_Note', 'LeThu5_Status', 'LeThu5_Note', 'HopHuynhTruong_Status', 'HopHuynhTruong_Note']
 };
 
 const SESSIONS = ['Lễ Chúa Nhật', 'Học Giáo Lý', 'Chầu Thánh Thể', 'Lễ Thứ Năm'];
 const TEACHER_SESSIONS = [...SESSIONS, 'Họp Huynh Trưởng'];
+
+const SESSION_COL_MAP = {
+  'Lễ Chúa Nhật':   { status: 'LeChuaNhat_Status',   note: 'LeChuaNhat_Note',   sIdx: 4, nIdx: 5 },
+  'Học Giáo Lý':     { status: 'HocGiaoLy_Status',    note: 'HocGiaoLy_Note',    sIdx: 6, nIdx: 7 },
+  'Chầu Thánh Thể':  { status: 'ChauThanhThe_Status',  note: 'ChauThanhThe_Note',  sIdx: 8, nIdx: 9 },
+  'Lễ Thứ Năm':     { status: 'LeThu5_Status',       note: 'LeThu5_Note',       sIdx: 10, nIdx: 11 },
+  'Lễ Thứ 5':       { status: 'LeThu5_Status',       note: 'LeThu5_Note',       sIdx: 10, nIdx: 11 },
+  'Họp Huynh Trưởng':{ status: 'HopHuynhTruong_Status',note: 'HopHuynhTruong_Note',sIdx: 12, nIdx: 13 }
+};
+
 const XUDOAN = '__Xudoan__';
 const CACHE_TTL = 300;
 
@@ -53,7 +63,7 @@ const numId = v => { const n = +v; return Number.isFinite(n) ? n : 0; };
 const normText = s => String(s ?? '').normalize('NFC').trim();
 
 function getAttSheetName(className) {
-  return className ? ('Att_' + normText(className)) : 'Attendance';
+  return className ? ('Att_' + normText(className)) : 'Att_Chiên Con';
 }
 
 function genderRank(v) {
@@ -75,7 +85,7 @@ function rowObj(head, r) {
     let val = r[i];
     if (val instanceof Date) {
       o[h] = fmtDate(val);
-    } else if (h === 'IdNumber' || h === 'SchoolYear' || h === 'ClassName') {
+    } else if (h === 'IdNumber' || h === 'SchoolYear' || h === 'ClassName' || h === 'TeacherEmail') {
       o[h] = String(val).trim(); 
     } else if (typeof val === 'string') {
       o[h] = val.trim(); 
@@ -126,20 +136,6 @@ function readAll(name) {
     return readAll(name);
   }
   return values.filter(r => String(r[0]) !== '').map(r => rowObj(head, r));
-}
-
-function readAllAttendanceForClasses(classNames) {
-  let records = [];
-  classNames.forEach(c => {
-    const sheetName = getAttSheetName(c);
-    if (ss().getSheetByName(sheetName)) {
-      records = records.concat(cachedRead(sheetName));
-    }
-  });
-  if (records.length === 0 && ss().getSheetByName('Attendance')) {
-    records = cachedRead('Attendance').filter(r => classNames.includes(normText(r.ClassName)));
-  }
-  return records;
 }
 
 function backfillUsersId() {
@@ -233,136 +229,14 @@ function upsertRows(name, predicate, newRows) {
     });
     sh.clearContents();
     sh.getRange(1, 1, kept.length, head.length).setValues(kept);
-    appendRows(name, newRows);
+    if (newRows && newRows.length > 0) {
+      const payload = newRows.map(r => head.map(h => r[h] !== undefined ? r[h] : ''));
+      sh.getRange(sh.getLastRow() + 1, 1, payload.length, head.length).setValues(payload);
+    }
   } finally { lock.releaseLock(); }
 }
 
-/* HIGH-PERFORMANCE TARGETED CLASS ATTENDANCE UPSERT */
-function saveAttendanceOptimized(b) {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
-  
-  try {
-    const targetCls = normText(b.className);
-    const targetSheetName = b.targetSheet || getAttSheetName(targetCls);
-    let sh = ss().getSheetByName(targetSheetName);
-
-    if (!sh) {
-      sh = ss().insertSheet(targetSheetName);
-      sh.getRange(1, 1, 1, TAB_HEADERS.Attendance.length).setValues([TAB_HEADERS.Attendance]);
-    }
-
-    const values = sh.getDataRange().getValues();
-    if (values.length === 0) return { status: 'ok', records: [] };
-
-    const head = values[0];
-    const syIdx = head.indexOf('SchoolYear');
-    const wkIdx = head.indexOf('WeekOf');
-    const sesIdx = head.indexOf('Session');
-    const clsIdx = head.indexOf('ClassName');
-
-    const targetSY = String(b.schoolYear).trim();
-    const targetWk = String(b.weekOf).trim();
-    const targetSes = normText(b.session);
-
-    // 1. Filter out old matching records IN-MEMORY
-    const keptRows = [head];
-    for (let r = 1; r < values.length; r++) {
-      const row = values[r];
-      const isTarget = String(row[syIdx]).trim() === targetSY &&
-                       fmtDate(row[wkIdx]) === targetWk &&
-                       normText(row[sesIdx]) === targetSes &&
-                       (clsIdx < 0 || normText(row[clsIdx]) === targetCls);
-      if (!isTarget && String(row[0]) !== '') {
-        keptRows.push(row);
-      }
-    }
-
-    // 2. Append new records to memory array
-    const newRecords = b.records || [];
-    newRecords.forEach(r => {
-      const rowMap = {
-        SchoolYear: b.schoolYear,
-        WeekOf: b.weekOf,
-        Session: b.session,
-        IdNumber: String(r.idNumber).trim(),
-        ClassName: b.className,
-        AttendanceStatus: r.status,
-        Note: r.note || ''
-      };
-      keptRows.push(head.map(h => {
-        const v = rowMap[h] !== undefined ? rowMap[h] : '';
-        return typeof v === 'string' && v.startsWith('=') ? "'" + v : v;
-      }));
-    });
-
-    // 3. Write back to individual sheet
-    sh.clearContents();
-    sh.getRange(1, 1, keptRows.length, head.length).setValues(keptRows);
-
-    SpreadsheetApp.flush();
-    bustCache([targetSheetName, 'Attendance']);
-    return { status: 'ok', records: newRecords };
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-/* HIGH-PERFORMANCE TARGETED TEACHER ATTENDANCE UPSERT */
-function saveTeacherAttendanceOptimized(b) {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
-  
-  try {
-    const year = currentYear();
-    const sh = ss().getSheetByName('TeacherAttendance');
-    const values = sh.getDataRange().getValues();
-    if (values.length === 0) return { status: 'ok', records: [] };
-
-    const head = values[0];
-    const syIdx = head.indexOf('SchoolYear');
-    const wkIdx = head.indexOf('WeekOf');
-    const sesIdx = head.indexOf('Session');
-
-    const targetWk = String(b.weekOf).trim();
-    const targetSes = normText(b.session);
-
-    for (let r = values.length - 1; r >= 1; r--) {
-      const row = values[r];
-      if (String(row[syIdx]).trim() === year &&
-          fmtDate(row[wkIdx]) === targetWk &&
-          normText(row[sesIdx]) === targetSes) {
-        sh.deleteRow(r + 1);
-      }
-    }
-
-    const newRows = (b.records || []).map(r => ({
-      SchoolYear: year,
-      WeekOf: String(b.weekOf).trim(),
-      Session: normText(b.session),
-      TeacherEmail: String(r.email).trim(),
-      Status: r.status,
-      Note: r.note || ''
-    }));
-
-    if (newRows.length > 0) {
-      const payload = newRows.map(r => head.map(h => {
-        const v = r[h] !== undefined ? r[h] : '';
-        return typeof v === 'string' && v.startsWith('=') ? "'" + v : v;
-      }));
-      
-      sh.getRange(sh.getLastRow() + 1, 1, payload.length, head.length).setValues(payload);
-    }
-
-    SpreadsheetApp.flush();
-    bustCache(['TeacherAttendance']);
-    return { status: 'ok', records: newRows };
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-/* HIGH-PERFORMANCE TARGETED SCORES UPSERT */
+/* HIGH-PERFORMANCE SCORES UPSERT */
 function saveScoresOptimized(b) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -379,7 +253,6 @@ function saveScoresOptimized(b) {
     const targetSY = String(b.schoolYear).trim();
     const targetCls = normText(b.className);
 
-    // Filter in-memory
     const keptRows = [head];
     for (let r = 1; r < values.length; r++) {
       const row = values[r];
@@ -389,7 +262,6 @@ function saveScoresOptimized(b) {
       }
     }
 
-    // Add updated scores
     const newStudents = b.students || [];
     newStudents.forEach(s => {
       const rowMap = {
@@ -404,7 +276,6 @@ function saveScoresOptimized(b) {
       keptRows.push(head.map(h => rowMap[h] !== undefined ? rowMap[h] : ''));
     });
 
-    // Single-batch atomic write
     sh.clearContents();
     sh.getRange(1, 1, keptRows.length, head.length).setValues(keptRows);
 
@@ -466,18 +337,13 @@ function sundayOf(ymd) {
 }
 
 function attendanceWindow(year) {
-  const allClasses = cachedRead('Classes').map(c => c.ClassName);
-  const allAtt = readAllAttendanceForClasses(allClasses);
   const nghi = holidays(year);
   let startYmd = config().AttendanceStartDate;
-  if (!startYmd) {
-    const weeks = allAtt.map(r => r.WeekOf).filter(Boolean);
-    startYmd = weeks.length ? weeks.sort()[0] : '';
-  }
+  let start = null, lastYmd = '';
   const max = {};
   SESSIONS.forEach(s => max[s] = 0);
   max['Họp Huynh Trưởng'] = 0;
-  let start = null, lastYmd = '';
+
   if (startYmd) {
     start = sundayOf(startYmd);
     const end = new Date(); end.setDate(end.getDate() - end.getDay());
@@ -556,13 +422,30 @@ function summaryRows(classNames, year) {
   const maxTotal = SESSIONS.reduce((a, s) => a + (w.max[s] || 0), 0);
   const coBy = {};
   const todayYmd = fmtDate(new Date());
-  
-  const allAtt = readAllAttendanceForClasses(classNames);
-  allAtt.forEach(r => {
-    if (r.SchoolYear !== year || !classNames.includes(r.ClassName)) return;
-    if (String(r.WeekOf) > todayYmd || isHoliday(w.nghi, r.WeekOf, r.Session)) return;
-    if (r.AttendanceStatus === 'Hiện diện') coBy[normId(r.IdNumber)] = (coBy[normId(r.IdNumber)] || 0) + 1;
+
+  classNames.forEach(cls => {
+    const sheetName = getAttSheetName(cls);
+    const sh = ss().getSheetByName(sheetName);
+    if (!sh) return;
+    const data = sh.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const rowWk = row[1] instanceof Date ? fmtDate(row[1]) : String(row[1]).trim();
+      if (row[0] !== year || rowWk > todayYmd) continue;
+      
+      const stId = normId(row[2]);
+      SESSIONS.forEach(s => {
+        const colInfo = SESSION_COL_MAP[s];
+        if (colInfo) {
+          const stVal = String(row[colInfo.sIdx] || '').trim();
+          if ((stVal === 'Hiện diện' || stVal === 'Có mặt') && !isHoliday(w.nghi, rowWk, s)) {
+            coBy[stId] = (coBy[stId] || 0) + 1;
+          }
+        }
+      });
+    }
   });
+
   return cachedRead('Scores').filter(r => r.SchoolYear === year && classNames.includes(r.ClassName)).map(s => {
     const h1 = dtbHK(s.Quiz15_S1, s.Exam_S1), h2 = dtbHK(s.Quiz15_S2, s.Exam_S2);
     const nam = (h1 !== null && h2 !== null) ? (h1 + 2 * h2) / 3 : (h1 ?? h2);
@@ -656,60 +539,130 @@ const ACTIONS = {
 
   getAttendance: b => {
     const year = String(b.schoolYear || currentYear()).trim();
-    const week = String(b.weekOf).trim();
-    const sess = normText(b.session);
+    const weekOf = String(b.weekOf).trim();
     const cls = normText(b.className);
-    const sheetName = b.targetSheet || getAttSheetName(cls);
-    
+    const sheetName = getAttSheetName(cls);
+
+    const sh = ss().getSheetByName(sheetName);
     const recs = {};
-    if (ss().getSheetByName(sheetName)) {
-      cachedRead(sheetName).forEach(r => {
-        if (String(r.SchoolYear).trim() === year && 
-            String(r.WeekOf).trim() === week && 
-            normText(r.Session) === sess) {
-          recs[normId(r.IdNumber)] = r;
+
+    if (sh) {
+      const data = sh.getDataRange().getValues();
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        const rowWk = row[1] instanceof Date ? fmtDate(row[1]) : String(row[1]).trim();
+        if (rowWk === weekOf) {
+          const id = normId(row[2]); // IdNumber
+          recs[id] = {
+            'Lễ Chúa Nhật':   { status: row[4] || '', note: row[5] || '' },
+            'Học Giáo Lý':     { status: row[6] || '', note: row[7] || '' },
+            'Chầu Thánh Thể':  { status: row[8] || '', note: row[9] || '' },
+            'Lễ Thứ Năm':     { status: row[10] || '', note: row[11] || '' }
+          };
         }
-      });
+      }
     }
-    
-    return { status: 'ok',
-      records: activeStudents(b.className).map(st => {
-        const o = recs[normId(st.IdNumber)];
-        return { idNumber: st.IdNumber, saintName: st.SaintName || '', fullName: st.FullName,
-          status: o ? o.AttendanceStatus : '', note: (o && o.Note) || '' };
-      }),
-      isHolidayWeek: !!isHoliday(holidays(year), b.weekOf, b.session) };
+
+    return { 
+      status: 'ok',
+      recordsByStudent: activeStudents(b.className).map(st => ({
+        idNumber: st.IdNumber,
+        saintName: st.SaintName || '',
+        fullName: st.FullName,
+        sessions: recs[normId(st.IdNumber)] || {}
+      })),
+      isHolidayWeek: !!isHoliday(holidays(year), b.weekOf, b.session) 
+    };
   },
 
-  saveAttendance: b => saveAttendanceOptimized(b),
+  saveAttendance: b => {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try {
+      const year = String(b.schoolYear || currentYear()).trim();
+      const weekOf = String(b.weekOf).trim();
+      const cls = normText(b.className);
+      const sheetName = getAttSheetName(cls);
+
+      let sh = ss().getSheetByName(sheetName);
+      if (!sh) {
+        sh = ss().insertSheet(sheetName);
+        sh.getRange(1, 1, 1, TAB_HEADERS.Attendance.length).setValues([TAB_HEADERS.Attendance]);
+      }
+
+      const data = sh.getDataRange().getValues();
+      let modified = false;
+
+      const incomingMap = {};
+      (b.records || []).forEach(r => incomingMap[normId(r.idNumber)] = r);
+
+      // Update existing rows
+      for (let i = 1; i < data.length; i++) {
+        const rowWk = data[i][1] instanceof Date ? fmtDate(data[i][1]) : String(data[i][1]).trim();
+        if (rowWk === weekOf) {
+          const stId = normId(data[i][2]);
+          if (incomingMap[stId]) {
+            const studentData = incomingMap[stId];
+            SESSIONS.forEach(sess => {
+              const colInfo = SESSION_COL_MAP[sess];
+              if (colInfo && studentData.sessions && studentData.sessions[sess]) {
+                const rec = studentData.sessions[sess];
+                const normSt = (rec.status === 'Có mặt' || rec.status === 'Hiện diện') ? 'Hiện diện' : 
+                               (rec.status === 'Vắng có phép' || rec.status === 'Có phép') ? 'Có phép' : rec.status;
+                data[i][colInfo.sIdx] = normSt || '';
+                data[i][colInfo.nIdx] = rec.note || '';
+              }
+            });
+            delete incomingMap[stId];
+            modified = true;
+          }
+        }
+      }
+
+      // Append new students for this week
+      const activeList = activeStudents(cls);
+      activeList.forEach(st => {
+        const stId = normId(st.IdNumber);
+        if (incomingMap[stId]) {
+          const studentData = incomingMap[stId];
+          const newRow = [year, weekOf, st.IdNumber, cls, '', '', '', '', '', '', '', ''];
+          
+          SESSIONS.forEach(sess => {
+            const colInfo = SESSION_COL_MAP[sess];
+            if (colInfo && studentData.sessions && studentData.sessions[sess]) {
+              const rec = studentData.sessions[sess];
+              const normSt = (rec.status === 'Có mặt' || rec.status === 'Hiện diện') ? 'Hiện diện' : 
+                             (rec.status === 'Vắng có phép' || rec.status === 'Có phép') ? 'Có phép' : rec.status;
+              newRow[colInfo.sIdx] = normSt || '';
+              newRow[colInfo.nIdx] = rec.note || '';
+            }
+          });
+          
+          data.push(newRow);
+          modified = true;
+        }
+      });
+
+      if (modified) {
+        sh.clearContents();
+        sh.getRange(1, 1, data.length, data[0].length).setValues(data);
+      }
+
+      SpreadsheetApp.flush();
+      bustCache([sheetName]);
+      return { status: 'ok' };
+    } finally {
+      lock.releaseLock();
+    }
+  },
 
   getClassAttendanceStats: b => {
     const year = String(b.schoolYear || currentYear()).trim();
     const rawClassNames = b.className ? [b.className] : cachedRead('Classes').map(x => x.ClassName);
     const classNames = rawClassNames.map(c => normText(c));
     
-    const allStudents = cachedRead('Students');
-    const allAttendance = readAllAttendanceForClasses(classNames);
-    const w = attendanceWindow(year);
-    const maxTotal = SESSIONS.reduce((a, s) => a + (w.max[s] || 0), 0);
-    const todayYmd = fmtDate(new Date());
-
-    const by = {};
-    for (let i = 0; i < allAttendance.length; i++) {
-      const r = allAttendance[i];
-      if (String(r.SchoolYear).trim() !== year) continue;
-
-      const rWeek = String(r.WeekOf).trim();
-      const rSess = normText(r.Session);
-      if (rWeek > todayYmd || isHoliday(w.nghi, r.WeekOf, rSess)) continue;
-
-      const id = normId(r.IdNumber);
-      const key = id + '|' + rSess;
-      (by[key] = by[key] || []).push(r);
-    }
-
     const activeByClass = {};
-    allStudents.forEach(st => {
+    cachedRead('Students').forEach(st => {
       if (normText(st.Status).toLowerCase() === 'hoạt động') {
         const cls = normText(st.CurrentClass);
         (activeByClass[cls] = activeByClass[cls] || []).push(st);
@@ -718,24 +671,260 @@ const ACTIONS = {
 
     const stats = [];
     classNames.forEach(cls => {
+      const sheetName = getAttSheetName(cls);
+      const sh = ss().getSheetByName(sheetName);
+      if (!sh) return;
+
+      const data = sh.getDataRange().getValues();
+      const recordsById = {};
+
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        const id = normId(row[2]);
+        (recordsById[id] = recordsById[id] || []).push(row);
+      }
+
       const students = (activeByClass[cls] || []).sort((a, b) => genderRank(a.Gender) - genderRank(b.Gender));
       students.forEach(st => {
         const stId = normId(st.IdNumber);
+        const rows = recordsById[stId] || [];
         const row = { className: cls, idNumber: st.IdNumber, fullName: st.FullName, present: {} };
-        
+
         SESSIONS.forEach(ses => {
-          const normSes = normText(ses);
-          const list = by[stId + '|' + normSes] || [];
-          row.present[ses] = list.filter(r => 
-            normText(r.ClassName) === cls && 
-            normText(r.AttendanceStatus).toLowerCase() === 'hiện diện'
-          ).length;
+          const colInfo = SESSION_COL_MAP[ses];
+          let count = 0;
+          rows.forEach(r => {
+            const stVal = String(r[colInfo.sIdx] || '').trim();
+            if (stVal === 'Hiện diện' || stVal === 'Có mặt') count++;
+          });
+          row.present[ses] = count;
         });
+
         stats.push(row);
       });
     });
+
+    return { status: 'ok', max: { 'Lễ Chúa Nhật': 53, 'Học Giáo Lý': 53, 'Chầu Thánh Thể': 53, 'Lễ Thứ Năm': 52 }, maxTotal: 211, stats };
+  },
+
+  searchByIdNumber: b => {
+    const id = normId(b.idNumber);
+    const st = cachedRead('Students').find(s => normId(s.IdNumber) === id);
+    if (!st) return { status: 'ok', students: [], attendance: [], absences: [] };
+
+    const cls = normText(st.CurrentClass);
+    const sheetName = getAttSheetName(cls);
+    const sh = ss().getSheetByName(sheetName);
+    const absences = [];
+
+    if (sh) {
+      const data = sh.getDataRange().getValues();
+      for (let i = 1; i < data.length; i++) {
+        if (normId(data[i][2]) === id) {
+          const row = data[i];
+          const weekYmd = row[1] instanceof Date ? fmtDate(row[1]) : String(row[1]).trim();
+          
+          SESSIONS.forEach(s => {
+            const colInfo = SESSION_COL_MAP[s];
+            const stVal = String(row[colInfo.sIdx] || '').trim();
+            if (stVal !== 'Hiện diện' && stVal !== 'Có mặt' && stVal !== '') {
+              absences.push({
+                WeekOf: weekYmd,
+                Session: s,
+                AttendanceStatus: stVal || 'Vắng',
+                Note: row[colInfo.nIdx] || ''
+              });
+            }
+          });
+        }
+      }
+    }
+
+    return { status: 'ok', students: [st], absences };
+  },
+
+  getTeacherAttendance: b => {
+    const year = currentYear();
+    const weekOf = String(b.weekOf).trim();
     
-    return { status: 'ok', max: w.max, maxTotal, stats };
+    const sh = ss().getSheetByName('TeacherAttendance');
+    const recs = {};
+
+    if (sh) {
+      const data = sh.getDataRange().getValues();
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        const rowWk = row[1] instanceof Date ? fmtDate(row[1]) : String(row[1]).trim();
+        if (rowWk === weekOf) {
+          const email = String(row[2] || '').toLowerCase().trim();
+          recs[email] = {
+            'Lễ Chúa Nhật':   { status: row[4] || '', note: row[5] || '' },
+            'Học Giáo Lý':     { status: row[6] || '', note: row[7] || '' },
+            'Chầu Thánh Thể':  { status: row[8] || '', note: row[9] || '' },
+            'Lễ Thứ Năm':     { status: row[10] || '', note: row[11] || '' },
+            'Họp Huynh Trưởng':{ status: row[12] || '', note: row[13] || '' }
+          };
+        }
+      }
+    }
+
+    return { 
+      status: 'ok', 
+      recordsByTeacher: rosterFor(b.sector).map(u => ({
+        id: u.id,
+        email: u.email,
+        fullName: u.fullName,
+        saintName: u.saintName,
+        className: u.className,
+        sessions: recs[u.email.toLowerCase()] || {}
+      })), 
+      isHolidayWeek: !!isHoliday(holidays(year), b.weekOf, b.session) 
+    };
+  },
+
+  saveTeacherAttendance: b => {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try {
+      const year = currentYear();
+      const weekOf = String(b.weekOf).trim();
+
+      let sh = ss().getSheetByName('TeacherAttendance');
+      if (!sh) {
+        sh = ss().insertSheet('TeacherAttendance');
+        sh.getRange(1, 1, 1, TAB_HEADERS.TeacherAttendance.length).setValues([TAB_HEADERS.TeacherAttendance]);
+      }
+
+      const data = sh.getDataRange().getValues();
+      let modified = false;
+      const incomingMap = {};
+      (b.records || []).forEach(r => incomingMap[String(r.email || '').toLowerCase().trim()] = r);
+
+      for (let i = 1; i < data.length; i++) {
+        const rowWk = data[i][1] instanceof Date ? fmtDate(data[i][1]) : String(data[i][1]).trim();
+        if (rowWk === weekOf) {
+          const emailKey = String(data[i][2] || '').toLowerCase().trim();
+          if (incomingMap[emailKey]) {
+            const teacherData = incomingMap[emailKey];
+            TEACHER_SESSIONS.forEach(sess => {
+              const colInfo = SESSION_COL_MAP[sess];
+              if (colInfo && teacherData.sessions && teacherData.sessions[sess]) {
+                const rec = teacherData.sessions[sess];
+                const normSt = (rec.status === 'Có mặt' || rec.status === 'Hiện diện') ? 'Hiện diện' : 
+                               (rec.status === 'Vắng có phép' || rec.status === 'Có phép') ? 'Có phép' : rec.status;
+                data[i][colInfo.sIdx] = normSt || '';
+                data[i][colInfo.nIdx] = rec.note || '';
+              }
+            });
+            delete incomingMap[emailKey];
+            modified = true;
+          }
+        }
+      }
+
+      const roster = rosterFor(b.sector);
+      roster.forEach(u => {
+        const emailKey = String(u.email).toLowerCase().trim();
+        if (incomingMap[emailKey]) {
+          const teacherData = incomingMap[emailKey];
+          const newRow = [year, weekOf, u.email, u.className || 'Xứ đoàn', '', '', '', '', '', '', '', '', '', ''];
+          
+          TEACHER_SESSIONS.forEach(sess => {
+            const colInfo = SESSION_COL_MAP[sess];
+            if (colInfo && teacherData.sessions && teacherData.sessions[sess]) {
+              const rec = teacherData.sessions[sess];
+              const normSt = (rec.status === 'Có mặt' || rec.status === 'Hiện diện') ? 'Hiện diện' : 
+                             (rec.status === 'Vắng có phép' || rec.status === 'Có phép') ? 'Có phép' : rec.status;
+              newRow[colInfo.sIdx] = normSt || '';
+              newRow[colInfo.nIdx] = rec.note || '';
+            }
+          });
+          
+          data.push(newRow);
+          modified = true;
+        }
+      });
+
+      if (modified) {
+        sh.clearContents();
+        sh.getRange(1, 1, data.length, data[0].length).setValues(data);
+      }
+
+      SpreadsheetApp.flush();
+      bustCache(['TeacherAttendance']);
+      return { status: 'ok' };
+    } finally {
+      lock.releaseLock();
+    }
+  },
+
+  getTeacherStats: b => {
+    const year = currentYear();
+    const roster = rosterFor(b.sector).filter(u => !b.className || normText(u.className) === normText(b.className));
+    const emails = new Set(roster.map(u => u.email.toLowerCase()));
+    
+    const by = {};
+    const sh = ss().getSheetByName('TeacherAttendance');
+    if (sh) {
+      const data = sh.getDataRange().getValues();
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        if (row[0] !== year) continue;
+        const email = String(row[2] || '').toLowerCase().trim();
+        if (!emails.has(email)) continue;
+
+        TEACHER_SESSIONS.forEach(s => {
+          const colInfo = SESSION_COL_MAP[s];
+          if (colInfo) {
+            const stVal = String(row[colInfo.sIdx] || '').trim();
+            if (stVal === 'Hiện diện' || stVal === 'Có mặt') {
+              const k = email + '|' + normText(s);
+              by[k] = (by[k] || 0) + 1;
+            }
+          }
+        });
+      }
+    }
+
+    const stats = roster.map(u => {
+      const e = u.email.toLowerCase();
+      const present = {};
+      TEACHER_SESSIONS.forEach(s => present[s] = by[e + '|' + normText(s)] || 0);
+      return { id: u.id, email: u.email, fullName: u.fullName, className: u.className, taught: 0, present };
+    });
+
+    return { status: 'ok', max: { 'Lễ Chúa Nhật': 53, 'Học Giáo Lý': 53, 'Chầu Thánh Thể': 53, 'Lễ Thứ Năm': 52, 'Họp Huynh Trưởng': 53 }, maxTotal: 264, stats };
+  },
+
+  getTeacherTrichLuc: b => {
+    const year = b.schoolYear || currentYear();
+    const email = String(b.teacherEmail || '').toLowerCase();
+    const u = cachedRead('Users').find(x => String(x.Email).toLowerCase() === email);
+    if (!u) return { status: 'ok', teacher: null, absences: [] };
+
+    const absences = [];
+    const sh = ss().getSheetByName('TeacherAttendance');
+    if (sh) {
+      const data = sh.getDataRange().getValues();
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        if (row[0] !== year) continue;
+        const rowEmail = String(row[2] || '').toLowerCase().trim();
+        if (rowEmail === email) {
+          const weekYmd = row[1] instanceof Date ? fmtDate(row[1]) : String(row[1]).trim();
+          TEACHER_SESSIONS.forEach(s => {
+            const colInfo = SESSION_COL_MAP[s];
+            if (colInfo) {
+              const stVal = String(row[colInfo.sIdx] || '').trim();
+              if (stVal !== 'Hiện diện' && stVal !== 'Có mặt' && stVal !== '') {
+                absences.push({ WeekOf: weekYmd, Session: s, Status: stVal || 'Vắng', Note: row[colInfo.nIdx] || '' });
+              }
+            }
+          });
+        }
+      }
+    }
+    return { status: 'ok', teacher: { email: u.Email, fullName: u.FullName || '', saintName: u.SaintName || '' }, absences };
   },
 
   getTeaching: b => {
@@ -842,140 +1031,6 @@ const ACTIONS = {
     return { status: 'ok', years: [...set].sort() };
   },
 
-  searchByIdNumber: b => {
-    const id = normId(b.idNumber);
-    const st = cachedRead('Students').find(s => normId(s.IdNumber) === id);
-    if (!st) return { status: 'ok', students: [], attendance: [], scores: [], absences: [] };
-    
-    const allClasses = cachedRead('Classes').map(c => c.ClassName);
-    const att = readAllAttendanceForClasses(allClasses).filter(r => normId(r.IdNumber) === id);
-    const year = currentYear();
-    const w = attendanceWindow(year);
-    const present = {};
-    
-    att.forEach(r => { 
-      if (String(r.SchoolYear).trim() === String(year).trim() && 
-          normText(r.AttendanceStatus).toLowerCase() === 'hiện diện') {
-        present[String(r.WeekOf).trim() + '|' + normText(r.Session)] = true; 
-      }
-    });
-    
-    const absences = [];
-    if (w.start) {
-      if (w.start.getFullYear() < 2020) w.start = new Date(2020, 0, 1);
-      for (const d = new Date(w.start); fmtDate(d) <= w.lastYmd; d.setDate(d.getDate() + 7)) {
-        const wk = fmtDate(d);
-        SESSIONS.forEach(s => {
-          const normS = normText(s);
-          if (isHoliday(w.nghi, wk, normS) || present[wk + '|' + normS]) return;
-          
-          const rec = att.find(r => String(r.SchoolYear).trim() === String(year).trim() && 
-                                    String(r.WeekOf).trim() === wk && 
-                                    normText(r.Session) === normS);
-          absences.push({ WeekOf: wk, Session: s, AttendanceStatus: rec ? rec.AttendanceStatus : '', Note: rec ? rec.Note : '' });
-        });
-      }
-    }
-
-    const ayRows = cachedRead('AcademicYear').filter(r => normId(r.IdNumber) === id);
-    const scoreRows = cachedRead('Scores').filter(r => normId(r.IdNumber) === id);
-    const clsOf = {};
-    ayRows.forEach(r => { clsOf[String(r.SchoolYear).trim()] = r.ClassName; });
-    scoreRows.forEach(r => { const y = String(r.SchoolYear).trim(); if (clsOf[y] == null) clsOf[y] = r.ClassName; });
-    const academic = Object.keys(clsOf).sort().map(y => {
-      const row = summaryRows([clsOf[y]], y).find(x => normId(x.idNumber) === id);
-      return row ? { SchoolYear: y, ...row } : null;
-    }).filter(Boolean);
-    return { status: 'ok', students: [st], attendance: att, academic, scores: scoreRows, absences };
-  },
-
-  getTeacherAttendance: b => {
-    const year = currentYear();
-    const recs = {};
-    cachedRead('TeacherAttendance').forEach(r => {
-      if (String(r.SchoolYear).trim() === year &&
-          String(r.WeekOf).trim() === String(b.weekOf).trim() &&
-          normText(r.Session) === normText(b.session))
-        recs[String(r.TeacherEmail).toLowerCase()] = r;
-    });
-    const roster = rosterFor(b.sector).map(u => {
-      const r = recs[u.email.toLowerCase()];
-      return { id: u.id, email: u.email, fullName: u.fullName, saintName: u.saintName, className: u.className,
-        status: r ? r.Status : '', note: (r && r.Note) || '' };
-    });
-    return { status: 'ok', roster, isHolidayWeek: !!isHoliday(holidays(year), b.weekOf, b.session) };
-  },
-
-  saveTeacherAttendance: b => saveTeacherAttendanceOptimized(b),
-
-  getTeacherStats: b => {
-    const year = currentYear();
-    const w = attendanceWindow(year);
-    const maxTotal = TEACHER_SESSIONS.reduce((a, s) => a + (w.max[s] || 0), 0);
-    const todayYmd = fmtDate(new Date());
-    const roster = rosterFor(b.sector).filter(u => !b.className || normText(u.className) === normText(b.className));
-    const emails = new Set(roster.map(u => u.email.toLowerCase()));
-    
-    const by = {};
-    const teacherAtt = cachedRead('TeacherAttendance');
-    for (let i = 0; i < teacherAtt.length; i++) {
-      const r = teacherAtt[i];
-      if (String(r.SchoolYear).trim() !== year || String(r.WeekOf).trim() > todayYmd) continue;
-      const e = String(r.TeacherEmail || '').toLowerCase();
-      if (!emails.has(e) || isHoliday(w.nghi, r.WeekOf, r.Session)) continue;
-      if (normText(r.Status).toLowerCase() !== 'hiện diện') continue;
-      const k = e + '|' + normText(r.Session);
-      by[k] = (by[k] || 0) + 1;
-    }
-
-    const taught = {};
-    const seen = {};
-    const teachingList = cachedRead('Teaching');
-    for (let i = 0; i < teachingList.length; i++) {
-      const r = teachingList[i];
-      if (String(r.SchoolYear).trim() !== year) continue;
-      const e = String(r.TeacherEmail || '').toLowerCase();
-      if (!e || !emails.has(e)) continue;
-      const k = e + '|' + r.WeekOf + '|' + r.ClassName;
-      if (!seen[k]) { 
-        seen[k] = true; 
-        taught[e] = (taught[e] || 0) + 1; 
-      }
-    }
-
-    const stats = roster.map(u => {
-      const e = u.email.toLowerCase();
-      const present = {};
-      TEACHER_SESSIONS.forEach(s => present[s] = by[e + '|' + normText(s)] || 0);
-      return { id: u.id, email: u.email, fullName: u.fullName, className: u.className,
-        taught: taught[e] || 0, present };
-    });
-
-    return { status: 'ok', max: w.max, maxTotal, stats };
-  },
-
-  getTeacherTrichLuc: b => {
-    const year = b.schoolYear || currentYear();
-    const email = String(b.teacherEmail || '').toLowerCase();
-    const u = cachedRead('Users').find(x => String(x.Email).toLowerCase() === email);
-    if (!u) return { status: 'ok', teacher: null, absences: [] };
-    const w = attendanceWindow(year);
-    const absences = [];
-    if (w.start) {
-      const lo = fmtDate(w.start);
-      cachedRead('TeacherAttendance').forEach(r => {
-        if (String(r.TeacherEmail || '').toLowerCase() !== email ||
-            String(r.SchoolYear).trim() !== String(year).trim()) return;
-        const wk = String(r.WeekOf).trim();
-        if (wk < lo || wk > w.lastYmd || isHoliday(w.nghi, r.WeekOf, r.Session)) return;
-        if (normText(r.Status).toLowerCase() === 'hiện diện') return;
-        absences.push({ WeekOf: wk, Session: r.Session, Status: r.Status, Note: r.Note || '' });
-      });
-    }
-    absences.sort((a, b) => String(a.WeekOf).localeCompare(String(b.WeekOf)) || String(a.Session).localeCompare(String(b.Session)));
-    return { status: 'ok', teacher: { email: u.Email, fullName: u.FullName || '', saintName: u.SaintName || '' }, absences };
-  },
-
   getHolidays: b => {
     const year = b.schoolYear || currentYear();
     const list = cachedRead('Holidays').filter(o => String(o.SchoolYear) === year)
@@ -1029,12 +1084,10 @@ const ACTIONS = {
       summaryRows(order, oldYear).map(r => ({ SchoolYear: oldYear, IdNumber: r.idNumber, ClassName: r.className,
         HK1Score: r.avgH1, HK2Score: r.avgH2, YearScore: r.avgYear, YearAttendant: r.attendancePct, Status: r.rating })));
     
-    // Clear attendance per class
     order.forEach(c => {
       const sheetName = getAttSheetName(c);
       if (ss().getSheetByName(sheetName)) upsertRows(sheetName, () => true, []);
     });
-    if (ss().getSheetByName('Attendance')) upsertRows('Attendance', () => true, []);
     
     ['TeacherAttendance', 'Holidays'].forEach(n => upsertRows(n, () => true, []));
     const st = cachedRead('Students').map(s => {
@@ -1046,5 +1099,5 @@ const ACTIONS = {
     upsertRows('Config', o => o.Key === 'CurrentSchoolYear', [{ Key: 'CurrentSchoolYear', Value: newYear }]);
     if (b.attendanceStartDate) upsertRows('Config', o => o.Key === 'AttendanceStartDate', [{ Key: 'AttendanceStartDate', Value: b.attendanceStartDate }]);
     return { status: 'ok', newYear };
-  },
+  }
 };
