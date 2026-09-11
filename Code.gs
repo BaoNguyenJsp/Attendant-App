@@ -192,7 +192,19 @@ function cachedRead(name) {
   return data;
 }
 
-function bustCache(names) { CacheService.getScriptCache().removeAll(names.map(n => 'tab_' + n + '_n')); }
+function bustCache(names) { 
+  const cache = CacheService.getScriptCache();
+  
+  if (!names || names.length === 0) {
+    // Dynamically get all sheet names (including dynamic Att_ tabs) and wipe their cache
+    const sheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
+    const allKeys = sheets.map(sh => 'tab_' + sh.getName() + '_n');
+    cache.removeAll(allKeys);
+  } else {
+    // Wipe only specific requested tabs
+    cache.removeAll(names.map(n => 'tab_' + n + '_n')); 
+  }
+}
 
 function appendRows(name, rows) {
   let sh = ss().getSheetByName(name);
