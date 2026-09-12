@@ -3,7 +3,7 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, setState, TSTUDENTS, TSCORES, TCLASSES, year, isExec, cur, fmt1, fillClasses, fillSel, exportExcel } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, setState, TSTUDENTS, TSCORES, TCLASSES, year, isExec, cur, fmt1, fillClasses, fillSel, exportExcel, sortStudents } from '../shared/common.js';
 import { normSummary, activeStudents } from '../shared/ui.js';
 
 await initCommon();
@@ -65,6 +65,7 @@ if (!years.includes(year())) years = [year(), ...years];
 fillSel('th-nam', years.map(y => ({v:y})), year());
 fillSel('kt-nam', years.map(y => ({v:y})), year());
 
+/* ---------- Student Sorting Helper ---------- */
 const clsOrd = {}; 
 TCLASSES.forEach((c, i) => clsOrd[c.ClassName] = i);
 const keyId = s => String(s || '').replace(/^['0]+/, '');
@@ -75,9 +76,32 @@ TSTUDENTS.forEach(st => {
   gMap[keyId(st.IdNumber)] = g === 'nữ' ? 0 : g === 'nam' ? 1 : 2; 
 });
 
-const sumSort = (a, b) => (clsOrd[a.className] ?? 1e9) - (clsOrd[b.className] ?? 1e9)
-  || (gMap[keyId(a.idNumber)] ?? 2) - (gMap[keyId(b.idNumber)] ?? 2)
-  || String(a.fullName || '').localeCompare(String(b.fullName || ''), 'vi');
+const sumSort = (a, b) => {
+  // 1. Order by Class First (Strict Class Order)
+  const clsA = a.className || a.ClassName || '';
+  const clsB = b.className || b.ClassName || '';
+  const ca = clsOrd[clsA] ?? 1e9;
+  const cb = clsOrd[clsB] ?? 1e9;
+  if (ca !== cb) return ca - cb;
+
+  // 2. Fetch base student profile to obtain ListOrder
+  const stA = TSTUDENTS.find(s => keyId(s.IdNumber) === keyId(a.idNumber || a.IdNumber)) || {};
+  const stB = TSTUDENTS.find(s => keyId(s.IdNumber) === keyId(b.idNumber || b.IdNumber)) || {};
+
+  // 3. Order by ListOrder within the same Class
+  const valA = a.ListOrder ?? a.listOrder ?? stA.ListOrder;
+  const valB = b.ListOrder ?? b.listOrder ?? stB.ListOrder;
+  const oa = (valA !== null && valA !== '' && !isNaN(+valA)) ? +valA : 1e9;
+  const ob = (valB !== null && valB !== '' && !isNaN(+valB)) ? +valB : 1e9;
+  if (oa !== ob) return oa - ob;
+
+  // 4. Fallback to Gender -> Full Name
+  const ga = gMap[keyId(a.idNumber || a.IdNumber)] ?? 2;
+  const gb = gMap[keyId(b.idNumber || b.IdNumber)] ?? 2;
+  if (ga !== gb) return ga - gb;
+
+  return String(a.fullName || a.FullName || '').localeCompare(String(b.fullName || b.FullName || ''), 'vi');
+};
 
 /* ---------- Nhập Điểm ---------- */
 async function renderNhap() {
@@ -111,11 +135,25 @@ async function saveScores() {
     tr.querySelectorAll('[data-f]').forEach(inp => { o[FMAP[inp.dataset.f]] = inp.value === '' ? '' : +inp.value; });
     students.push(o);
   });
+  
   if (!students.length) return;
+  
   try {
     const r = await api('saveScores', {schoolYear: year(), className: cls, students});
-    setState({TSCORES: TSCORES.filter(s => !(s.SchoolYear === year() && s.ClassName === cls)).concat(r.students || [])});
+    
+    const updatedScores = (r.students || []).map(s => ({
+      SchoolYear: year(),
+      ClassName: cls,
+      IdNumber: s.idNumber,
+      Quiz15_S1: s.quiz15s1,
+      Exam_S1: s.exams1,
+      Quiz15_S2: s.quiz15s2,
+      Exam_S2: s.exams2
+    }));
+    
+    setState({TSCORES: TSCORES.filter(s => !(s.SchoolYear === year() && s.ClassName === cls)).concat(updatedScores)});
   } catch (e) { return toast(e.message); }
+  
   toast('Đã lưu điểm.');
   invalidateSummaryCache();
   await renderNhap();
@@ -179,11 +217,8 @@ async function renderHBT() {
   
   const st = r.student;
   const records = r.history || [];
-  
-  // Mix historical records with current live year record
   if (r.currentRec) records.push(r.currentRec);
   
-  // Sort descending by School Year
   records.sort((a, b) => String(b.SchoolYear).localeCompare(String(a.SchoolYear)));
   
   const out = $('hbt-out');
@@ -238,7 +273,9 @@ async function renderTongHop() {
   let r;
   try { r = await api('getSummary', {schoolYear: yr, className: cls}); }
   catch (e) { return toast(e.message); }
+  
   const rows = (r.summary || []).map(normSummary).sort(sumSort);
+
   $('th-tbody').innerHTML = rows.length
     ? rows.map((x, i) => '<tr><td class="p-2 border text-center">' + (i + 1) + '</td><td class="p-2 border">' + esc(x.idNumber) + '</td>' +
         '<td class="p-2 border font-medium">' + esc(x.fullName) + '</td><td class="p-2 border">' + esc(x.className) + '</td>' +
@@ -270,7 +307,9 @@ async function renderKT() {
   let r;
   try { r = await api('getSummary', {schoolYear: yr, className: cls}); }
   catch (e) { return toast(e.message); }
+  
   const rows = (r.summary || []).map(normSummary).filter(x => x.rating === 'Giỏi' && x.cc != null && +x.cc >= 80).sort(sumSort);
+
   $('kt-tbody').innerHTML = rows.length
     ? rows.map((x, i) => '<tr><td class="p-2 border text-center">' + (i + 1) + '</td><td class="p-2 border">' + esc(x.idNumber) + '</td>' +
         '<td class="p-2 border font-medium">' + esc(x.fullName) + '</td><td class="p-2 border">' + esc(x.className) + '</td>' +

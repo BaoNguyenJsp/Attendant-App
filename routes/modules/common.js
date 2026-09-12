@@ -14,6 +14,7 @@ module.exports = {
 
     // Ghi Thiếu nhi theo lớp (FR-AUTH-10)
     app.post('/api/saveStudent', authz.requireScopeWrite, proxy('saveStudent'));
+    app.post('/api/saveStudentOrder', authz.requireScopeWrite, proxy('saveStudentOrder'));
 
     // Tìm kiếm CCCD: chỉ trả nếu Thiếu nhi thuộc scope[] hoặc admin
     app.post('/api/searchByIdNumber', async (req, res, next) => {

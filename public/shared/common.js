@@ -255,13 +255,30 @@ const gRank = v => {
 export function sortStudents(rows) {
   const cm = {};
   TCLASSES.forEach((c, i) => cm[c.ClassName] = i);
+  
   return rows.slice().sort((a, b) => {
-    const ca = cm[a.CurrentClass] != null ? cm[a.CurrentClass] : 1e9;
-    const cb = cm[b.CurrentClass] != null ? cm[b.CurrentClass] : 1e9;
+    // 1. Sort by Class
+    const clsA = a.CurrentClass || a.className || '';
+    const clsB = b.CurrentClass || b.className || '';
+    const ca = cm[clsA] != null ? cm[clsA] : 1e9;
+    const cb = cm[clsB] != null ? cm[clsB] : 1e9;
     if (ca !== cb) return ca - cb;
-    const ga = gRank(a.Gender), gb = gRank(b.Gender);
+    
+    // 2. Extract ListOrder safely (handling casing & strings)
+    const valA = a.ListOrder ?? a.listOrder ?? a.listorder;
+    const valB = b.ListOrder ?? b.listOrder ?? b.listorder;
+    const oa = (valA !== null && valA !== '' && !isNaN(+valA)) ? +valA : 1e9;
+    const ob = (valB !== null && valB !== '' && !isNaN(+valB)) ? +valB : 1e9;
+
+    // 3. Primary Sort: Manual ListOrder
+    if (oa !== ob) return oa - ob;
+
+    // 4. Fallback Sort: Gender -> Alphabetical
+    const ga = gRank(a.Gender || a.gender), gb = gRank(b.Gender || b.gender);
     if (ga !== gb) return ga - gb;
-    return String(a.FullName || '').localeCompare(String(b.FullName || ''), 'vi');
+    const nameA = String(a.FullName || a.fullName || '');
+    const nameB = String(b.FullName || b.fullName || '');
+    return nameA.localeCompare(nameB, 'vi');
   });
 }
 

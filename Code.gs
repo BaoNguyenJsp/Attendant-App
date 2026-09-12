@@ -8,8 +8,7 @@ const TAB_HEADERS = {
   Groups:            ['GroupName', 'Type', 'Scope', 'Description'],
   GroupMembers:      ['GroupName', 'Email'],
   Classes:           ['ClassName', 'Grade'],
-  Students:          ['IdNumber', 'SaintName', 'FullName', 'DateOfBirth', 'Gender', 'Father', 'Mother', 'CurrentClass', 'EnrollYear', 'Status', 'Note'],
-  Teaching:          ['SchoolYear', 'WeekOf', 'ClassName', 'TeacherEmail', 'LessonContent', 'LessonPlanUrl', 'LessonPlanNames', 'RevisedPlanUrl', 'RevisedPlanNames', 'UpdatedBy'],
+Students: ['IdNumber', 'SaintName', 'FullName', 'DateOfBirth', 'Gender', 'Father', 'Mother', 'CurrentClass', 'EnrollYear', 'Status', 'Note', 'ListOrder'],  Teaching:          ['SchoolYear', 'WeekOf', 'ClassName', 'TeacherEmail', 'LessonContent', 'LessonPlanUrl', 'LessonPlanNames', 'RevisedPlanUrl', 'RevisedPlanNames', 'UpdatedBy'],
   Scores:            ['SchoolYear', 'IdNumber', 'ClassName', 'Quiz15_S1', 'Exam_S1', 'Quiz15_S2', 'Exam_S2'],
   Config:            ['Key', 'Value'],
   Holidays:          ['SchoolYear', 'WeekOf', 'Session', 'Reason'],
@@ -565,13 +564,15 @@ const ACTIONS = {
   },
 
   saveStudent: b => {
+    const old = cachedRead('Students').find(s => normId(s.IdNumber) === normId(b.idNumber));
     const row = {
       IdNumber: b.idNumber, SaintName: b.saintName || '', FullName: b.fullName,
       DateOfBirth: b.dateOfBirth || '', Gender: b.gender || '', Father: b.father || '', Mother: b.mother || '',
       CurrentClass: b.className, EnrollYear: b.enrollYear || currentYear(),
       Status: b.status || 'Hoạt động', Note: b.note || '',
+      ListOrder: b.listOrder !== undefined ? b.listOrder : (old ? (old.ListOrder || '') : '')
     };
-    upsertRows('Students', o => o.IdNumber === b.idNumber, [row]);
+    upsertRows('Students', o => normId(o.IdNumber) === normId(b.idNumber), [row]);
     return { status: 'ok', student: row, idNumber: b.idNumber };
   },
 
@@ -1174,5 +1175,43 @@ const ACTIONS = {
     upsertRows('Config', o => o.Key === 'CurrentSchoolYear', [{ Key: 'CurrentSchoolYear', Value: newYear }]);
     if (b.attendanceStartDate) upsertRows('Config', o => o.Key === 'AttendanceStartDate', [{ Key: 'AttendanceStartDate', Value: b.attendanceStartDate }]);
     return { status: 'ok', newYear };
-  }
+  },
+
+  saveStudentOrder: b => {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try {
+      let sh = ss().getSheetByName('Students');
+      const head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+      const idIdx = head.indexOf('IdNumber');
+      const orderIdx = head.indexOf('ListOrder');
+      
+      if (orderIdx < 0) {
+        sh.insertColumns(head.length + 1);
+        sh.getRange(1, head.length + 1).setValue('ListOrder');
+        bustCache(['Students']);
+        return ACTIONS.saveStudentOrder(b); // Retry after adding column
+      }
+      
+      const data = sh.getDataRange().getValues();
+      const orderMap = {};
+      (b.orderedIds || []).forEach((id, idx) => orderMap[normId(id)] = idx + 1);
+      
+      let changed = false;
+      for (let i = 1; i < data.length; i++) {
+        const id = normId(data[i][idIdx]);
+        if (orderMap[id] !== undefined) {
+          data[i][orderIdx] = orderMap[id];
+          changed = true;
+        }
+      }
+      
+      if (changed) {
+        sh.getRange(1, 1, data.length, data[0].length).setValues(data);
+        SpreadsheetApp.flush();
+        bustCache(['Students']);
+      }
+      return { status: 'ok' };
+    } finally { lock.releaseLock(); }
+  },
 };

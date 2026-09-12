@@ -18,7 +18,11 @@ let msg = q.get('login') === 'denied' ? 'Email chưa được cấp quyền dùn
   : (q.get('login') === 'error' ? q.get('msg') : '');
 if (msg) showLogin(msg);
 else {
-  try { await api('getUser'); location.replace('/'); }
+  try {
+    localStorage.clear();
+    await api('getUser'); 
+    location.replace('/'); 
+  }
   // 401 = chưa đăng nhập: trạng thái bình thường của trang login → gate sạch, không báo lỗi.
   catch (e) { showLogin(e.status === 401 ? '' : e.message); }
 }

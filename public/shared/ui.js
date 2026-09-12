@@ -61,7 +61,16 @@ export const teachersOf = grp => {
   return groupMembersMap.get(grp) || [];
 };
 
-export const activeStudents = cls => sortStudents(TSTUDENTS.filter(s => s.CurrentClass === cls && String(s.Status || 'Hoạt động').toLowerCase().trim() === 'hoạt động'));
+export function activeStudents(className) {
+  const targetClass = String(className || '').normalize('NFC').trim();
+  const filtered = TSTUDENTS.filter(s => 
+    String(s.CurrentClass || '').normalize('NFC').trim() === targetClass && 
+    String(s.Status || '').toLowerCase().trim() === 'hoạt động'
+  );
+  
+  // Force all pages to use the custom ListOrder sequence
+  return sortStudents(filtered);
+}
 
 const STATUS_MAP = {
   'Hiện diện': 'bg-emerald-100 text-emerald-700',

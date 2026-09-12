@@ -1,61 +1,83 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Thiếu nhi — Sổ Thiếu Nhi</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link rel="stylesheet" href="/shared/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Thiếu nhi — Sổ Thiếu Nhi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/shared/style.css">
 </head>
-<body class="bg-slate-100 min-h-screen"
-      data-title="👥 Quản Lý Thiếu nhi"
-      data-sub="Thêm / sửa thiếu nhi theo lớp — admin mọi lớp · Huynh trưởng lớp được phân công"
-      data-back="1"
-      data-role="any">
 
-<div id="shell"></div>
+<body class="bg-slate-100 min-h-screen" data-title="👥 Quản Lý Thiếu nhi"
+  data-sub="Thêm / sửa thiếu nhi theo lớp — admin mọi lớp · Huynh trưởng lớp được phân công" data-back="1"
+  data-role="any">
 
-<div class="max-w-7xl mx-auto px-4 pb-6">
-  <div class="bg-white rounded-xl shadow-sm p-5">
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
-      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
-        <select id="hs-lop" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
-      <div class="flex items-end"><button id="add-student" class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg">＋ Thêm Thiếu nhi</button></div>
-    </div>
-    <div class="tbl-scroll sticky">
-      <table class="w-full text-sm border-collapse">
-        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
-          <th class="p-3">Số CCCD</th><th class="p-3">Họ Và Tên</th><th class="p-3">Giới Tính</th><th class="p-3">Ngày Sinh</th><th class="p-3">Năm Nhập Học</th><th class="p-3">Trạng Thái</th><th class="p-3">Ghi Chú</th><th class="p-3 sticky-col">Thao Tác</th>
-        </tr></thead>
-        <tbody id="hs-tbody"></tbody>
-      </table>
-    </div>
-  </div>
-</div>
+  <div id="shell"></div>
 
-<div id="hs-modal" class="modal">
-  <div class="modal-content">
-    <h3 id="hs-m-title">Thêm Thiếu nhi</h3>
-    <div class="form-grid">
-      <div class="form-group full"><label>Họ Và Tên *</label><input id="m-fullname" type="text"></div>
-      <div class="form-group"><label>Số CCCD *</label><input id="m-cccd" type="text"></div>
-      <div class="form-group"><label>Tên Thánh</label><input id="m-saint" type="text"></div>
-      <div class="form-group"><label>Ngày Sinh</label><input id="m-dob" type="date"></div>
-      <div class="form-group"><label>Giới Tính</label><select id="m-gender"><option value="">—</option><option>Nữ</option><option>Nam</option></select></div>
-      <div class="form-group"><label>Lớp *</label><select id="m-class"></select></div>
-      <div class="form-group"><label>Năm Nhập Học</label><input id="m-enroll" type="text"></div>
-      <div class="form-group"><label>Trạng Thái</label><select id="m-status"><option>Hoạt động</option><option>Tốt nghiệp</option><option>Ngưng hoạt động</option></select></div>
-      <div class="form-group"><label>Cha</label><input id="m-father" type="text"></div>
-      <div class="form-group"><label>Mẹ</label><input id="m-mother" type="text"></div>
-      <div class="form-group full"><label>Ghi Chú</label><textarea id="m-note" rows="2"></textarea></div>
-    </div>
-    <div class="modal-actions">
-      <button type="button" class="btn-cancel">Hủy</button>
-      <button type="button" class="btn-save">Lưu</button>
+  <div class="max-w-7xl mx-auto px-4 pb-6">
+    <div class="bg-white rounded-xl shadow-sm p-5">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+        <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
+          <select id="hs-lop" class="w-full border p-2.5 rounded-lg font-semibold"></select>
+        </div>
+        <div class="flex items-end"><button id="add-student"
+            class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg">＋ Thêm Thiếu
+            nhi</button></div>
+      </div>
+      <div class="tbl-scroll sticky">
+        <table class="w-full text-sm border-collapse">
+          <thead>
+            <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+              <th class="p-3 w-8"></th>
+              <th class="p-3">Số CCCD</th>
+              <th class="p-3">Họ Và Tên</th>
+              <th class="p-3">Giới Tính</th>
+              <th class="p-3">Ngày Sinh</th>
+              <th class="p-3">Năm Nhập Học</th>
+              <th class="p-3">Trạng Thái</th>
+              <th class="p-3">Ghi Chú</th>
+              <th class="p-3 sticky-col">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="hs-tbody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
-</div>
 
-<script type="module" src="hocsinh.js"></script>
+  <div id="hs-modal" class="modal">
+    <div class="modal-content">
+      <h3 id="hs-m-title">Thêm Thiếu nhi</h3>
+      <div class="form-grid">
+        <div class="form-group full"><label>Họ Và Tên *</label><input id="m-fullname" type="text"></div>
+        <div class="form-group"><label>Số CCCD *</label><input id="m-cccd" type="text"></div>
+        <div class="form-group"><label>Tên Thánh</label><input id="m-saint" type="text"></div>
+        <div class="form-group"><label>Ngày Sinh</label><input id="m-dob" type="date"></div>
+        <div class="form-group"><label>Giới Tính</label><select id="m-gender">
+            <option value="">—</option>
+            <option>Nữ</option>
+            <option>Nam</option>
+          </select></div>
+        <div class="form-group"><label>Lớp *</label><select id="m-class"></select></div>
+        <div class="form-group"><label>Năm Nhập Học</label><input id="m-enroll" type="text"></div>
+        <div class="form-group"><label>Trạng Thái</label><select id="m-status">
+            <option>Hoạt động</option>
+            <option>Tốt nghiệp</option>
+            <option>Ngưng hoạt động</option>
+          </select></div>
+        <div class="form-group"><label>Cha</label><input id="m-father" type="text"></div>
+        <div class="form-group"><label>Mẹ</label><input id="m-mother" type="text"></div>
+        <div class="form-group full"><label>Ghi Chú</label><textarea id="m-note" rows="2"></textarea></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel">Hủy</button>
+        <button type="button" class="btn-save">Lưu</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="hocsinh.js"></script>
 </body>
+
 </html>

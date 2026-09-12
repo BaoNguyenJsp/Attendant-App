@@ -3,13 +3,17 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, setState, SESSIONS, TCLASSES, year, defaultWeek, normSunday, fillClasses, fillSessions, exportExcel } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, setState, SESSIONS, TCLASSES, TSTUDENTS, year, defaultWeek, normSunday, fillClasses, fillSessions, exportExcel, sortStudents } from '../shared/common.js';
 import { rankBadge } from '../shared/ui.js';
 
 await initCommon();
 
-const { classes } = await api('getClasses');
-setState({TCLASSES: classes || []});
+const [cl, st] = await Promise.all([
+  api('getClasses'),
+  api('getStudents')
+]);
+
+setState({ TCLASSES: cl.classes || [], TSTUDENTS: st.students || [] });
 fillClasses('dd-lop', 'tk-lop');
 fillSessions('dd-buoi');
 
@@ -72,7 +76,20 @@ async function renderDD() {
     note.textContent = '⚠ Tuần này là ngày nghỉ đã khai báo trong mục Quản trị.'; 
   } else note.style.display = 'none';
 
-  weekCache = r.recordsByStudent || [];
+  // Inject ListOrder and Gender from TSTUDENTS so sortStudents has the necessary data
+  const rawRecords = r.recordsByStudent || [];
+  const orderedList = sortStudents(rawRecords.map(x => {
+    const baseSt = TSTUDENTS.find(s => s.IdNumber === x.idNumber) || {};
+    return { 
+      ...x, 
+      CurrentClass: cls, 
+      IdNumber: x.idNumber,
+      ListOrder: baseSt.ListOrder,
+      Gender: baseSt.Gender
+    };
+  }));
+  
+  weekCache = orderedList.map(o => rawRecords.find(r => r.idNumber === o.idNumber) || o);
   currentSession = $('dd-buoi').value;
   renderSessionFromCache();
 }
@@ -167,13 +184,13 @@ function calcDD() {
 
 async function saveAttendance() {
   normSunday($('dd-week'));
-  syncStateToCache(); // Sync the active screen to cache before saving
+  syncStateToCache();
 
   const body = {
     schoolYear: year(), 
     weekOf: $('dd-week').value, 
     className: $('dd-lop').value,
-    records: weekCache // Send the entire week with all sessions
+    records: weekCache
   };
 
   try { 
@@ -227,7 +244,22 @@ async function renderTK() {
   let r;
   try { r = await api('getClassAttendanceStats', {schoolYear: year(), className: cls}); }
   catch (e) { return toast(e.message); }
-  const rows = r.stats || [], max = r.max || {}, maxTotal = r.maxTotal || 0;
+  
+  // Inject ListOrder and Gender from TSTUDENTS for Statistics Table sorting
+  const rawStats = r.stats || [];
+  const orderedList = sortStudents(rawStats.map(x => {
+    const baseSt = TSTUDENTS.find(s => s.IdNumber === x.idNumber) || {};
+    return { 
+      ...x, 
+      CurrentClass: cls, 
+      IdNumber: x.idNumber,
+      ListOrder: baseSt.ListOrder,
+      Gender: baseSt.Gender
+    };
+  }));
+  const rows = orderedList.map(o => rawStats.find(x => x.idNumber === o.idNumber) || o);
+
+  const max = r.max || {}, maxTotal = r.maxTotal || 0;
   $('tk-tbody').innerHTML = rows.length
     ? rows.map((x, i) => {
         const sum = SESSIONS.reduce((a, s) => a + (x.present[s] || 0), 0);
@@ -270,7 +302,6 @@ async function renderToanDoan() {
 $('dd-lop').addEventListener('change', async () => { tabCache['t-dd'] = false; await renderDD(); tabCache['t-dd'] = true; });
 $('dd-week').addEventListener('change', async () => { normSunday($('dd-week')); tabCache['t-dd'] = false; await renderDD(); tabCache['t-dd'] = true; });
 
-// SWITCH SESSION INSTANTLY (Syncs current screen, then loads new session without API call)
 $('dd-buoi').addEventListener('change', () => {
   syncStateToCache();
   currentSession = $('dd-buoi').value;
