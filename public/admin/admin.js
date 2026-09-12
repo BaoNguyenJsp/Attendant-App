@@ -8,9 +8,8 @@ import { groupBadge } from '../shared/ui.js';
 
 await initCommon();
 
-/* ---------- Corrected Tab Mapping ---------- */
 const tabCache = {
-  't-us': false,    // Default tab: Huynh trưởng
+  't-us': false,    // Huynh trưởng
   't-grp': false,   // Nhóm
   't-cls': false,   // Lớp
   't-hol': false,   // Nghỉ lễ
@@ -18,6 +17,7 @@ const tabCache = {
 };
 
 let ALL_USERS = [], ALL_MEMBERS = [], ALL_GROUPS = [], HOLIDAYS = [];
+let CONFIG = {};
 
 async function switchTab(tabId) {
   document.querySelectorAll('[data-pane]').forEach(pane => pane.style.display = 'none');
@@ -41,7 +41,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
 });
 
-/* ---------- 1. Quản lý Huynh Trưởng ---------- */
+/* ---------- 0. Load Data ---------- */
 async function loadTeacherData() {
   let r;
   try { r = await api('getTeachers'); }
@@ -51,6 +51,14 @@ async function loadTeacherData() {
   ALL_GROUPS = r.groups || [];
 }
 
+async function loadConfig() {
+  try {
+    const r = await api('getConfig');
+    CONFIG = r.config || {};
+  } catch (e) { toast(e.message); }
+}
+
+/* ---------- 1. Quản lý Huynh Trưởng ---------- */
 async function renderUsers() {
   if (!ALL_USERS.length) await loadTeacherData();
   const q = ($('us-q') ? $('us-q').value : '').trim().toLowerCase();
@@ -74,7 +82,16 @@ async function renderUsers() {
     ? filtered.map(u => {
         const uEmail = String(u.Email || '').toLowerCase();
         const gs = memberGroupsMap.get(uEmail) || [];
-        const badges = gs.map(g => groupBadge(g)).join(' ') || '<span class="text-slate-400">—</span>';
+        
+        // Render Group Name inside the badge (with colors based on Type)
+        const badges = gs.map(g => {
+          const cls = g.Type === 'Quản trị' ? 'bg-red-100 text-red-800' :
+                      g.Type === 'Ngành' ? 'bg-green-100 text-green-800' :
+                      g.Type === 'Quản trị ngành' ? 'bg-purple-100 text-purple-800' :
+                      'bg-blue-100 text-blue-800'; // Default is Lớp
+          return `<span class="inline-block px-2 py-0.5 mb-1 mr-1 rounded-full text-[11px] font-bold whitespace-nowrap ${cls}">${esc(g.GroupName)}</span>`;
+        }).join('') || '<span class="text-slate-400">—</span>';
+
         return '<tr>' +
           '<td class="p-2 border text-center">' + esc(u.Id || '—') + '</td>' +
           '<td class="p-2 border text-xs">' + esc(u.Email) + '</td>' +
@@ -86,6 +103,99 @@ async function renderUsers() {
         '</tr>';
       }).join('')
     : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Không tìm thấy Huynh trưởng khớp yêu cầu.</td></tr>';
+}
+
+function openUsModal(emailRaw) {
+  const targetEmail = String(emailRaw || '').trim().toLowerCase();
+  const u = targetEmail ? ALL_USERS.find(x => String(x.Email).trim().toLowerCase() === targetEmail) : null;
+  
+  if ($('us-m-email')) {
+    $('us-m-email').value = u ? u.Email : '';
+    $('us-m-email').readOnly = !!u; // Khóa email nếu là cập nhật
+    $('us-m-email').style.backgroundColor = u ? '#f1f5f9' : ''; 
+  }
+  
+  if ($('us-m-saint')) $('us-m-saint').value = u ? (u.SaintName || '') : '';
+  if ($('us-m-full')) $('us-m-full').value = u ? (u.FullName || '') : '';
+  if ($('us-m-sdt')) $('us-m-sdt').value = u ? (u.SDT || '') : '';
+  if ($('us-m-status')) $('us-m-status').value = u ? (u.Status || 'Hoạt động') : 'Hoạt động';
+
+  let userGroups = [];
+  if (u) {
+    userGroups = ALL_MEMBERS
+      .filter(m => String(m.Email).trim().toLowerCase() === String(u.Email).trim().toLowerCase())
+      .map(m => m.GroupName);
+  }
+  
+  let grpEl = $('us-m-groups');
+  if (grpEl) {
+    if (grpEl.tagName === 'INPUT') {
+      const div = document.createElement('div');
+      div.id = 'us-m-groups';
+      div.className = 'flex flex-col gap-2 p-3 border border-slate-300 rounded-lg max-h-40 overflow-y-auto bg-slate-50';
+      grpEl.parentNode.replaceChild(div, grpEl);
+      grpEl = div;
+    }
+    
+    grpEl.innerHTML = ALL_GROUPS.map(g => 
+      `<label class="flex items-center gap-2 cursor-pointer">
+         <input type="checkbox" value="${esc(g.GroupName)}" ${userGroups.includes(g.GroupName) ? 'checked' : ''} class="w-4 h-4"> 
+         <span class="text-sm font-medium">${esc(g.GroupName)}</span>
+       </label>`
+    ).join('');
+  }
+
+  if ($('us-modal')) $('us-modal').classList.add('open');
+}
+
+const usModal = $('us-modal');
+if (usModal) {
+  usModal.querySelector('.btn-cancel').addEventListener('click', () => usModal.classList.remove('open'));
+  usModal.querySelector('.btn-save').addEventListener('click', async () => {
+    const email = $('us-m-email') ? $('us-m-email').value.trim() : '';
+    if (!email) return toast('Vui lòng nhập Email.');
+    
+    const groups = $('us-m-groups') ? Array.from($('us-m-groups').querySelectorAll('input:checked')).map(cb => cb.value) : [];
+    
+    try {
+      await api('saveUser', {
+        user: { 
+          email: email, 
+          saintName: $('us-m-saint') ? $('us-m-saint').value.trim() : '', 
+          fullName: $('us-m-full') ? $('us-m-full').value.trim() : '', 
+          sdt: $('us-m-sdt') ? $('us-m-sdt').value.trim() : '', 
+          status: $('us-m-status') ? $('us-m-status').value : 'Hoạt động' 
+        }
+      });
+      await api('saveGroupMembers', { assignments: [{ email, groups }] });
+      toast('Đã lưu thông tin Huynh trưởng.');
+      usModal.classList.remove('open');
+      
+      // BẮT BUỘC TẢI LẠI DỮ LIỆU ĐỂ CẬP NHẬT BADGE LÊN UI
+      await loadTeacherData();
+
+      tabCache['t-us'] = false;
+      await renderUsers();
+      tabCache['t-us'] = true;
+    } catch (e) { toast(e.message); }
+  });
+}
+
+const usTbody = $('us-tbody');
+if (usTbody) {
+  usTbody.addEventListener('click', e => {
+    const btn = e.target.closest('.us-edit');
+    if (btn) openUsModal(btn.dataset.email);
+  });
+}
+
+const btnUsAdd = $('us-add');
+if (btnUsAdd) {
+  btnUsAdd.addEventListener('click', () => openUsModal('')); // Thêm mới
+}
+
+if ($('us-q')) {
+  $('us-q').addEventListener('input', () => renderUsers());
 }
 
 /* ---------- 2. Quản lý Nhóm ---------- */
@@ -135,11 +245,20 @@ async function renderClasses() {
 
 /* ---------- 4. Quản lý Nghỉ Lễ ---------- */
 async function renderHolidays() {
+  if (!Object.keys(CONFIG).length) await loadConfig();
+
+  const holWeekInput = $('hol-week');
+  if (holWeekInput) {
+    if (!holWeekInput.value) holWeekInput.value = defaultWeek();
+    
+    // Đảm bảo không cho phép chọn ngày trước AttendanceStartDate
+    if (CONFIG.AttendanceStartDate) {
+      holWeekInput.setAttribute('min', CONFIG.AttendanceStartDate);
+    }
+  }
+
   if ($('hol-session') && !$('hol-session').children.length) {
     fillSel('hol-session', [{v:'', t:'Cả tuần'}].concat(SESSIONS.map(s => ({v:s}))));
-  }
-  if ($('hol-week') && !$('hol-week').value) {
-    $('hol-week').value = defaultWeek();
   }
 
   let r;
@@ -170,11 +289,6 @@ async function saveHolidayList() {
   } catch (e) { toast(e.message); }
 }
 
-/* ---------- Events ---------- */
-if ($('us-q')) {
-  $('us-q').addEventListener('input', () => renderUsers());
-}
-
 if ($('hol-week')) {
   $('hol-week').addEventListener('change', () => normSunday($('hol-week')));
 }
@@ -184,6 +298,12 @@ if (btnHolAdd) {
   btnHolAdd.addEventListener('click', async () => {
     const weekOf = $('hol-week').value;
     if (!weekOf) return toast('Chọn ngày Chủ Nhật nghỉ lễ.');
+    
+    // Chặn người dùng gửi form nếu ngày vi phạm AttendanceStartDate
+    if (CONFIG.AttendanceStartDate && weekOf < CONFIG.AttendanceStartDate) {
+      return toast('Ngày nghỉ lễ không được trước ngày khai giảng (' + CONFIG.AttendanceStartDate + ').');
+    }
+
     HOLIDAYS.push({
       weekOf: weekOf,
       session: $('hol-session').value,
@@ -204,7 +324,7 @@ if (holTbody) {
   });
 }
 
-/* Modal Chuyển Năm */
+/* ---------- 5. Chuyển Năm Học ---------- */
 const btnYearOpen = $('year-open');
 if (btnYearOpen) {
   btnYearOpen.addEventListener('click', () => {
