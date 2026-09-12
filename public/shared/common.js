@@ -176,8 +176,8 @@ function setStoredCache(action, data) {
   }
 }
 
-/* ---------- Enhanced API Dispatcher ---------- */
-export async function api(action, body) {
+/* ---------- Enhanced API Dispatcher with Auto-Retry Interceptor ---------- */
+export async function api(action, body, retries = 3, delayMs = 1500) {
   const isCacheable = CACHEABLE_ACTIONS.has(action) && (!body || Object.keys(body).length === 0);
 
   if (isCacheable) {
@@ -193,34 +193,53 @@ export async function api(action, body) {
 
   pendingApi++;
   showLoading();
+  
   try {
-    let r;
-    try { 
-      r = await fetch('/api/' + action, {
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        credentials: 'same-origin', 
-        body: JSON.stringify(body || {})
-      }); 
-    } catch (e) { 
-      throw new Error('Mất kết nối máy chủ.'); 
+    let lastError = null;
+
+    // Retry Loop Interceptor
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try { 
+        const r = await fetch('/api/' + action, {
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' }, 
+          credentials: 'same-origin', 
+          body: JSON.stringify(body || {})
+        }); 
+        
+        let j;
+        try { 
+          j = await r.json(); 
+        } catch (e) { 
+          throw new Error('Máy chủ trả về lỗi (HTTP ' + r.status + ').'); 
+        }
+        
+        if (!r.ok || j.status === 'error') { 
+          const e = new Error(j.message || 'Lỗi máy chủ'); 
+          e.status = r.status; 
+          throw e; 
+        }
+        
+        if (isCacheable) {
+          setStoredCache(action, j);
+        }
+
+        return j; // Success! Return data immediately and break the loop.
+
+      } catch (e) { 
+        lastError = e;
+        
+        // If this is not the last attempt, wait and retry
+        if (attempt < retries) {
+          console.warn(`[API] '${action}' failed (Attempt ${attempt}/${retries}). Retrying in ${delayMs}ms... Error: ${e.message}`);
+          await new Promise(resolve => setTimeout(resolve, delayMs)); // Wait before retrying
+        }
+      }
     }
 
-    let j;
-    try { j = await r.json(); }
-    catch (e) { throw new Error('Máy chủ trả về lỗi (HTTP ' + r.status + '). Vui lòng thử lại.'); }
+    // If loop finishes and all retries failed, throw the final error to the UI
+    throw lastError || new Error('Mất kết nối máy chủ.'); 
     
-    if (!r.ok || j.status === 'error') { 
-      const e = new Error(j.message || 'Lỗi máy chủ'); 
-      e.status = r.status; 
-      throw e; 
-    }
-    
-    if (isCacheable) {
-      setStoredCache(action, j);
-    }
-
-    return j;
   } finally {
     pendingApi--;
     hideLoading();

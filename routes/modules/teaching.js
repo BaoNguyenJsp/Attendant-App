@@ -11,5 +11,6 @@ module.exports = {
       proxy('saveTeaching')(req, res, next);
     });
     app.post('/api/uploadFile', authz.requireScopeWrite, proxy('uploadFile'));
+    app.post('/api/getUploadUrl', proxy('getUploadUrl'));
   },
 };

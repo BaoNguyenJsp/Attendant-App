@@ -194,14 +194,11 @@ function cachedRead(name) {
 
 function bustCache(names) { 
   const cache = CacheService.getScriptCache();
-  
   if (!names || names.length === 0) {
-    // Dynamically get all sheet names (including dynamic Att_ tabs) and wipe their cache
     const sheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
     const allKeys = sheets.map(sh => 'tab_' + sh.getName() + '_n');
     cache.removeAll(allKeys);
   } else {
-    // Wipe only specific requested tabs
     cache.removeAll(names.map(n => 'tab_' + n + '_n')); 
   }
 }
@@ -248,11 +245,9 @@ function upsertRows(name, predicate, newRows) {
   } finally { lock.releaseLock(); }
 }
 
-/* HIGH-PERFORMANCE SCORES UPSERT */
 function saveScoresOptimized(b) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
-  
   try {
     const sh = ss().getSheetByName('Scores');
     const values = sh.getDataRange().getValues();
@@ -269,21 +264,14 @@ function saveScoresOptimized(b) {
     for (let r = 1; r < values.length; r++) {
       const row = values[r];
       const isTarget = String(row[syIdx]).trim() === targetSY && normText(row[clsIdx]) === targetCls;
-      if (!isTarget && String(row[0]) !== '') {
-        keptRows.push(row);
-      }
+      if (!isTarget && String(row[0]) !== '') keptRows.push(row);
     }
 
     const newStudents = b.students || [];
     newStudents.forEach(s => {
       const rowMap = {
-        SchoolYear: b.schoolYear,
-        IdNumber: s.idNumber,
-        ClassName: b.className,
-        Quiz15_S1: s.quiz15s1 || '',
-        Exam_S1: s.exams1 || '',
-        Quiz15_S2: s.quiz15s2 || '',
-        Exam_S2: s.exams2 || ''
+        SchoolYear: b.schoolYear, IdNumber: s.idNumber, ClassName: b.className,
+        Quiz15_S1: s.quiz15s1 || '', Exam_S1: s.exams1 || '', Quiz15_S2: s.quiz15s2 || '', Exam_S2: s.exams2 || ''
       };
       keptRows.push(head.map(h => rowMap[h] !== undefined ? rowMap[h] : ''));
     });
@@ -294,9 +282,7 @@ function saveScoresOptimized(b) {
     SpreadsheetApp.flush();
     bustCache(['Scores']);
     return { status: 'ok', students: newStudents };
-  } finally {
-    lock.releaseLock();
-  }
+  } finally { lock.releaseLock(); }
 }
 
 function driveFileIds(urls) {
@@ -309,15 +295,55 @@ function driveFileIds(urls) {
 }
 
 const sanitize = s => String(s || '').replace(/[\\/:*?"<>|]/g, '_').trim();
+
+function getOrCreateSubFolder(parentFolder, folderName) {
+  if (!folderName) return parentFolder;
+  const it = parentFolder.getFoldersByName(folderName);
+  if (it.hasNext()) return it.next();
+  return parentFolder.createFolder(folderName);
+}
+
 function teachFolder(year, weekOf, className, role) {
-  const root = config().DriveFolderId ? DriveApp.getFolderById(config().DriveFolderId) : DriveApp.getRootFolder();
-  const name = sanitize([year, weekOf, className, role].filter(Boolean).join('_')) || '_uploads';
-  const ps = PropertiesService.getScriptProperties(), key = 'tf_' + name, id = ps.getProperty(key);
-  if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
-  const it = root.getFoldersByName(name);
-  const f = it.hasNext() ? it.next() : root.createFolder(name);
-  ps.setProperty(key, f.getId());
-  return f;
+  const rootId = config().DriveFolderId;
+  const root = rootId ? DriveApp.getFolderById(rootId) : DriveApp.getRootFolder();
+  
+  const yName = sanitize(year);
+  const cName = sanitize(className);
+  const wName = sanitize(weekOf);
+  const rName = sanitize(role);
+  
+  if (!yName || !cName || !wName || !rName) return root;
+
+  const finalKey = 'tfolder_' + [yName, cName, wName, rName].join('_');
+  const ps = PropertiesService.getScriptProperties();
+  
+  // 1. Fast check (No lock needed if folder is already cached from previous days)
+  const cachedId = ps.getProperty(finalKey);
+  if (cachedId) { try { return DriveApp.getFolderById(cachedId); } catch (e) {} }
+  
+  // 2. Concurrency Lock: Force simultaneous 3-file uploads into a queue
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000); // Wait up to 15 seconds for other concurrent uploads to finish folder creation
+  
+  try {
+    // 3. Double-check cache inside the lock (in case another thread just created it 1 second ago)
+    const cachedIdAfterLock = ps.getProperty(finalKey);
+    if (cachedIdAfterLock) { try { return DriveApp.getFolderById(cachedIdAfterLock); } catch (e) {} }
+
+    // 4. Create paths safely
+    let cur = root;
+    cur = getOrCreateSubFolder(cur, yName);
+    cur = getOrCreateSubFolder(cur, cName);
+    cur = getOrCreateSubFolder(cur, wName);
+    cur = getOrCreateSubFolder(cur, rName);
+    
+    // Save to cache for future lookups
+    ps.setProperty(finalKey, cur.getId());
+    return cur;
+  } finally {
+    // Release the queue so the next file can proceed
+    lock.releaseLock();
+  }
 }
 
 let __memoConfig = null;
@@ -604,11 +630,9 @@ const ACTIONS = {
 
       const data = sh.getDataRange().getValues();
       let modified = false;
-
       const incomingMap = {};
       (b.records || []).forEach(r => incomingMap[normId(r.idNumber)] = r);
 
-      // Update existing rows
       for (let i = 1; i < data.length; i++) {
         const rowWk = data[i][1] instanceof Date ? fmtDate(data[i][1]) : String(data[i][1]).trim();
         if (rowWk === weekOf) {
@@ -631,14 +655,12 @@ const ACTIONS = {
         }
       }
 
-      // Append new students for this week
       const activeList = activeStudents(cls);
       activeList.forEach(st => {
         const stId = normId(st.IdNumber);
         if (incomingMap[stId]) {
           const studentData = incomingMap[stId];
           const newRow = [year, weekOf, st.IdNumber, cls, '', '', '', '', '', '', '', ''];
-          
           SESSIONS.forEach(sess => {
             const colInfo = SESSION_COL_MAP[sess];
             if (colInfo && studentData.sessions && studentData.sessions[sess]) {
@@ -649,7 +671,6 @@ const ACTIONS = {
               newRow[colInfo.nIdx] = rec.note || '';
             }
           });
-          
           data.push(newRow);
           modified = true;
         }
@@ -659,13 +680,10 @@ const ACTIONS = {
         sh.clearContents();
         sh.getRange(1, 1, data.length, data[0].length).setValues(data);
       }
-
       SpreadsheetApp.flush();
       bustCache([sheetName]);
       return { status: 'ok' };
-    } finally {
-      lock.releaseLock();
-    }
+    } finally { lock.releaseLock(); }
   },
 
   getClassAttendanceStats: b => {
@@ -865,9 +883,7 @@ const ACTIONS = {
       SpreadsheetApp.flush();
       bustCache(['TeacherAttendance']);
       return { status: 'ok' };
-    } finally {
-      lock.releaseLock();
-    }
+    } finally { lock.releaseLock(); }
   },
 
   getTeacherStats: b => {
@@ -990,31 +1006,31 @@ const ACTIONS = {
     return { status: 'ok', record: row };
   },
 
-  testDrive: () => {
-    const r = { folderId: config().DriveFolderId || '' };
-    try { r.rootName = DriveApp.getRootFolder().getName(); } catch (e) { r.rootError = String(e); }
-    if (r.folderId) {
-      try { r.folderName = DriveApp.getFolderById(r.folderId).getName(); } catch (e) { r.folderError = String(e); }
-    }
-    try {
-      const folder = r.folderId ? DriveApp.getFolderById(r.folderId) : DriveApp.getRootFolder();
-      const file = folder.createFile('_test_sharing', 'x', MimeType.PLAIN_TEXT);
-      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      r.shareUrl = file.getUrl();
-      file.setTrashed(true);
-      r.shareOk = true;
-    } catch (e) { r.shareError = String(e); }
-    return { status: 'ok', ...r };
+  // Generate Direct Google Drive Upload URL for Large Files (>10MB limits)
+  getUploadUrl: b => {
+    const folder = teachFolder(b.schoolYear, b.weekOf, b.className, b.kind === 'TBM' ? 'TBM' : 'GLV');
+    const url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable';
+    const payload = { name: b.filename, parents: [folder.getId()] };
+    const headers = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
+    if (b.origin) headers['Origin'] = b.origin;
+
+    const res = UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      headers: headers,
+      muteHttpExceptions: true
+    });
+
+    if (res.getResponseCode() !== 200) return { status: 'error', message: res.getContentText() };
+    const hdrs = res.getHeaders();
+    return { status: 'ok', uploadUrl: hdrs['Location'] || hdrs['location'] };
   },
 
+  // Fallback for smaller files <= 8MB
   uploadFile: b => {
     const blob = Utilities.newBlob(Utilities.base64Decode(b.base64), b.mimeType, b.filename);
-    let folder;
-    if (b.schoolYear && b.weekOf && b.className) {
-      folder = teachFolder(b.schoolYear, b.weekOf, b.className, b.kind === 'TBM' ? 'TBM' : 'GLV');
-    } else {
-      folder = config().DriveFolderId ? DriveApp.getFolderById(config().DriveFolderId) : DriveApp.getRootFolder();
-    }
+    const folder = teachFolder(b.schoolYear, b.weekOf, b.className, b.kind === 'TBM' ? 'TBM' : 'GLV');
     const same = folder.getFilesByName(b.filename);
     while (same.hasNext()) same.next().setTrashed(true);
     const file = folder.createFile(blob);

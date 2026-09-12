@@ -12,6 +12,7 @@ let editingClass = null, editingRec = null, TEACHING_BY_CLASS = {};
 let planKeep = [], planAdd = [], revKeep = [], revAdd = [];
 const FPLAN = 'GLV', FTBM = 'TBM';
 const HIST_PAGE = 8; let histPage = 1;
+let isSaving = false;
 
 const sectionCache = {
   freqLoaded: false,
@@ -40,7 +41,13 @@ const glvLabel = em => {
 
 /* ---------- Cards (Active Week Only) ---------- */
 async function renderCards() {
-  if (!$('gd-week').value) $('gd-week').value = defaultWeek();
+  if (!$('gd-week').value) {
+    const d = new Date();
+    d.setDate(d.getDate() + (d.getDay() === 0 ? 0 : 7 - d.getDay()));
+    const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+    $('gd-week').value = `${y}-${m}-${day}`;
+  }
+  
   normSunday($('gd-week'));
   
   const wk = $('gd-week').value;
@@ -71,7 +78,7 @@ async function renderCards() {
   }).join('');
 }
 
-/* ---------- Frequency (Lazy Loaded) ---------- */
+/* ---------- Frequency ---------- */
 async function renderFreq(force = false) {
   if (sectionCache.freqLoaded && !force) return;
   let recs = [];
@@ -86,7 +93,7 @@ async function renderFreq(force = false) {
   sectionCache.freqLoaded = true;
 }
 
-/* ---------- History (Server Paginated - Lazy Loaded) ---------- */
+/* ---------- History ---------- */
 async function renderHist(force = false) {
   if (sectionCache.histLoaded && !force) return;
   const cls = $('gd-cls').value;
@@ -119,7 +126,7 @@ function renderPager(total, page) {
     '</span>';
 }
 
-/* ---------- Modals ---------- */
+/* ---------- Modals & Files ---------- */
 const splitUrls = s => String(s || '').split(',').map(x => x.trim()).filter(x => /^https?:\/\//i.test(x));
 const splitNames = s => String(s || '').split('\n');
 const linkList = (urls, names) => {
@@ -145,7 +152,7 @@ const chip = (inner, list, grp, i) => '<div class="file-chip">' + inner +
   '<button type="button" class="chip-rm" data-list="' + list + '" data-grp="' + grp + '" data-i="' + i + '" title="Gỡ bỏ">✕</button></div>';
 
 function renderLists() {
-  const addChip = (f, list, i) => chip('<span class="chip-name">📎 ' + esc(f.name) + '</span>', list, 'add', i);
+  const addChip = (f, list, i) => chip('<span class="chip-name">⏳ ' + esc(f.name) + '</span>', list, 'add', i);
   $('plan-list').innerHTML = planKeep.map((k, i) => chip(fileLink(k.url, k.name, false), FPLAN, 'keep', i)).join('') +
     planAdd.map((f, i) => addChip(f, FPLAN, i)).join('');
   $('rev-list').innerHTML = revKeep.map((k, i) => chip(fileLink(k.url, k.name, true), FTBM, 'keep', i)).join('') +
@@ -161,31 +168,84 @@ function addFiles(input, kind) {
   });
 }
 
-function readFile(file) {
-  return new Promise((res, rej) => {
-    const rd = new FileReader();
-    rd.onload = () => res({base64: String(rd.result).split(',')[1]});
-    rd.onerror = () => rej(new Error('Đọc file thất bại.'));
-    rd.readAsDataURL(file);
+/* Direct-to-Drive Upload for ALL files */
+async function uploadFileDirect(f, wk, cls, kind) {
+  const r = await api('getUploadUrl', { 
+    schoolYear: year(), 
+    weekOf: wk, 
+    className: cls, 
+    kind, 
+    filename: f.name,
+    origin: window.location.origin 
   });
+  if (r.status !== 'ok') throw new Error(r.message);
+  
+  const res = await fetch(r.uploadUrl, {
+    method: 'PUT',
+    mode: 'cors',
+    headers: { 'Content-Type': f.type || 'application/octet-stream' },
+    body: f
+  });
+  
+  if (!res.ok) throw new Error('Upload trực tiếp thất bại');
+  const data = await res.json();
+  return 'https://drive.google.com/file/d/' + data.id + '/view';
+}
+
+/* Batched Concurrent Uploader */
+async function uploadBatched(list, keepList, kind, wk, cls, batchSize = 3) {
+  let failedCount = 0;
+  const filesToUpload = [...list]; 
+  
+  for (let i = 0; i < filesToUpload.length; i += batchSize) {
+    const chunk = filesToUpload.slice(i, i + batchSize);
+    
+    await Promise.all(chunk.map(async f => {
+      try {
+        const driveUrl = await uploadFileDirect(f, wk, cls, kind);
+        
+        const idx = list.indexOf(f);
+        if (idx > -1) list.splice(idx, 1);
+        
+        keepList.push({ url: driveUrl, name: f.name });
+        renderLists();
+      } catch (e) {
+        failedCount++;
+      }
+    }));
+  }
+  
+  if (failedCount > 0) {
+    throw new Error(`Có ${failedCount} file tải lên thất bại. Vui lòng thử bấm lưu lại để tải tiếp.`);
+  }
 }
 
 async function saveTeaching() {
+  if (isSaving) return;
+  
   const lesson = $('gd-lesson').value.trim();
   if (!lesson && !editingRec) return toast('Nhập nội dung bài học trước khi lưu.');
+  
   const wk = $('gd-week').value;
-  const upload = (list, kind) => Promise.all(list.map(f => readFile(f).then(({base64}) =>
-    api('uploadFile', {schoolYear: year(), weekOf: wk, className: editingClass, kind, base64, mimeType: f.type || 'application/octet-stream', filename: f.name})
-      .then(r => r.url))));
-  const body = {
-    schoolYear: year(), weekOf: wk, className: editingClass, lessonContent: lesson
-  };
+  const btn = document.querySelector('.btn-save');
+  const ogText = btn.textContent;
+  
+  isSaving = true;
+  btn.disabled = true;
+  btn.textContent = '⏳ Đang xử lý...';
+
   try {
-    const [up, ur] = await Promise.all([upload(planAdd, FPLAN), upload(revAdd, FTBM)]);
-    body.lessonPlanUrl = planKeep.map(k => k.url).concat(up).join(',');
-    body.lessonPlanNames = planKeep.map(k => k.name).concat(planAdd.map(f => f.name)).join('\n');
-    body.revisedPlanUrl = revKeep.map(k => k.url).concat(ur).join(',');
-    body.revisedPlanNames = revKeep.map(k => k.name).concat(revAdd.map(f => f.name)).join('\n');
+    await uploadBatched(planAdd, planKeep, FPLAN, wk, editingClass, 3);
+    await uploadBatched(revAdd, revKeep, FTBM, wk, editingClass, 3);
+
+    const body = {
+      schoolYear: year(), weekOf: wk, className: editingClass, lessonContent: lesson,
+      lessonPlanUrl: planKeep.map(k => k.url).join(','),
+      lessonPlanNames: planKeep.map(k => k.name).join('\n'),
+      revisedPlanUrl: revKeep.map(k => k.url).join(','),
+      revisedPlanNames: revKeep.map(k => k.name).join('\n')
+    };
+
     await api('saveTeaching', body);
     $('gd-modal').classList.remove('open');
     toast('Đã lưu giáo án.');
@@ -194,7 +254,13 @@ async function saveTeaching() {
     sectionCache.histLoaded = false;
 
     await renderCards();
-  } catch (e) { toast(e.message); }
+  } catch (e) { 
+    toast(e.message); 
+  } finally {
+    isSaving = false;
+    btn.disabled = false;
+    btn.textContent = ogText;
+  }
 }
 
 /* ---------- Boot ---------- */
@@ -203,6 +269,7 @@ setState({TCLASSES: cl.classes || [], USERS_ROWS: te.users || [], GROUP_MEMBERS:
 
 const gdModal = $('gd-modal');
 gdModal.addEventListener('click', e => {
+  if (isSaving) return;
   if (e.target === gdModal) return gdModal.classList.remove('open');
   const rm = e.target.closest('.chip-rm');
   if (rm) {
@@ -213,7 +280,7 @@ gdModal.addEventListener('click', e => {
     renderLists();
   }
 });
-gdModal.querySelector('.btn-cancel').addEventListener('click', () => gdModal.classList.remove('open'));
+gdModal.querySelector('.btn-cancel').addEventListener('click', () => { if (!isSaving) gdModal.classList.remove('open'); });
 gdModal.querySelector('.btn-save').addEventListener('click', () => saveTeaching());
 addFiles($('f-plan'), FPLAN);
 addFiles($('f-rev'), FTBM);
