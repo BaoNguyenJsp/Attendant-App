@@ -8,7 +8,8 @@ const TAB_HEADERS = {
   Groups:            ['GroupName', 'Type', 'Scope', 'Description'],
   GroupMembers:      ['GroupName', 'Email'],
   Classes:           ['ClassName', 'Grade'],
-Students: ['IdNumber', 'SaintName', 'FullName', 'DateOfBirth', 'Gender', 'Father', 'Mother', 'CurrentClass', 'EnrollYear', 'Status', 'Note', 'ListOrder'],  Teaching:          ['SchoolYear', 'WeekOf', 'ClassName', 'TeacherEmail', 'LessonContent', 'LessonPlanUrl', 'LessonPlanNames', 'RevisedPlanUrl', 'RevisedPlanNames', 'UpdatedBy'],
+  Students:          ['IdNumber', 'SaintName', 'FullName', 'DateOfBirth', 'Gender', 'Father', 'Mother', 'CurrentClass', 'EnrollYear', 'Status', 'Note', 'ListOrder'],
+  Teaching:          ['SchoolYear', 'WeekOf', 'ClassName', 'TeacherEmail', 'LessonContent', 'LessonPlanUrl', 'LessonPlanNames', 'RevisedPlanUrl', 'RevisedPlanNames', 'UpdatedBy'],
   Scores:            ['SchoolYear', 'IdNumber', 'ClassName', 'Quiz15_S1', 'Exam_S1', 'Quiz15_S2', 'Exam_S2'],
   Config:            ['Key', 'Value'],
   Holidays:          ['SchoolYear', 'WeekOf', 'Session', 'Reason'],
@@ -215,9 +216,11 @@ function appendRows(name, rows) {
       const v = r[h] !== undefined ? r[h] : '';
       return typeof v === 'string' && v.startsWith('=') ? "'" + v : v;
     })));
+  SpreadsheetApp.flush();
   bustCache([name]);
 }
 
+/* FIXED: Automatically flush spreadsheet changes and bustCache inside upsertRows */
 function upsertRows(name, predicate, newRows) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -241,6 +244,10 @@ function upsertRows(name, predicate, newRows) {
       const payload = newRows.map(r => head.map(h => r[h] !== undefined ? r[h] : ''));
       sh.getRange(sh.getLastRow() + 1, 1, payload.length, head.length).setValues(payload);
     }
+    
+    // BẮT BUỘC BUST CACHE ĐỂ KHÔNG BỊ TRẢ VỀ DỮ LIỆU CŨ
+    SpreadsheetApp.flush();
+    bustCache([name]);
   } finally { lock.releaseLock(); }
 }
 
@@ -316,31 +323,25 @@ function teachFolder(year, weekOf, className, role) {
   const finalKey = 'tfolder_' + [yName, cName, wName, rName].join('_');
   const ps = PropertiesService.getScriptProperties();
   
-  // 1. Fast check (No lock needed if folder is already cached from previous days)
   const cachedId = ps.getProperty(finalKey);
   if (cachedId) { try { return DriveApp.getFolderById(cachedId); } catch (e) {} }
   
-  // 2. Concurrency Lock: Force simultaneous 3-file uploads into a queue
   const lock = LockService.getScriptLock();
-  lock.waitLock(15000); // Wait up to 15 seconds for other concurrent uploads to finish folder creation
+  lock.waitLock(15000);
   
   try {
-    // 3. Double-check cache inside the lock (in case another thread just created it 1 second ago)
     const cachedIdAfterLock = ps.getProperty(finalKey);
     if (cachedIdAfterLock) { try { return DriveApp.getFolderById(cachedIdAfterLock); } catch (e) {} }
 
-    // 4. Create paths safely
     let cur = root;
     cur = getOrCreateSubFolder(cur, yName);
     cur = getOrCreateSubFolder(cur, cName);
     cur = getOrCreateSubFolder(cur, wName);
     cur = getOrCreateSubFolder(cur, rName);
     
-    // Save to cache for future lookups
     ps.setProperty(finalKey, cur.getId());
     return cur;
   } finally {
-    // Release the queue so the next file can proceed
     lock.releaseLock();
   }
 }
@@ -591,7 +592,7 @@ const ACTIONS = {
         const row = data[i];
         const rowWk = row[1] instanceof Date ? fmtDate(row[1]) : String(row[1]).trim();
         if (rowWk === weekOf) {
-          const id = normId(row[2]); // IdNumber
+          const id = normId(row[2]);
           recs[id] = {
             'Lễ Chúa Nhật':   { status: row[4] || '', note: row[5] || '' },
             'Học Giáo Lý':     { status: row[6] || '', note: row[7] || '' },
@@ -1007,7 +1008,6 @@ const ACTIONS = {
     return { status: 'ok', record: row };
   },
 
-  // Generate Direct Google Drive Upload URL for Large Files (>10MB limits)
   getUploadUrl: b => {
     const folder = teachFolder(b.schoolYear, b.weekOf, b.className, b.kind === 'TBM' ? 'TBM' : 'GLV');
     const url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable';
@@ -1028,7 +1028,6 @@ const ACTIONS = {
     return { status: 'ok', uploadUrl: hdrs['Location'] || hdrs['location'] };
   },
 
-  // Fallback for smaller files <= 8MB
   uploadFile: b => {
     const blob = Utilities.newBlob(Utilities.base64Decode(b.base64), b.mimeType, b.filename);
     const folder = teachFolder(b.schoolYear, b.weekOf, b.className, b.kind === 'TBM' ? 'TBM' : 'GLV');
@@ -1058,7 +1057,6 @@ const ACTIONS = {
     const st = cachedRead('Students').find(s => normId(s.IdNumber) === id);
     if (!st) return { status: 'error', message: 'Không tìm thấy Thiếu nhi với CCCD này.' };
 
-    // 1. Get History (past years) from AcademicYear tab
     const history = cachedRead('AcademicYear')
       .filter(r => normId(r.IdNumber) === id)
       .map(r => ({
@@ -1071,11 +1069,9 @@ const ACTIONS = {
         Status: r.Status
       }));
 
-    // 2. Get Live Current Year from Summary Engine
     const currentYr = currentYear();
     let currentRec = null;
     
-    // Only fetch live data if student is active
     if (st.CurrentClass && normText(st.Status).toLowerCase() === 'hoạt động') {
       const summary = summaryRows([st.CurrentClass], currentYr);
       const stSum = summary.find(x => normId(x.idNumber) === id);
@@ -1190,7 +1186,7 @@ const ACTIONS = {
         sh.insertColumns(head.length + 1);
         sh.getRange(1, head.length + 1).setValue('ListOrder');
         bustCache(['Students']);
-        return ACTIONS.saveStudentOrder(b); // Retry after adding column
+        return ACTIONS.saveStudentOrder(b);
       }
       
       const data = sh.getDataRange().getValues();

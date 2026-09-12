@@ -3,7 +3,7 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, year, isAdmin, SESSIONS, fillSel, normSunday, defaultWeek } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, year, isAdmin, SESSIONS, fillSel, normSunday, defaultWeek, clearApiCache } from '../shared/common.js';
 import { groupBadge } from '../shared/ui.js';
 
 await initCommon();
@@ -171,7 +171,8 @@ if (usModal) {
       toast('Đã lưu thông tin Huynh trưởng.');
       usModal.classList.remove('open');
       
-      // BẮT BUỘC TẢI LẠI DỮ LIỆU ĐỂ CẬP NHẬT BADGE LÊN UI
+      // XÓA CACHE TẠI LOCALSTORAGE VÀ TẢI LẠI DỮ LIỆU TỪ SERVER
+      clearApiCache('getTeachers');
       await loadTeacherData();
 
       tabCache['t-us'] = false;
@@ -283,6 +284,7 @@ async function saveHolidayList() {
   try {
     await api('saveHolidays', { holidays: HOLIDAYS });
     toast('Đã cập nhật danh sách nghỉ lễ.');
+    clearApiCache('getHolidays');
     tabCache['t-hol'] = false;
     await renderHolidays();
     tabCache['t-hol'] = true;
@@ -344,6 +346,7 @@ if (yearModal) {
     try {
       await api('startSchoolYear', { attendanceStartDate: startDate });
       toast('Đã chuyển sang năm học mới.');
+      clearApiCache();
       location.reload();
     } catch (e) { toast(e.message); }
   });
