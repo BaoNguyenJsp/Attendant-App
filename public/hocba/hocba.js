@@ -4,19 +4,18 @@
 'use strict';
 
 import { initCommon, $, api, esc, toast, setState, TSTUDENTS, TSCORES, TCLASSES, year, isExec, cur, fmt1, fillClasses, fillSel, exportExcel } from '../shared/common.js';
-import { searchCard, normSummary, activeStudents } from '../shared/ui.js';
+import { normSummary, activeStudents } from '../shared/ui.js';
 
 await initCommon();
 
 const SCORE_FIELDS = ['Quiz15_S1', 'Exam_S1', 'Quiz15_S2', 'Exam_S2'];
 const FMAP = {'Quiz15_S1':'quiz15s1', 'Exam_S1':'exams1', 'Quiz15_S2':'quiz15s2', 'Exam_S2':'exams2'};
 
-/* ---------- Corrected Tab Mapping ---------- */
 const tabCache = {
-  't-nhap': false,    // Nhập điểm (Default active tab)
-  't-hbt': true,     // Tra cứu
-  't-tonghop': false, // Tổng hợp
-  't-kt': false      // Khen thưởng
+  't-nhap': false,    
+  't-hbt': true,     
+  't-tonghop': false, 
+  't-kt': false      
 };
 
 function invalidateSummaryCache() {
@@ -164,8 +163,71 @@ async function importScores() {
   await saveScores();
 }
 
-/* ---------- Trích Lục ---------- */
-function renderHBT() { searchCard($('hbt-id').value.trim(), 'hbt-out'); }
+/* ---------- TRÍCH LỤC HỌC BẠ CHUYÊN SÂU ---------- */
+async function renderHBT() {
+  const id = $('hbt-id').value.trim();
+  if (!id) return toast('Vui lòng nhập số CCCD / Định danh');
+  
+  let r;
+  try {
+    r = await api('getHocBa', { idNumber: id });
+  } catch (e) {
+    return toast(e.message);
+  }
+  
+  if (r.status === 'error') return toast(r.message);
+  
+  const st = r.student;
+  const records = r.history || [];
+  
+  // Mix historical records with current live year record
+  if (r.currentRec) records.push(r.currentRec);
+  
+  // Sort descending by School Year
+  records.sort((a, b) => String(b.SchoolYear).localeCompare(String(a.SchoolYear)));
+  
+  const out = $('hbt-out');
+  out.innerHTML = `
+    <div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm mb-4">
+      <h3 class="text-lg font-bold text-blue-900 mb-2">${esc(st.SaintName || '')} ${esc(st.FullName)}</h3>
+      <div class="text-sm text-slate-700 grid grid-cols-2 md:grid-cols-4 gap-2">
+        <p><b>CCCD:</b> ${esc(st.IdNumber)}</p>
+        <p><b>Lớp hiện tại:</b> ${esc(st.CurrentClass)}</p>
+        <p><b>Trạng thái:</b> ${esc(st.Status)}</p>
+        <p><b>Năm nhập học:</b> ${esc(st.EnrollYear || '—')}</p>
+      </div>
+    </div>
+    
+    <div class="tbl-scroll">
+      <table class="w-full text-sm border-collapse bg-white">
+        <thead>
+          <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+            <th class="p-3">Năm Học</th>
+            <th class="p-3">Lớp</th>
+            <th class="p-3">ĐTB HK1</th>
+            <th class="p-3">ĐTB HK2</th>
+            <th class="p-3">ĐTB Năm</th>
+            <th class="p-3">Chuyên Cần</th>
+            <th class="p-3">Xếp Loại</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${records.length ? records.map(x => `
+            <tr>
+              <td class="p-2 border text-center font-bold text-slate-700">${esc(x.SchoolYear)}</td>
+              <td class="p-2 border text-center font-medium">${esc(x.ClassName)}</td>
+              <td class="p-2 border text-center">${fmt1(x.HK1Score)}</td>
+              <td class="p-2 border text-center">${fmt1(x.HK2Score)}</td>
+              <td class="p-2 border text-center font-bold text-blue-800">${fmt1(x.YearScore)}</td>
+              <td class="p-2 border text-center">${x.YearAttendant == null ? '—' : x.YearAttendant + '%'}</td>
+              <td class="p-2 border text-center font-semibold ${x.Status === 'Giỏi' ? 'text-pink-600' : 'text-slate-700'}">${esc(x.Status || '—')}</td>
+            </tr>
+          `).join('') : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có hồ sơ học tập.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
 
 /* ---------- Tổng Hợp & Khen Thưởng ---------- */
 async function renderTongHop() {

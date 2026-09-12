@@ -1052,6 +1052,53 @@ const ACTIONS = {
     return { status: 'ok', summary: summaryRows(classNames, year) };
   },
 
+  getHocBa: b => {
+    const id = normId(b.idNumber);
+    const st = cachedRead('Students').find(s => normId(s.IdNumber) === id);
+    if (!st) return { status: 'error', message: 'Không tìm thấy Thiếu nhi với CCCD này.' };
+
+    // 1. Get History (past years) from AcademicYear tab
+    const history = cachedRead('AcademicYear')
+      .filter(r => normId(r.IdNumber) === id)
+      .map(r => ({
+        SchoolYear: r.SchoolYear,
+        ClassName: r.ClassName,
+        HK1Score: r.HK1Score,
+        HK2Score: r.HK2Score,
+        YearScore: r.YearScore,
+        YearAttendant: r.YearAttendant,
+        Status: r.Status
+      }));
+
+    // 2. Get Live Current Year from Summary Engine
+    const currentYr = currentYear();
+    let currentRec = null;
+    
+    // Only fetch live data if student is active
+    if (st.CurrentClass && normText(st.Status).toLowerCase() === 'hoạt động') {
+      const summary = summaryRows([st.CurrentClass], currentYr);
+      const stSum = summary.find(x => normId(x.idNumber) === id);
+      if (stSum) {
+        currentRec = {
+          SchoolYear: currentYr,
+          ClassName: st.CurrentClass,
+          HK1Score: stSum.avgH1,
+          HK2Score: stSum.avgH2,
+          YearScore: stSum.avgYear,
+          YearAttendant: stSum.attendancePct,
+          Status: stSum.rating
+        };
+      }
+    }
+
+    return { 
+      status: 'ok', 
+      student: st, 
+      history, 
+      currentRec 
+    };
+  },
+
   getYearOptions: () => {
     const set = new Set([currentYear()]);
     ['AcademicYear', 'Scores'].forEach(t =>
