@@ -24,19 +24,32 @@ let draggingRow = null;
 function renderHS() {
   const cls = $('hs-lop').value;
   const sts = sortStudents(TSTUDENTS.filter(s => s.CurrentClass === cls));
+  
   $('hs-tbody').innerHTML = sts.length
-    ? sts.map((st, i) => '<tr data-id="' + esc(st.IdNumber) + '" class="cursor-pointer hover:bg-slate-50 transition-colors bg-white" draggable="true">' +
-        '<td class="p-2 border text-center text-slate-400 cursor-grab active:cursor-grabbing" title="Kéo thả để sắp xếp">☰</td>' +
-        '<td class="p-2 border text-center whitespace-nowrap">' + esc(st.IdNumber) + '</td>' +
-        '<td class="p-2 border font-medium">' + esc(st.FullName) + '</td>' +
-        '<td class="p-2 border text-center">' + esc(st.Gender || '') + '</td>' +
-        '<td class="p-2 border text-center whitespace-nowrap">' + esc(st.DateOfBirth || '') + '</td>' +
-        '<td class="p-2 border text-center whitespace-nowrap">' + esc(st.EnrollYear || '') + '</td>' +
-        '<td class="p-2 border text-center">' + badgeStatus(st.Status) + '</td>' +
-        '<td class="p-2 border">' + esc(st.Note || '') + '</td>' +
-        '<td class="p-2 border text-center sticky-col"><button data-id="' + esc(st.IdNumber) + '" class="edit-student bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs px-4 py-2 rounded-lg whitespace-nowrap">Cập nhật</button></td>' +
-        '</tr>').join('')
-    : '<tr><td colspan="9" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi trong lớp ' + esc(cls) + '.</td></tr>';
+    ? sts.map((st, i) => {
+        // Safe string casting before split to prevent TypeError
+        const siblingNames = String(st.Siblings || '').split(',')
+          .map(id => id.trim())
+          .filter(Boolean)
+          .map(id => {
+            const sib = TSTUDENTS.find(s => s.IdNumber === id);
+            return sib ? `<span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs whitespace-nowrap">${esc(sib.FullName)} (${esc(sib.CurrentClass)})</span>` : esc(id);
+          }).join(' ');
+
+        return '<tr data-id="' + esc(st.IdNumber) + '" class="cursor-pointer hover:bg-slate-50 transition-colors bg-white" draggable="true">' +
+          '<td class="p-2 border text-center text-slate-400 cursor-grab active:cursor-grabbing" title="Kéo thả để sắp xếp">☰</td>' +
+          '<td class="p-2 border text-center whitespace-nowrap">' + esc(st.IdNumber) + '</td>' +
+          '<td class="p-2 border font-medium">' + esc(st.FullName) + '</td>' +
+          '<td class="p-2 border text-center">' + esc(st.Gender || '') + '</td>' +
+          '<td class="p-2 border text-center whitespace-nowrap">' + esc(st.DateOfBirth || '') + '</td>' +
+          '<td class="p-2 border text-center">' + esc(st.EnrollYear || '') + '</td>' +
+          '<td class="p-2 border text-center">' + badgeStatus(st.Status) + '</td>' +
+          '<td class="p-2 border text-center">' + siblingNames + '</td>' +
+          '<td class="p-2 border">' + esc(st.Note || '') + '</td>' +
+          '<td class="p-2 border text-center sticky-col"><button data-id="' + esc(st.IdNumber) + '" class="edit-student bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs px-4 py-2 rounded-lg whitespace-nowrap">Cập nhật</button></td>' +
+          '</tr>';
+      }).join('')
+    : '<tr><td colspan="10" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi trong lớp ' + esc(cls) + '.</td></tr>';
 }
 
 /* ---------- Drag & Drop Reordering ---------- */
@@ -52,7 +65,7 @@ tbody.addEventListener('dragstart', e => {
 });
 
 tbody.addEventListener('dragover', e => {
-  e.preventDefault(); // Necessary to allow dropping
+  e.preventDefault(); 
   const tr = e.target.closest('tr');
   if (!tr || tr === draggingRow) return;
   
@@ -79,7 +92,6 @@ async function saveNewOrder() {
   
   const orderedIds = rows.map(tr => tr.dataset.id);
   
-  // Update local state immediately
   orderedIds.forEach((id, idx) => {
     const s = TSTUDENTS.find(x => x.IdNumber === id);
     if (s) s.ListOrder = idx + 1;
@@ -88,14 +100,86 @@ async function saveNewOrder() {
   toast('Đang lưu thứ tự...');
   try {
     await api('saveStudentOrder', { orderedIds });
-    
-    // Clear student cache so other tabs fetch updated ListOrder immediately
     clearApiCache('getStudents'); 
-    
     toast('Đã cập nhật thứ tự lớp.');
   } catch (e) {
     toast('Lỗi khi lưu thứ tự: ' + e.message);
   }
+}
+
+/* ---------- Sibling Search UI ---------- */
+let selectedSiblings = [];
+
+function renderSiblingTags() {
+  const container = $('m-sibling-tags');
+  if (!container) return;
+  
+  container.innerHTML = selectedSiblings.map(id => {
+    const s = TSTUDENTS.find(x => x.IdNumber === id);
+    const name = s ? s.FullName : id;
+    return `
+      <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs flex items-center gap-1 font-semibold">
+        ${esc(name)}
+        <button type="button" class="remove-sibling text-blue-500 hover:text-blue-900 font-bold px-1" data-id="${id}">×</button>
+      </span>`;
+  }).join('');
+  
+  if ($('m-siblings')) $('m-siblings').value = selectedSiblings.join(',');
+}
+
+function setupSiblingSearch() {
+  const searchInp = $('m-sibling-search');
+  const drop = $('m-sibling-dropdown');
+  const tagsContainer = $('m-sibling-tags');
+  if (!searchInp || !drop || !tagsContainer) return;
+
+  searchInp.addEventListener('input', e => {
+    const q = e.target.value.toLowerCase().trim();
+    if (!q) { drop.classList.add('hidden'); return; }
+    
+    const hits = TSTUDENTS.filter(s => 
+      s.IdNumber !== editingId && 
+      !selectedSiblings.includes(s.IdNumber) &&
+      (String(s.FullName).toLowerCase().includes(q) || String(s.IdNumber).includes(q))
+    ).slice(0, 8);
+
+    if (hits.length === 0) {
+      drop.innerHTML = '<div class="p-2 text-sm text-slate-500 text-center">Không tìm thấy</div>';
+    } else {
+      drop.innerHTML = hits.map(s => `
+        <div class="sibling-option p-2 hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-0" data-id="${s.IdNumber}">
+          <div class="text-sm font-bold text-blue-900">${esc(s.FullName)}</div>
+          <div class="text-xs text-slate-500">${esc(s.IdNumber)} — ${esc(s.CurrentClass)}</div>
+        </div>
+      `).join('');
+    }
+    drop.classList.remove('hidden');
+  });
+
+  drop.addEventListener('click', e => {
+    const item = e.target.closest('.sibling-option');
+    if (item) {
+      selectedSiblings.push(item.dataset.id);
+      searchInp.value = '';
+      drop.classList.add('hidden');
+      renderSiblingTags();
+      searchInp.focus();
+    }
+  });
+
+  tagsContainer.addEventListener('click', e => {
+    const btn = e.target.closest('.remove-sibling');
+    if (btn) {
+      selectedSiblings = selectedSiblings.filter(id => id !== btn.dataset.id);
+      renderSiblingTags();
+    }
+  });
+
+  document.addEventListener('click', e => {
+    if (!searchInp.contains(e.target) && !drop.contains(e.target)) {
+      drop.classList.add('hidden');
+    }
+  });
 }
 
 /* ---------- Modal Controls ---------- */
@@ -113,7 +197,13 @@ function openModal(id) {
   $('m-status').value = st ? (st.Status || 'Hoạt động') : 'Hoạt động';
   $('m-father').value = st ? (st.Father || '') : '';
   $('m-mother').value = st ? (st.Mother || '') : '';
+  $('m-siblings').value = st ? (st.Siblings || '') : ''; 
   $('m-note').value = st ? (st.Note || '') : '';
+
+  // Safe string casting before split
+  selectedSiblings = st && st.Siblings ? String(st.Siblings).split(',').map(s => s.trim()).filter(Boolean) : [];
+  renderSiblingTags();
+  if ($('m-sibling-search')) $('m-sibling-search').value = '';
 
   const mcls = $('m-class');
   mcls.innerHTML = $('hs-lop').innerHTML;
@@ -139,6 +229,7 @@ async function saveModal() {
     status: $('m-status').value,
     father: $('m-father').value.trim(),
     mother: $('m-mother').value.trim(),
+    siblings: $('m-siblings').value.trim(),
     note: $('m-note').value.trim(),
   };
 
@@ -150,14 +241,13 @@ async function saveModal() {
     const r = await api('saveStudent', body);
     const idx = TSTUDENTS.findIndex(s => s.IdNumber === body.idNumber);
     if (idx >= 0) {
-      // Preserve ListOrder during update
       r.student.ListOrder = TSTUDENTS[idx].ListOrder;
       TSTUDENTS[idx] = r.student;
     } else {
       TSTUDENTS.push(r.student);
     }
     
-    clearApiCache('getStudents'); // Refresh cache on edits too
+    clearApiCache('getStudents'); 
   } catch (e) { 
     return toast(e.message); 
   }
@@ -183,4 +273,5 @@ m.querySelector('.btn-save').addEventListener('click', saveModal);
 m.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
 /* Initial Boot */
+setupSiblingSearch();
 renderHS();

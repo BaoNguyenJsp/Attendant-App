@@ -259,7 +259,7 @@ async function renderHolidays() {
   }
 
   if ($('hol-session') && !$('hol-session').children.length) {
-    fillSel('hol-session', [{v:'', t:'Cả tuần'}].concat(SESSIONS.map(s => ({v:s}))));
+    fillSel('hol-session', SESSIONS.map(s => ({v:s})));
   }
 
   let r;
@@ -306,11 +306,33 @@ if (btnHolAdd) {
       return toast('Ngày nghỉ lễ không được trước ngày khai giảng (' + CONFIG.AttendanceStartDate + ').');
     }
 
+    const session = $('hol-session').value;
+    const reason = $('hol-reason').value.trim();
+
+    // Kiểm tra trùng lặp: unique by weekOf + session
+    const isDuplicate = HOLIDAYS.some(h => h.weekOf === weekOf && (h.session || '') === session);
+    if (isDuplicate) {
+      return toast('Lịch nghỉ cho buổi này trong tuần ' + weekOf + ' đã tồn tại.');
+    }
+
+    // Kiểm tra xung đột: nếu đã nghỉ "Cả tuần", không cho thêm buổi lẻ
+    // Hoặc nếu đã có buổi lẻ, cảnh báo nếu muốn thêm "Cả tuần"
+    const hasAllWeek = HOLIDAYS.some(h => h.weekOf === weekOf && !h.session);
+    const hasSpecific = HOLIDAYS.some(h => h.weekOf === weekOf && h.session);
+
+    if (session && hasAllWeek) {
+      return toast('Ngày ' + weekOf + ' đã được thiết lập nghỉ cả tuần. Vui lòng xóa lịch nghỉ cả tuần trước khi thêm buổi lẻ.');
+    }
+    if (!session && hasSpecific) {
+      return toast('Ngày ' + weekOf + ' đã có lịch nghỉ cho buổi cụ thể. Vui lòng xóa các buổi lẻ trước khi thiết lập nghỉ cả tuần.');
+    }
+
     HOLIDAYS.push({
       weekOf: weekOf,
-      session: $('hol-session').value,
-      reason: $('hol-reason').value.trim()
+      session: session,
+      reason: reason
     });
+    
     $('hol-reason').value = '';
     await saveHolidayList();
   });

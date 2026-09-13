@@ -66,48 +66,36 @@ fillSel('th-nam', years.map(y => ({v:y})), year());
 fillSel('kt-nam', years.map(y => ({v:y})), year());
 
 /* ---------- Student Sorting Helper ---------- */
-const clsOrd = {}; 
-TCLASSES.forEach((c, i) => clsOrd[c.ClassName] = i);
-const keyId = s => String(s || '').replace(/^['0]+/, '');
-const gMap = {};
-
-TSTUDENTS.forEach(st => { 
-  const g = String(st.Gender || '').normalize('NFC').trim().toLowerCase(); 
-  gMap[keyId(st.IdNumber)] = g === 'nữ' ? 0 : g === 'nam' ? 1 : 2; 
-});
-
-const sumSort = (a, b) => {
-  // 1. Order by Class First (Strict Class Order)
-  const clsA = a.className || a.ClassName || '';
-  const clsB = b.className || b.ClassName || '';
-  const ca = clsOrd[clsA] ?? 1e9;
-  const cb = clsOrd[clsB] ?? 1e9;
-  if (ca !== cb) return ca - cb;
-
-  // 2. Fetch base student profile to obtain ListOrder
-  const stA = TSTUDENTS.find(s => keyId(s.IdNumber) === keyId(a.idNumber || a.IdNumber)) || {};
-  const stB = TSTUDENTS.find(s => keyId(s.IdNumber) === keyId(b.idNumber || b.IdNumber)) || {};
-
-  // 3. Order by ListOrder within the same Class
-  const valA = a.ListOrder ?? a.listOrder ?? stA.ListOrder;
-  const valB = b.ListOrder ?? b.listOrder ?? stB.ListOrder;
-  const oa = (valA !== null && valA !== '' && !isNaN(+valA)) ? +valA : 1e9;
-  const ob = (valB !== null && valB !== '' && !isNaN(+valB)) ? +valB : 1e9;
-  if (oa !== ob) return oa - ob;
-
-  // 4. Fallback to Gender -> Full Name
-  const ga = gMap[keyId(a.idNumber || a.IdNumber)] ?? 2;
-  const gb = gMap[keyId(b.idNumber || b.IdNumber)] ?? 2;
-  if (ga !== gb) return ga - gb;
-
-  return String(a.fullName || a.FullName || '').localeCompare(String(b.fullName || b.FullName || ''), 'vi');
-};
+function sortSummaryRecords(records) {
+  const mapped = records.map(x => {
+    const id = x.idNumber || x.IdNumber;
+    const baseSt = TSTUDENTS.find(s => s.IdNumber === id) || {};
+    return {
+      ...x,
+      // Ensure lowerCamelCase properties are preserved for template rendering
+      className: x.className || x.ClassName || baseSt.CurrentClass || '',
+      idNumber: id,
+      fullName: x.fullName || x.FullName || baseSt.FullName,
+      saintName: x.saintName || x.SaintName || baseSt.SaintName,
+      // Enforce PascalCase properties needed by `sortStudents` logic
+      CurrentClass: x.className || x.ClassName || baseSt.CurrentClass || '',
+      IdNumber: id,
+      ListOrder: x.ListOrder ?? x.listOrder ?? baseSt.ListOrder,
+      Gender: baseSt.Gender || baseSt.gender,
+      FullName: x.fullName || x.FullName || baseSt.FullName,
+      SaintName: x.saintName || x.SaintName || baseSt.SaintName
+    };
+  });
+  
+  const ordered = sortStudents(mapped);
+  return ordered.map(o => mapped.find(x => (x.idNumber || x.IdNumber) === o.IdNumber) || o);
+}
 
 /* ---------- Nhập Điểm ---------- */
 async function renderNhap() {
   const cls = $('nh-lop').value;
   if (!cls) return;
-  const sts = activeStudents(cls);
+  const sts = sortStudents(activeStudents(cls));
   const scoreMap = {};
   TSCORES.filter(s => s.SchoolYear === year() && s.ClassName === cls).forEach(s => scoreMap[s.IdNumber] = s);
   const tb = $('nh-tbody');
@@ -162,8 +150,26 @@ async function saveScores() {
 /* ---------- Excel Import ---------- */
 function downloadTemplate() {
   const cls = $('nh-lop').value;
+  const sortedSts = sortStudents(activeStudents(cls));
+  const scoreMap = {};
+  
+  // Fetch existing scores so downloading and re-uploading doesn't wipe them
+  TSCORES.filter(s => s.SchoolYear === year() && s.ClassName === cls).forEach(s => scoreMap[s.IdNumber] = s);
+  
   const aoa = [['Số CCCD', 'Tên thánh', 'Họ và tên', "Điểm 15' HK1", 'Kiểm tra HK1', "Điểm 15' HK2", 'Kiểm tra HK2']];
-  activeStudents(cls).forEach(s => aoa.push([s.IdNumber, s.SaintName || '', s.FullName, '', '', '', '']));
+  sortedSts.forEach(s => {
+    const sc = scoreMap[s.IdNumber] || {};
+    aoa.push([
+      s.IdNumber, 
+      s.SaintName || '', 
+      s.FullName, 
+      sc.Quiz15_S1 ?? '', 
+      sc.Exam_S1 ?? '', 
+      sc.Quiz15_S2 ?? '', 
+      sc.Exam_S2 ?? ''
+    ]);
+  });
+  
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Điểm');
   XLSX.writeFile(wb, 'Khung_nhap_diem_' + cls + '.xlsx');
@@ -177,24 +183,32 @@ async function importScores() {
   try { const wb = XLSX.read(await f.arrayBuffer()); ws = wb.Sheets[wb.SheetNames[0]]; }
   catch (e) { return toast('Không đọc được file Excel.'); }
   const rows = XLSX.utils.sheet_to_json(ws, {header: 1, defval: ''});
-  const keyOf = s => String(s || '').replace(/[^0-9]/g, '').replace(/^0+/, '');
+  
+  // Safe extraction (allows alphanumeric IDs while ignoring Excel's leading zero removal)
+  const keyOf = s => String(s || '').trim().replace(/^0+/, '').toLowerCase(); 
   const byId = {};
+  
   $('nh-tbody').querySelectorAll('tr').forEach(tr => {
     const id = tr.children[1] ? tr.children[1].textContent.trim() : '';
     if (id) byId[keyOf(id)] = tr;
   });
+  
   const errs = [], updates = []; let skipped = 0;
   rows.slice(1).forEach(r => {
     const tr = byId[keyOf(r[0])];
     if (!tr) { if (String(r[0] || '').trim()) skipped++; return; }
-    const vals = SCORE_FIELDS.map((f, i) => String(r[i + 3] == null ? '' : r[i + 3]).trim());
+    
+    // Replace comma with dot to support Vietnamese decimal formatting properly
+    const vals = SCORE_FIELDS.map((f, i) => String(r[i + 3] == null ? '' : r[i + 3]).trim().replace(',', '.'));
     if (vals.some(v => v !== '' && (isNaN(+v) || +v < 0 || +v > 10))) {
       const who = tr.children[2] ? tr.children[2].textContent.trim() : tr.children[1].textContent.trim();
       errs.push(who);
     } else updates.push({tr, vals});
   });
+  
   if (errs.length) return toast('Điểm không hợp lệ (0–10): ' + errs.slice(0, 3).join(', ') + (errs.length > 3 ? '…' : '') + '. Chưa lưu gì.');
   if (!updates.length) return toast(skipped ? 'Không có CCCD nào trong file thuộc lớp này.' : 'File không có dòng điểm nào.');
+  
   updates.forEach(({tr, vals}) => tr.querySelectorAll('[data-f]').forEach((inp, i) => { inp.value = vals[i]; }));
   const msg = skipped ? ' — bỏ qua ' + skipped + ' CCCD không thuộc lớp.' : '';
   toast('Đã nhập ' + updates.length + ' Thiếu nhi' + msg);
@@ -216,6 +230,8 @@ async function renderHBT() {
   if (r.status === 'error') return toast(r.message);
   
   const st = r.student;
+  if (!st) return toast('Không tìm thấy dữ liệu học sinh.');
+  
   const records = r.history || [];
   if (r.currentRec) records.push(r.currentRec);
   
@@ -274,30 +290,58 @@ async function renderTongHop() {
   try { r = await api('getSummary', {schoolYear: yr, className: cls}); }
   catch (e) { return toast(e.message); }
   
-  const rows = (r.summary || []).map(normSummary).sort(sumSort);
+  // BYPASS normSummary COMPLETELY - It is destroying the data keys
+  const rows = sortSummaryRecords(r.summary || []);
 
   $('th-tbody').innerHTML = rows.length
-    ? rows.map((x, i) => '<tr><td class="p-2 border text-center">' + (i + 1) + '</td><td class="p-2 border">' + esc(x.idNumber) + '</td>' +
-        '<td class="p-2 border font-medium">' + esc(x.fullName) + '</td><td class="p-2 border">' + esc(x.className) + '</td>' +
-        '<td class="p-2 border text-center">' + fmt1(x.h1) + '</td><td class="p-2 border text-center">' + fmt1(x.h2) + '</td>' +
-        '<td class="p-2 border text-center font-bold">' + fmt1(x.avgYear) + '</td>' +
-        '<td class="p-2 border text-center">' + (x.cc == null ? '—' : x.cc + '%') + '</td>' +
-        (showRating ? '<td class="p-2 border text-center">' + (x.rating ? esc(x.rating) : '—') + '</td>' : '') + '</tr>').join('')
+    ? rows.map((x, i) => {
+        const id = x.IdNumber || x.idNumber || '';
+        const fullName = [x.SaintName || x.saintName, x.FullName || x.fullName].filter(Boolean).join(' ');
+        const cName = x.CurrentClass || x.ClassName || x.className || '';
+
+        const h1 = x.HK1Score ?? x.avgH1 ?? x.h1;
+        const h2 = x.HK2Score ?? x.avgH2 ?? x.h2;
+        const avg = x.YearScore ?? x.avgYear;
+        const cc = x.YearAttendant ?? x.pct ?? x.cc;
+        const rt = x.Status ?? x.rating;
+
+        return '<tr><td class="p-2 border text-center">' + (i + 1) + '</td><td class="p-2 border">' + esc(id) + '</td>' +
+          '<td class="p-2 border font-medium">' + esc(fullName) + '</td><td class="p-2 border">' + esc(cName) + '</td>' +
+          '<td class="p-2 border text-center">' + fmt1(h1) + '</td><td class="p-2 border text-center">' + fmt1(h2) + '</td>' +
+          '<td class="p-2 border text-center font-bold">' + fmt1(avg) + '</td>' +
+          '<td class="p-2 border text-center">' + (cc == null || cc === '' ? '—' : cc + '%') + '</td>' +
+          (showRating ? '<td class="p-2 border text-center">' + (rt ? esc(rt) : '—') + '</td>' : '') + '</tr>';
+      }).join('')
     : '<tr><td colspan="' + heads.length + '" class="p-4 text-center text-slate-400">Chưa có dữ liệu.</td></tr>';
 }
 
 async function toanDoan() {
   if (!isExec()) return;
   let r;
-  try { r = await api('getSummary', {wholeDeanery: true}); }
+  try { r = await api('getSummary', {schoolYear: year(), wholeDeanery: true}); }
   catch (e) { return toast(e.message); }
-  const rows = (r.summary || []).map(normSummary).sort(sumSort);
+  
+  // BYPASS normSummary COMPLETELY
+  const rows = sortSummaryRecords(r.summary || []);
+  
   const w = window.open('', '_blank');
   w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Xếp loại toàn đoàn ' + esc(year()) + '</title>' +
     '<style>body{font-family:Arial,sans-serif;padding:24px}h1{font-size:18px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #999;padding:4px 6px;text-align:left}th{background:#eee}.c{text-align:center}</style></head><body>' +
     '<h1>Xếp loại toàn đoàn — Năm học ' + esc(year()) + '</h1>' +
     '<table><thead><tr><th>STT</th><th>Lớp</th><th>Số CCCD</th><th>Họ Tên</th><th class="c">ĐTB HK1</th><th class="c">ĐTB HK2</th><th class="c">ĐTB Năm</th><th class="c">% Chuyên Cần</th><th>Xếp loại</th></tr></thead><tbody>' +
-    rows.map((x, i) => '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(x.className) + '</td><td>' + esc(x.idNumber) + '</td><td>' + esc(x.fullName) + '</td><td class="c">' + fmt1(x.h1) + '</td><td class="c">' + fmt1(x.h2) + '</td><td class="c">' + fmt1(x.avgYear) + '</td><td class="c">' + (x.cc == null ? '—' : x.cc + '%') + '</td><td>' + (x.rating ? esc(x.rating) : '—') + '</td></tr>').join('') +
+    rows.map((x, i) => {
+        const id = x.IdNumber || x.idNumber || '';
+        const fullName = [x.SaintName || x.saintName, x.FullName || x.fullName].filter(Boolean).join(' ');
+        const cName = x.CurrentClass || x.ClassName || x.className || '';
+
+        const h1 = x.HK1Score ?? x.avgH1 ?? x.h1;
+        const h2 = x.HK2Score ?? x.avgH2 ?? x.h2;
+        const avg = x.YearScore ?? x.avgYear;
+        const cc = x.YearAttendant ?? x.pct ?? x.cc;
+        const rt = x.Status ?? x.rating;
+
+        return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(cName) + '</td><td>' + esc(id) + '</td><td>' + esc(fullName) + '</td><td class="c">' + fmt1(h1) + '</td><td class="c">' + fmt1(h2) + '</td><td class="c">' + fmt1(avg) + '</td><td class="c">' + (cc == null || cc === '' ? '—' : cc + '%') + '</td><td>' + (rt ? esc(rt) : '—') + '</td></tr>';
+    }).join('') +
     '</tbody></table><script>window.print()<\/script></body></html>');
   w.document.close();
 }
@@ -308,13 +352,28 @@ async function renderKT() {
   try { r = await api('getSummary', {schoolYear: yr, className: cls}); }
   catch (e) { return toast(e.message); }
   
-  const rows = (r.summary || []).map(normSummary).filter(x => x.rating === 'Giỏi' && x.cc != null && +x.cc >= 80).sort(sumSort);
+  // BYPASS normSummary COMPLETELY
+  const rawRows = (r.summary || []).filter(x => {
+      const rt = x.Status ?? x.rating;
+      const cc = x.YearAttendant ?? x.pct ?? x.cc;
+      return rt === 'Giỏi' && cc != null && +cc >= 80;
+  });
+  const rows = sortSummaryRecords(rawRows);
 
   $('kt-tbody').innerHTML = rows.length
-    ? rows.map((x, i) => '<tr><td class="p-2 border text-center">' + (i + 1) + '</td><td class="p-2 border">' + esc(x.idNumber) + '</td>' +
-        '<td class="p-2 border font-medium">' + esc(x.fullName) + '</td><td class="p-2 border">' + esc(x.className) + '</td>' +
-        '<td class="p-2 border text-center">' + fmt1(x.avgYear) + '</td><td class="p-2 border text-center">' + (x.cc == null ? '—' : x.cc + '%') + '</td>' +
-        '<td class="p-2 border text-center text-pink-600 font-bold">Giỏi</td></tr>').join('')
+    ? rows.map((x, i) => {
+        const id = x.IdNumber || x.idNumber || '';
+        const fullName = [x.SaintName || x.saintName, x.FullName || x.fullName].filter(Boolean).join(' ');
+        const cName = x.CurrentClass || x.ClassName || x.className || '';
+
+        const avg = x.YearScore ?? x.avgYear;
+        const cc = x.YearAttendant ?? x.pct ?? x.cc;
+
+        return '<tr><td class="p-2 border text-center">' + (i + 1) + '</td><td class="p-2 border">' + esc(id) + '</td>' +
+          '<td class="p-2 border font-medium">' + esc(fullName) + '</td><td class="p-2 border">' + esc(cName) + '</td>' +
+          '<td class="p-2 border text-center">' + fmt1(avg) + '</td><td class="p-2 border text-center">' + (cc == null || cc === '' ? '—' : cc + '%') + '</td>' +
+          '<td class="p-2 border text-center text-pink-600 font-bold">Giỏi</td></tr>';
+      }).join('')
     : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi đạt chuẩn.</td></tr>';
 }
 

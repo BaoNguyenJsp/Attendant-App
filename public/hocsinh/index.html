@@ -36,6 +36,7 @@
               <th class="p-3">Ngày Sinh</th>
               <th class="p-3">Năm Nhập Học</th>
               <th class="p-3">Trạng Thái</th>
+              <th class="p-3">Anh/Chị/Em</th>
               <th class="p-3">Ghi Chú</th>
               <th class="p-3 sticky-col">Thao Tác</th>
             </tr>
@@ -68,6 +69,13 @@
           </select></div>
         <div class="form-group"><label>Cha</label><input id="m-father" type="text"></div>
         <div class="form-group"><label>Mẹ</label><input id="m-mother" type="text"></div>
+        <div class="form-group full relative">
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Anh/Chị/Em</label>
+          <div id="m-sibling-tags" class="flex flex-wrap gap-1 mb-2"></div>
+          <input type="text" id="m-sibling-search" class="w-full border p-2.5 rounded-lg" placeholder="Tìm tên hoặc CCCD..." autocomplete="off">
+          <div id="m-sibling-dropdown" class="absolute z-10 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto hidden mt-1"></div>
+          <input type="hidden" id="m-siblings">
+        </div>
         <div class="form-group full"><label>Ghi Chú</label><textarea id="m-note" rows="2"></textarea></div>
       </div>
       <div class="modal-actions">
