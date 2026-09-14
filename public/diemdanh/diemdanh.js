@@ -13,9 +13,9 @@ const [cl, st] = await Promise.all([
   api('getStudents')
 ]);
 
-setState({ 
-  TCLASSES: Array.isArray(cl?.classes) ? cl.classes : [], 
-  TSTUDENTS: Array.isArray(st?.students) ? st.students : [] 
+setState({
+  TCLASSES: Array.isArray(cl?.classes) ? cl.classes : [],
+  TSTUDENTS: Array.isArray(st?.students) ? st.students : []
 });
 fillClasses('dd-lop', 'tk-lop');
 fillSessions('dd-buoi');
@@ -61,42 +61,42 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 async function renderDD() {
   if (!$('dd-week').value) $('dd-week').value = defaultWeek();
   normSunday($('dd-week'));
-  
+
   const cls = $('dd-lop').value;
   if (!cls) return toast('Chọn lớp.');
   let r;
-  try { 
+  try {
     r = await api('getAttendance', {
-      schoolYear: year(), 
-      weekOf: $('dd-week').value, 
+      schoolYear: year(),
+      weekOf: $('dd-week').value,
       className: cls
-    }); 
+    });
   } catch (e) { return toast(e.message); }
 
   const note = $('dd-holiday-note');
-  if (r?.isHolidayWeek) { 
-    note.style.display = 'block'; 
-    note.textContent = '⚠ Tuần này là ngày nghỉ đã khai báo trong mục Quản trị.'; 
+  if (r?.isHolidayWeek) {
+    note.style.display = 'block';
+    note.textContent = '⚠ Tuần này là ngày nghỉ đã khai báo trong mục Quản trị.';
   } else note.style.display = 'none';
 
   const rawRecords = Array.isArray(r?.recordsByStudent) ? r.recordsByStudent : (Array.isArray(r?.records) ? r.records : []);
   const orderedList = sortStudents(rawRecords.map(x => {
     const baseSt = (Array.isArray(TSTUDENTS) ? TSTUDENTS : []).find(s => s.IdNumber === x.idNumber) || {};
-    return { 
-      ...x, 
-      CurrentClass: cls, 
+    return {
+      ...x,
+      CurrentClass: cls,
       IdNumber: x.idNumber,
       ListOrder: baseSt.ListOrder,
       Gender: baseSt.Gender,
       photo: x.photo || baseSt.Photo || ''
     };
   }));
-  
+
   weekCache = orderedList.map(o => {
     const rec = rawRecords.find(r => r.idNumber === o.idNumber) || o;
     return { ...rec, photo: o.photo };
   });
-  
+
   currentSession = $('dd-buoi').value;
   renderSessionFromCache();
 
@@ -159,13 +159,13 @@ function handleCheck(i, which) {
   const row = $('dd-tbody').querySelector('tr[data-i="' + i + '"]');
   if (row) ddState[i].note = row.querySelector('input[type="text"]').value || '';
   const s = ddState[i];
-  
+
   if (which === 'present') {
     s.status = s.status === 'Hiện diện' ? '' : 'Hiện diện';
   } else if (which === 'permission') {
     s.status = s.status === 'Có phép' ? '' : 'Có phép';
   }
-  
+
   renderDDTable();
   markDirty();
 }
@@ -176,10 +176,10 @@ function noteInput(i) {
   markDirty();
 }
 
-function markAllPresent() { 
-  ddState.forEach(s => s.status = 'Hiện diện'); 
-  renderDDTable(); 
-  markDirty(); 
+function markAllPresent() {
+  ddState.forEach(s => s.status = 'Hiện diện');
+  renderDDTable();
+  markDirty();
 }
 
 function markDirty() {
@@ -200,16 +200,16 @@ async function saveAttendance() {
   syncStateToCache();
 
   const body = {
-    schoolYear: year(), 
-    weekOf: $('dd-week').value, 
+    schoolYear: year(),
+    weekOf: $('dd-week').value,
     className: $('dd-lop').value,
     records: weekCache
   };
 
-  try { 
-    await api('saveAttendance', body); 
-  } catch (e) { 
-    return toast(e.message); 
+  try {
+    await api('saveAttendance', body);
+  } catch (e) {
+    return toast(e.message);
   }
 
   ddBase = ddState.map(x => ({...x}));
@@ -262,17 +262,17 @@ const pct = (p, m) => {
 async function renderTK() {
   const cls = $('tk-lop').value;
   if (!cls) return;
-  
+
   let r;
-  try { 
-    r = await api('getClassAttendanceStats', { 
-      schoolYear: year(), 
+  try {
+    r = await api('getClassAttendanceStats', {
+      schoolYear: year(),
       className: cls
-    }); 
-  } catch (e) { 
-    return toast(e.message); 
+    });
+  } catch (e) {
+    return toast(e.message);
   }
-  
+
   const statsObj = r?.stats || {};
   const backendMaxObj = r?.max || {};
   const sessions = Array.isArray(SESSIONS) ? SESSIONS : [];
@@ -291,7 +291,7 @@ async function renderTK() {
   const mapped = classStudents.map(s => {
     const id = String(s.IdNumber || s.idNumber || '');
     const sStat = statsObj[id] || {};
-    
+
     return {
       ...s,
       idNumber: id,
@@ -303,11 +303,11 @@ async function renderTK() {
   });
 
   const rows = sortStudents(mapped);
-  
+
   $('tk-tbody').innerHTML = rows.length
     ? rows.map((x, i) => {
         const sStat = x.stat || {};
-        
+
         const sessionCells = sessions.map(sess => {
           const val = Number(sStat[sess] || 0);
           const maxVal = Number(maxObj[sess] || 0);
@@ -331,7 +331,7 @@ async function renderToanDoan() {
     toast('Lỗi giao diện: Không tìm thấy bảng Toàn Đoàn (td-tbody).');
     return;
   }
-  
+
   tb.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-slate-500 font-medium animate-pulse">⏳ Đang tổng hợp dữ liệu toàn đoàn...</td></tr>';
 
   // Lấy danh sách lớp và toàn bộ học sinh đang hoạt động
@@ -353,8 +353,8 @@ async function renderToanDoan() {
     let statsRes;
     try {
       statsRes = await api('getClassAttendanceStats', { schoolYear: year(), className: cls });
-    } catch (e) { 
-      continue; 
+    } catch (e) {
+      continue;
     }
 
     const statsObj = statsRes?.stats || {};
@@ -374,13 +374,13 @@ async function renderToanDoan() {
     classSts.forEach(s => {
       const id = String(s.IdNumber || s.idNumber || '').trim();
       const st = statsObj[id] || {};
-      
+
       c_cn += Number(st['Lễ Chúa Nhật'] || 0);
       c_gl += Number(st['Học Giáo Lý'] || 0);
       c_ctt += Number(st['Chầu Thánh Thể'] || 0);
       c_t5 += Number(st['Lễ Thứ Năm'] || 0);
-      c_total += Math.min(Number(st.total || 0), maxTotal); 
-      
+      c_total += Math.min(Number(st.total || 0), maxTotal);
+
       totalCN += Number(st['Lễ Chúa Nhật'] || 0);
       totalT5 += Number(st['Lễ Thứ Năm'] || 0);
     });
@@ -429,7 +429,7 @@ async function renderToanDoan() {
   const updateCardVal = (titleFragment, newVal) => {
     document.querySelectorAll('#t-toandoan div').forEach(div => {
       if (div.textContent.toUpperCase().includes(titleFragment)) {
-         const valNodes = Array.from(div.querySelectorAll('*')).filter(el => 
+         const valNodes = Array.from(div.querySelectorAll('*')).filter(el =>
            el.textContent.trim() === '—' || /^[0-9]+%?$/.test(el.textContent.trim())
          );
          if (valNodes.length > 0) {
@@ -459,9 +459,15 @@ const fsApply = $('fs-apply');
 const fsCanvas = $('fs-canvas');
 const fsCanvasCtx = fsCanvas ? fsCanvas.getContext('2d') : null;
 
-let fsSelectedImage = null; 
-let fsDetections = [];
+// Hỗ trợ upload tối đa 2 ảnh cùng lúc để tăng số HS được nhận diện (2 góc chụp khác nhau).
+// fsSelectedImages = [{src, source}, ...] tối đa 2 phần tử.
+// fsDetectionsPerImg = [[results ảnh 1], [results ảnh 2]] tương ứng từng ảnh.
+// Khi scan: detect + match trên từng ảnh, gộp match vào table (union - HS match ở bất kỳ ảnh nào đều tick).
+let fsSelectedImages = [];   // tối đa 3 ảnh
+let fsCurrentImgIdx = 0;     // tab đang xem
+let fsDetectionsPerImg = []; // detections cho từng ảnh
 const MATCH_THRESHOLD = 0.55;
+const MAX_FS_IMAGES = 3;
 
 const FACEAPI_MODEL_URL = '/models';
 let fsModelsReady = false;
@@ -619,7 +625,7 @@ async function buildReferenceDescriptors(students, onProgress) {
     const s = needBuild[i];
     let desc = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
-      try { desc = await computeReferenceDescriptor(s.photo); break; } 
+      try { desc = await computeReferenceDescriptor(s.photo); break; }
       catch (e) {
         if (/429|rate.?limit/i.test(e.message) && attempt < 3) {
           await new Promise(r => setTimeout(r, 2000 * Math.pow(2, attempt - 1)));
@@ -632,7 +638,7 @@ async function buildReferenceDescriptors(students, onProgress) {
       cache[s.idNumber] = { photo: s.photo, desc: Array.from(desc), ts: now };
       ok++;
     } else failed++;
-    
+
     if (onProgress) onProgress({ done, total, ok, failed });
     if (i < needBuild.length - 1) await new Promise(r => setTimeout(r, 300));
   }
@@ -679,7 +685,7 @@ function applyNMS(detections, iouThreshold = 0.4) {
   if (detections.length === 0) return [];
   const sorted = detections.map((det, idx) => ({ det, idx, score: det.detection.score })).sort((a, b) => b.score - a.score);
   const keep = [], suppressed = new Set();
-  
+
   for (let i = 0; i < sorted.length; i++) {
     if (suppressed.has(i)) continue;
     keep.push(sorted[i].det);
@@ -698,7 +704,7 @@ async function matchFaces(classImg, refs, opts = {}) {
   await loadFaceApiModels();
   const detectorOpts = new faceapi.TinyFaceDetectorOptions({ inputSize: opts.inputSize || 832, scoreThreshold: opts.scoreThreshold || 0.06 });
   const detections = await faceapi.detectAllFaces(classImg, detectorOpts).withFaceLandmarks().withFaceDescriptors();
-  const filteredDetections = applyNMS(detections, 0.4); 
+  const filteredDetections = applyNMS(detections, 0.4);
 
   const candidates = [];
   for (let i = 0; i < filteredDetections.length; i++) {
@@ -708,7 +714,7 @@ async function matchFaces(classImg, refs, opts = {}) {
   }
 
   candidates.sort((a, b) => a.distance - b.distance);
-  const usedDets = new Set(), usedRefs = new Set(), detMatch = new Array(filteredDetections.length).fill(null); 
+  const usedDets = new Set(), usedRefs = new Set(), detMatch = new Array(filteredDetections.length).fill(null);
 
   for (const c of candidates) {
     if (usedDets.has(c.detIdx) || usedRefs.has(c.refId)) continue;
@@ -720,7 +726,7 @@ async function matchFaces(classImg, refs, opts = {}) {
     const m = detMatch[i], box = det.detection.box;
     let status = 'unknown', autoTick = false;
     if (m) {
-      if (m.distance < THRESHOLD_MATCH) { status = 'matched'; autoTick = true; } 
+      if (m.distance < THRESHOLD_MATCH) { status = 'matched'; autoTick = true; }
       else if (m.distance <= THRESHOLD_REVIEW) { status = 'review'; }
     }
     return {
@@ -754,7 +760,9 @@ function fsOpen() {
 }
 function fsClose() { fsModal.style.display = 'none'; fsReset(); }
 function fsReset() {
-  fsSelectedImage = null; fsDetections = [];
+  fsSelectedImages = [];
+  fsCurrentImgIdx = 0;
+  fsDetectionsPerImg = [];
   clearFsCanvas();
   fsImg.removeAttribute('src');
   fsPreviewWrap.style.display = 'none';
@@ -763,19 +771,112 @@ function fsReset() {
   fsError.classList.add('hidden');
   fsError.textContent = '';
   const f = $('fs-file'); if (f) f.value = '';
-  const u = $('fs-url'); if (u) u.value = '';
+  const fAdd = $('fs-file-add'); if (fAdd) fAdd.value = '';
+  const u = $('fs-urls'); if (u) u.value = '';
+  updateFsTabsUI();
 }
 function fsShowError(msg) { fsError.classList.remove('hidden'); fsError.textContent = '⚠ ' + msg; }
-function fsShowPreview(src, source) {
-  fsSelectedImage = { src, source };
+/**
+ * Thêm 1 ảnh vào list (tối đa MAX_FS_IMAGES).
+ * Nếu đã đầy → thay thế ảnh hiện tại (đang xem).
+ * @param {string} src - URL/dataURL
+ * @param {'file'|'url'} source
+ */
+function fsAddImage(src, source) {
+  if (fsSelectedImages.length < MAX_FS_IMAGES) {
+    fsSelectedImages.push({ src, source });
+    fsDetectionsPerImg.push([]);
+    fsCurrentImgIdx = fsSelectedImages.length - 1;
+  } else {
+    // Đã đầy → thay thế ảnh hiện tại
+    fsSelectedImages[fsCurrentImgIdx] = { src, source };
+    fsDetectionsPerImg[fsCurrentImgIdx] = [];
+  }
+  fsApply.disabled = false;
+  fsApply.textContent = '🤖 Quét & Gợi ý';
+  loadImgIntoSlot(fsCurrentImgIdx);
+}
+
+/**
+ * Load ảnh tại index `idx` vào <img> + sync canvas.
+ */
+function loadImgIntoSlot(idx) {
+  if (idx < 0 || idx >= fsSelectedImages.length) return;
+  fsCurrentImgIdx = idx;
+  const img = fsSelectedImages[idx];
   clearFsCanvas();
-  fsImg.src = src;
+  fsImg.src = img.src;
   fsImg.onload = () => {
-    fsPreviewWrap.style.display = 'block'; fsEmpty.style.display = 'none'; fsApply.disabled = false;
+    fsPreviewWrap.style.display = 'block'; fsEmpty.style.display = 'none';
+    fsApply.disabled = false;
+    fsApply.textContent = '🤖 Quét & Gợi ý';
     $('fs-stats').textContent = 'Kích thước: ' + fsImg.naturalWidth + ' × ' + fsImg.naturalHeight + ' px';
-    if (fsDetections.length) drawDetectionsOverlay(fsDetections);
+    updateFsTabsUI();
+    const dets = fsDetectionsPerImg[idx] || [];
+    if (dets.length) requestAnimationFrame(() => drawDetectionsOverlay(dets));
   };
   fsImg.onerror = () => fsShowError('Không tải được ảnh. Kiểm tra link Drive đã share "Anyone with the link" chưa.');
+}
+
+/**
+ * Render tabs động theo số ảnh đã load.
+ */
+function updateFsTabsUI() {
+  const tabsContainer = $('fs-tabs');
+  if (!tabsContainer) return;
+  tabsContainer.innerHTML = '';
+  fsSelectedImages.forEach((_, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'fs-tab-btn px-4 py-2 font-bold text-sm border-b-2 whitespace-nowrap ' +
+      (i === fsCurrentImgIdx
+        ? 'border-blue-600 text-blue-700'
+        : 'border-transparent text-slate-500 hover:text-slate-700');
+    btn.dataset.tab = i;
+    btn.textContent = '📷 Ảnh ' + (i + 1);
+    btn.addEventListener('click', () => fsSwitchToImg(i));
+    tabsContainer.appendChild(btn);
+  });
+  // Ẩn nút "Thêm ảnh" khi đã đủ MAX_FS_IMAGES, hiện khi chưa đủ
+  const addLabel = $('fs-file-add-label');
+  if (addLabel) {
+    if (fsSelectedImages.length >= MAX_FS_IMAGES) {
+      addLabel.classList.add('hidden');
+    } else {
+      addLabel.classList.remove('hidden');
+    }
+  }
+}
+
+/**
+ * Switch sang ảnh khác (khi user click tab).
+ */
+function fsSwitchToImg(idx) {
+  if (idx < 0 || idx >= fsSelectedImages.length) return;
+  loadImgIntoSlot(idx);
+}
+
+/**
+ * Xoá ảnh hiện tại khỏi list.
+ */
+function fsRemoveCurrentImg() {
+  if (fsSelectedImages.length === 0) return;
+  fsSelectedImages.splice(fsCurrentImgIdx, 1);
+  fsDetectionsPerImg.splice(fsCurrentImgIdx, 1);
+  // Điều chỉnh current index
+  if (fsCurrentImgIdx >= fsSelectedImages.length) fsCurrentImgIdx = Math.max(0, fsSelectedImages.length - 1);
+  // Nếu không còn ảnh nào → reset về trạng thái empty
+  if (fsSelectedImages.length === 0) {
+    clearFsCanvas();
+    fsImg.removeAttribute('src');
+    fsPreviewWrap.style.display = 'none';
+    fsEmpty.style.display = 'block';
+    fsApply.disabled = true;
+    fsApply.textContent = '🤖 Quét & Gợi ý';
+    updateFsTabsUI();
+    return;
+  }
+  // Còn ảnh → load ảnh tại current index
+  loadImgIntoSlot(fsCurrentImgIdx);
 }
 
 const FS_BOX_STYLES = {
@@ -801,8 +902,8 @@ function drawDetectionsOverlay(detections) {
   clearFsCanvas();
   if (!detections || !detections.length) return;
   const size = syncFsCanvasSize();
-  if (!size) return; 
-  const { scaleX: scale, dpr } = size; 
+  if (!size) return;
+  const { scaleX: scale, dpr } = size;
 
   fsCanvasCtx.save();
   fsCanvasCtx.scale(dpr, dpr);
@@ -835,9 +936,10 @@ function drawLabel(ctx, text, x, y, bgColor) {
 
 let fsResizeTimer = null;
 window.addEventListener('resize', () => {
-  if (!fsDetections.length) return;
+  const dets = fsDetectionsPerImg[fsCurrentImgIdx] || [];
+  if (!dets.length) return;
   clearTimeout(fsResizeTimer);
-  fsResizeTimer = setTimeout(() => drawDetectionsOverlay(fsDetections), 100);
+  fsResizeTimer = setTimeout(() => drawDetectionsOverlay(dets), 100);
 });
 
 function fsConvertDriveUrl(u) {
@@ -853,50 +955,168 @@ $('fs-cancel')?.addEventListener('click', fsClose);
 fsModal?.addEventListener('click', e => { if (e.target === fsModal) fsClose(); });
 
 $('fs-file')?.addEventListener('change', e => {
-  const file = e.target.files && e.target.files[0];
-  if (!file) return;
-  if (!file.type.startsWith('image/')) return fsShowError('File không phải ảnh.');
-  const reader = new FileReader();
-  reader.onload = ev => fsShowPreview(ev.target.result, 'file');
-  reader.onerror = () => fsShowError('Không đọc được file.');
-  reader.readAsDataURL(file);
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+  const valid = files.filter(f => f.type.startsWith('image/'));
+  if (!valid.length) return fsShowError('File không phải ảnh.');
+  // Load từng file: ưu tiên thêm vào slot trống, nếu đầy thì thay thế slot hiện tại.
+  // Giới hạn tổng số ảnh = MAX_FS_IMAGES (không load quá).
+  const remaining = MAX_FS_IMAGES - fsSelectedImages.length;
+  if (remaining <= 0) {
+    // Đã đầy → chỉ thay ảnh đang xem
+    toast('⚠ Đã đủ ' + MAX_FS_IMAGES + ' ảnh. File mới sẽ thay thế ảnh đang xem.');
+    loadFileIntoSlot(valid[0], fsCurrentImgIdx);
+  } else {
+    const toLoad = valid.slice(0, remaining);
+    if (valid.length > remaining) toast('⚠ Chỉ load ' + remaining + ' ảnh đầu (tối đa ' + MAX_FS_IMAGES + ').');
+    toLoad.forEach((f, idx) => {
+      // Tìm slot trống tiếp theo
+      const slotIdx = fsSelectedImages.length + idx;
+      loadFileIntoSlot(f, slotIdx);
+    });
+  }
 });
 
-$('fs-load-url')?.addEventListener('click', () => {
-  const raw = $('fs-url').value.trim();
+$('fs-file-add')?.addEventListener('change', e => {
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+  const valid = files.filter(f => f.type.startsWith('image/'));
+  if (!valid.length) return fsShowError('File không phải ảnh.');
+  const remaining = MAX_FS_IMAGES - fsSelectedImages.length;
+  if (remaining <= 0) {
+    toast('⚠ Đã đủ ' + MAX_FS_IMAGES + ' ảnh. File mới sẽ thay thế ảnh đang xem.');
+    loadFileIntoSlot(valid[0], fsCurrentImgIdx);
+  } else {
+    const toLoad = valid.slice(0, remaining);
+    if (valid.length > remaining) toast('⚠ Chỉ load ' + remaining + ' ảnh đầu (tối đa ' + MAX_FS_IMAGES + ').');
+    toLoad.forEach((f, idx) => {
+      const slotIdx = fsSelectedImages.length + idx;
+      loadFileIntoSlot(f, slotIdx);
+    });
+  }
+});
+
+/**
+ * Load 1 file vào slot cụ thể (dùng cả cho initial + thêm ảnh).
+ */
+function loadFileIntoSlot(file, slotIdx) {
+  if (!file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    if (slotIdx < fsSelectedImages.length) {
+      // Slot đã tồn tại → thay thế
+      fsSelectedImages[slotIdx] = { src: ev.target.result, source: 'file' };
+      fsDetectionsPerImg[slotIdx] = [];
+      loadImgIntoSlot(slotIdx);
+    } else {
+      // Slot mới → push
+      fsAddImage(ev.target.result, 'file');
+    }
+  };
+  reader.onerror = () => fsShowError('Không đọc được file.');
+  reader.readAsDataURL(file);
+}
+
+$('fs-load-urls')?.addEventListener('click', () => {
+  const raw = $('fs-urls').value.trim();
   if (!raw) return fsShowError('Chưa nhập URL.');
-  fsShowPreview(fsConvertDriveUrl(raw), 'url');
+  // Tách theo dòng, lọc rỗng
+  const urls = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  if (!urls.length) return fsShowError('Chưa nhập URL hợp lệ.');
+  const remaining = MAX_FS_IMAGES - fsSelectedImages.length;
+  if (remaining <= 0) {
+    toast('⚠ Đã đủ ' + MAX_FS_IMAGES + ' ảnh. URL mới sẽ thay thế ảnh đang xem.');
+    fsAddImage(fsConvertDriveUrl(urls[0]), 'url');
+  } else {
+    const toLoad = urls.slice(0, remaining);
+    if (urls.length > remaining) toast('⚠ Chỉ load ' + remaining + ' URL đầu (tối đa ' + MAX_FS_IMAGES + ').');
+    toLoad.forEach((u, idx) => {
+      const slotIdx = fsSelectedImages.length + idx;
+      const url = fsConvertDriveUrl(u);
+      if (slotIdx < fsSelectedImages.length) {
+        fsSelectedImages[slotIdx] = { src: url, source: 'url' };
+        fsDetectionsPerImg[slotIdx] = [];
+        loadImgIntoSlot(slotIdx);
+      } else {
+        fsAddImage(url, 'url');
+      }
+    });
+  }
+});
+
+$('fs-remove-img')?.addEventListener('click', () => {
+  fsRemoveCurrentImg();
 });
 
 $('fs-apply')?.addEventListener('click', async () => {
   if (fsApply.textContent.includes('Đã xong')) return fsClose();
-  if (!fsSelectedImage) return;
+  if (!fsSelectedImages.length) return;
   fsError.classList.add('hidden');
   try {
-    fsApply.disabled = true; fsApply.textContent = '⏳ Tải models...';
+    fsApply.disabled = true;
+    fsApply.textContent = '⏳ Tải models...';
     await loadFaceApiModels();
     fsApply.textContent = '⏳ Chờ ảnh tham chiếu...';
     const deadline = Date.now() + 30000;
     while (refBuildInProgress && Date.now() < deadline) await new Promise(r => setTimeout(r, 200));
 
-    fsApply.textContent = '🔍 Phát hiện & so khớp...';
-    const result = await matchFaces(fsImg, refDescriptors);
-    if (result.error) return toast('⚠ ' + result.error);
-    
-    if (result.detections === 0) {
-      toast('⚠ Không phát hiện khuôn mặt nào trong ảnh. Thử ảnh khác rõ hơn.');
+    // ✅ Scan từng ảnh (tối đa MAX_FS_IMAGES=3), gộp kết quả match (union).
+    const totalImgs = fsSelectedImages.length;
+    let totalDetections = 0;
+    let allResults = []; // gộp tất cả results từ mọi ảnh
+    for (let i = 0; i < totalImgs; i++) {
+      fsApply.textContent = '🔍 Phát hiện ảnh ' + (i + 1) + '/' + totalImgs + '...';
+      // Switch sang ảnh i để fsImg load
+      fsCurrentImgIdx = i;
+      clearFsCanvas();
+      fsImg.src = fsSelectedImages[i].src;
+      // Đợi ảnh load xong (có thể đã cache nên dùng promise wrap)
+      await new Promise((resolve) => {
+        if (fsImg.complete && fsImg.naturalWidth) return resolve();
+        fsImg.onload = resolve;
+        fsImg.onerror = resolve; // fail cũng continue
+      });
+      // Đợi 1 frame để canvas size sync đúng
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      const result = await matchFaces(fsImg, refDescriptors);
+      if (result.error) {
+        toast('⚠ Ảnh ' + (i + 1) + ': ' + result.error);
+        fsDetectionsPerImg[i] = [];
+        continue;
+      }
+      fsDetectionsPerImg[i] = result.results;
+      totalDetections += result.detections;
+      allResults = allResults.concat(result.results);
+    }
+
+    if (totalDetections === 0) {
+      toast('⚠ Không phát hiện khuôn mặt nào trong cả ' + totalImgs + ' ảnh. Thử ảnh khác rõ hơn.');
+      // Vẫn show overlay cho ảnh hiện tại (rỗng)
+      fsSwitchToImg(0);
       return;
     }
 
-    fsDetections = result.results;
-    const { ticked, review, reviewList, skipped } = applyResultsToTable(result);
-    requestAnimationFrame(() => drawDetectionsOverlay(result.results));
+    // Gộp tất cả results → apply vào table (union: HS match ở bất kỳ ảnh nào đều tick).
+    // Lưu ý: applyResultsToTable đã skip HS đã tick "Hiện diện"/"Có phép" → không trùng.
+    const mergedResult = { results: allResults, detections: totalDetections };
+    const { ticked, review, reviewList, skipped } = applyResultsToTable(mergedResult);
 
-    fsApply.disabled = false; fsApply.textContent = '✓ Đã xong & Đóng';
-    
-    if (ticked === 0 && review === 0) return toast('⚠ Phát hiện ' + result.detections + ' mặt nhưng không khớp HS nào trong lớp.');
-    
-    let summary = '✅ Tick ' + ticked + ' HS hiện diện';
+    // Vẽ overlay của ảnh hiện tại (ảnh 1 hoặc ảnh user đang xem)
+    const prevIdx = fsCurrentImgIdx;
+    fsCurrentImgIdx = 0;
+    fsSwitchToImg(0);
+    // Sau khi switch sang ảnh 1 xong → cũng giữ currentImg ở đầu để user thấy ảnh 1 trước
+
+    fsApply.disabled = false;
+    fsApply.textContent = '✓ Đã xong & Đóng';
+
+    let summary;
+    if (totalImgs === 1) {
+      summary = '✅ Tick ' + ticked + ' HS hiện diện';
+    } else {
+      summary = '✅ Tick ' + ticked + ' HS hiện diện (gộp từ ' + totalImgs + ' ảnh)';
+    }
     if (review > 0) summary += ' (có ' + review + ' cần xem lại: ' + reviewList.slice(0, 3).join(', ') + (reviewList.length > 3 ? '…' : '') + ')';
     if (skipped.length) summary += ' (bỏ qua ' + skipped.length + ' đã tick trước)';
     toast(summary);
@@ -904,7 +1124,8 @@ $('fs-apply')?.addEventListener('click', async () => {
     fsShowError(e.message);
   } finally {
     if (fsApply.textContent.startsWith('⏳') || fsApply.textContent.startsWith('🔍')) {
-      fsApply.disabled = false; fsApply.textContent = '🤖 Quét & Gợi ý';
+      fsApply.disabled = false;
+      fsApply.textContent = '🤖 Quét & Gợi ý';
     }
   }
 });
