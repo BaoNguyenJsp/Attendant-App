@@ -6,6 +6,7 @@
 <title>Chuyên Cần — Sổ Thiếu Nhi</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <link rel="stylesheet" href="/shared/style.css">
 </head>
 <body class="bg-slate-100 min-h-screen"
@@ -26,14 +27,20 @@
 
   <!-- t-dd -->
   <div id="t-dd" class="bg-white rounded-b-xl shadow-sm p-5" data-pane>
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
       <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
         <select id="dd-lop" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></select></div>
       <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Tuần (Chủ Nhật)</label>
         <input type="date" id="dd-week" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></div>
       <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Buổi Sinh Hoạt</label>
         <select id="dd-buoi" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></select></div>
-      <div class="flex items-end"><button id="dd-markall" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-lg">✅ Chọn hiện diện tất cả</button></div>
+      <div class="flex items-end">
+        <button id="dd-markall" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-lg whitespace-nowrap">✅ Chọn hiện diện tất cả</button>
+      </div>
+      <div class="flex items-end">
+        <button id="dd-facescan" title="Upload ảnh lớp để AI gợi ý điểm danh" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2.5 rounded-lg whitespace-nowrap">📷 Upload ảnh lớp</button>
+        <span id="fs-status" class="ml-2 text-xs font-bold"></span>
+      </div>
     </div>
 
     <div id="dd-holiday-note"></div>
@@ -56,6 +63,46 @@
       <div class="flex gap-3 flex-wrap">
         <button id="dd-refresh" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-5 py-3 rounded-lg">↻ Làm mới</button>
         <button id="dd-save" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3 rounded-lg">💾 Lưu Điểm Danh</button>
+      </div>
+    </div>
+
+    <!-- Face Scan Modal -->
+    <div id="fs-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" style="display:none">
+      <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+          <h3 class="text-lg font-bold text-slate-800">📷 Quét khuôn mặt — Upload ảnh lớp</h3>
+          <button id="fs-close" class="text-slate-500 hover:text-slate-800 text-2xl leading-none px-2">✕</button>
+        </div>
+        <div class="px-6 py-4 overflow-y-auto flex-1">
+          <div id="fs-empty" class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center bg-slate-50">
+            <div class="text-5xl mb-3">📷</div>
+            <p class="font-bold text-slate-700 mb-2">Upload ảnh lớp để AI gợi ý điểm danh</p>
+            <p class="text-sm text-slate-500 mb-4">Chọn ảnh chụp Thiếu Nhi ngồi theo hàng (chất lượng càng cao, AI càng chính xác)</p>
+            <label class="inline-block bg-rose-600 hover:bg-rose-700 text-white font-bold px-6 py-3 rounded-lg cursor-pointer transition">
+              📁 Chọn ảnh từ máy
+              <input type="file" id="fs-file" accept="image/*" class="hidden">
+            </label>
+            <p class="text-xs text-slate-400 mt-3">Hoặc dán URL ảnh Drive vào ô bên dưới</p>
+            <input type="url" id="fs-url" placeholder="https://drive.google.com/file/d/..." class="mt-3 w-full max-w-md border p-2 rounded-lg text-sm">
+            <button id="fs-load-url" class="mt-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg text-sm">Tải từ URL</button>
+          </div>
+          <div id="fs-preview-wrap" style="display:none">
+            <p class="text-sm font-bold text-slate-700 mb-2">Ảnh đã chọn:</p>
+            <div class="relative inline-block max-w-full">
+              <img id="fs-img" class="max-w-full max-h-[60vh] rounded-lg border border-slate-300" alt="Preview">
+              <!-- Step 1: canvas overlay (absolute trên ảnh) -->
+              <canvas id="fs-canvas" class="absolute top-0 left-0 pointer-events-none"></canvas>
+            </div>
+            <div id="fs-stats" class="mt-3 text-sm text-slate-600"></div>
+            <!-- Step 1: results panel (sẽ render cards ở Step 5) -->
+            <div id="fs-results" class="mt-4 space-y-2"></div>
+          </div>
+          <div id="fs-error" class="hidden mt-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm"></div>
+        </div>
+        <div class="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
+          <button id="fs-cancel" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-5 py-2.5 rounded-lg">Huỷ</button>
+          <button id="fs-apply" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-lg" disabled>🤖 Quét & Gợi ý</button>
+        </div>
       </div>
     </div>
   </div>
