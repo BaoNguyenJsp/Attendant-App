@@ -8,7 +8,7 @@ const TAB_HEADERS = {
   Groups:            ['GroupName', 'Type', 'Scope', 'Description'],
   GroupMembers:      ['GroupName', 'Email'],
   Classes:           ['ClassName', 'Grade'],
-  Students:          ['IdNumber', 'SaintName', 'FullName', 'DateOfBirth', 'Gender', 'Father', 'Mother', 'CurrentClass', 'EnrollYear', 'Status', 'Note', 'ListOrder'],
+  Students:          ['IdNumber', 'SaintName', 'FullName', 'DateOfBirth', 'Gender', 'Father', 'Mother', 'CurrentClass', 'EnrollYear', 'Status', 'Photo', 'Note', 'ListOrder'],  
   Teaching:          ['SchoolYear', 'WeekOf', 'ClassName', 'TeacherEmail', 'LessonContent', 'LessonPlanUrl', 'LessonPlanNames', 'RevisedPlanUrl', 'RevisedPlanNames', 'UpdatedBy'],
   Scores:            ['SchoolYear', 'IdNumber', 'ClassName', 'Quiz15_S1', 'Exam_S1', 'Quiz15_S2', 'Exam_S2'],
   Config:            ['Key', 'Value'],
@@ -806,7 +806,9 @@ const ACTIONS = {
       IdNumber: b.idNumber, SaintName: b.saintName || '', FullName: b.fullName,
       DateOfBirth: b.dateOfBirth || '', Gender: b.gender || '', Father: b.father || '', Mother: b.mother || '',
       CurrentClass: b.className, EnrollYear: b.enrollYear || currentYear(),
-      Status: b.status || 'Hoạt động', Note: b.note || '',
+      Status: b.status || 'Hoạt động', 
+      Photo: b.photo !== undefined ? b.photo : (old ? (old.Photo || '') : ''), // Add this line
+      Note: b.note || '',
       ListOrder: b.listOrder !== undefined ? b.listOrder : (old ? (old.ListOrder || '') : '')
     };
     upsertRows('Students', o => normId(o.IdNumber) === normId(b.idNumber), [row]);
@@ -845,6 +847,7 @@ const ACTIONS = {
         idNumber: st.IdNumber,
         saintName: st.SaintName || '',
         fullName: st.FullName,
+        photo: st.Photo || st.PhotoURL || st.Image || '', // Add this line
         sessions: recs[normId(st.IdNumber)] || {}
       })),
       isHolidayWeek: !!isHoliday(holidays(year), b.weekOf, b.session) 
