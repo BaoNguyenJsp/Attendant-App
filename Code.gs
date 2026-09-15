@@ -801,15 +801,42 @@ const ACTIONS = {
         sh.getRange(1, 1, 1, TAB_HEADERS.Attendance.length).setValues([TAB_HEADERS.Attendance]);
       }
 
-      const data = sh.getDataRange().getValues();
+      // Read from ultra-fast cache instead of downloading 3000 rows from the sheet
+      const cachedData = cachedRead(sheetName); 
       let modified = false;
       const incomingMap = {};
       (b.records || []).forEach(r => incomingMap[normId(r.idNumber)] = r);
 
-      for (let i = 1; i < data.length; i++) {
-        const rowWk = data[i][1] instanceof Date ? fmtDate(data[i][1]) : String(data[i][1]).trim();
-        if (rowWk === weekOf) {
-          const stId = normId(data[i][2]);
+      // Find EXACT row indices for this week
+      const targetIndices = [];
+      for (let i = 0; i < cachedData.length; i++) {
+        if (String(cachedData[i].WeekOf).trim() === weekOf) {
+          targetIndices.push(i);
+        }
+      }
+
+      // Group rows into blocks (so we can update them in one fast API call)
+      const blocks = [];
+      if (targetIndices.length > 0) {
+        let currentBlock = [targetIndices[0]];
+        for (let i = 1; i < targetIndices.length; i++) {
+          if (targetIndices[i] === targetIndices[i-1] + 1) currentBlock.push(targetIndices[i]);
+          else { blocks.push(currentBlock); currentBlock = [targetIndices[i]]; }
+        }
+        blocks.push(currentBlock);
+      }
+
+      const headers = TAB_HEADERS.Attendance;
+
+      // UPDATE EXACT ROWS ONLY (Takes ~0.2 seconds instead of 8 seconds)
+      for (const block of blocks) {
+        const blockData = [];
+        let blockModified = false;
+
+        for (const idx of block) {
+          const rowObj = cachedData[idx];
+          const stId = normId(rowObj.IdNumber);
+          
           if (incomingMap[stId]) {
             const studentData = incomingMap[stId];
             SESSIONS.forEach(sess => {
@@ -818,41 +845,55 @@ const ACTIONS = {
                 const rec = studentData.sessions[sess];
                 const normSt = (rec.status === 'Có mặt' || rec.status === 'Hiện diện') ? 'Hiện diện' : 
                                (rec.status === 'Vắng có phép' || rec.status === 'Có phép') ? 'Có phép' : rec.status;
-                data[i][colInfo.sIdx] = normSt || '';
-                data[i][colInfo.nIdx] = rec.note || '';
+                rowObj[colInfo.status] = normSt || '';
+                rowObj[colInfo.note] = rec.note || '';
               }
             });
             delete incomingMap[stId];
+            blockModified = true;
             modified = true;
           }
+          blockData.push(headers.map(h => rowObj[h] !== undefined ? rowObj[h] : ''));
+        }
+        
+        if (blockModified) {
+          const startRow = block[0] + 2; // +1 for 0-index, +1 for Header row
+          sh.getRange(startRow, 1, blockData.length, headers.length).setValues(blockData);
         }
       }
 
+      // Add any leftover new students as NEW rows at the bottom
       const activeList = activeStudents(cls);
+      const newRows = [];
       activeList.forEach(st => {
         const stId = normId(st.IdNumber);
         if (incomingMap[stId]) {
           const studentData = incomingMap[stId];
-          const newRow = [year, weekOf, st.IdNumber, cls, '', '', '', '', '', '', '', ''];
+          const newRowObj = { SchoolYear: year, WeekOf: weekOf, IdNumber: st.IdNumber, ClassName: cls };
+          
           SESSIONS.forEach(sess => {
             const colInfo = SESSION_COL_MAP[sess];
             if (colInfo && studentData.sessions && studentData.sessions[sess]) {
               const rec = studentData.sessions[sess];
               const normSt = (rec.status === 'Có mặt' || rec.status === 'Hiện diện') ? 'Hiện diện' : 
                              (rec.status === 'Vắng có phép' || rec.status === 'Có phép') ? 'Có phép' : rec.status;
-              newRow[colInfo.sIdx] = normSt || '';
-              newRow[colInfo.nIdx] = rec.note || '';
+              newRowObj[colInfo.status] = normSt || '';
+              newRowObj[colInfo.note] = rec.note || '';
             }
           });
-          data.push(newRow);
+          cachedData.push(newRowObj);
+          newRows.push(headers.map(h => newRowObj[h] !== undefined ? newRowObj[h] : ''));
           modified = true;
         }
       });
 
-      if (modified) {
-        sh.getRange(1, 1, data.length, data[0].length).setValues(data);
-        writeCache(sheetName, data.slice(1).map(r => rowObj(data[0], r))); // WRITE-THROUGH
+      if (newRows.length > 0) {
+        sh.getRange(sh.getLastRow() + 1, 1, newRows.length, headers.length).setValues(newRows);
       }
+
+      // Save memory state instantly to cache
+      if (modified) writeCache(sheetName, cachedData);
+      
       return { status: 'ok' };
     } finally { lock.releaseLock(); }
   },
@@ -920,22 +961,43 @@ const ACTIONS = {
     try {
       const year = currentYear();
       const weekOf = String(b.weekOf).trim();
+      const sheetName = 'TeacherAttendance';
 
-      let sh = ss().getSheetByName('TeacherAttendance');
+      let sh = ss().getSheetByName(sheetName);
       if (!sh) {
-        sh = ss().insertSheet('TeacherAttendance');
+        sh = ss().insertSheet(sheetName);
         sh.getRange(1, 1, 1, TAB_HEADERS.TeacherAttendance.length).setValues([TAB_HEADERS.TeacherAttendance]);
       }
 
-      const data = sh.getDataRange().getValues();
+      const cachedData = cachedRead(sheetName);
       let modified = false;
       const incomingMap = {};
       (b.records || []).forEach(r => incomingMap[String(r.email || '').toLowerCase().trim()] = r);
 
-      for (let i = 1; i < data.length; i++) {
-        const rowWk = data[i][1] instanceof Date ? fmtDate(data[i][1]) : String(data[i][1]).trim();
-        if (rowWk === weekOf) {
-          const emailKey = String(data[i][2] || '').toLowerCase().trim();
+      const targetIndices = [];
+      for (let i = 0; i < cachedData.length; i++) {
+        if (String(cachedData[i].WeekOf).trim() === weekOf) targetIndices.push(i);
+      }
+
+      const blocks = [];
+      if (targetIndices.length > 0) {
+        let currentBlock = [targetIndices[0]];
+        for (let i = 1; i < targetIndices.length; i++) {
+          if (targetIndices[i] === targetIndices[i-1] + 1) currentBlock.push(targetIndices[i]);
+          else { blocks.push(currentBlock); currentBlock = [targetIndices[i]]; }
+        }
+        blocks.push(currentBlock);
+      }
+
+      const headers = TAB_HEADERS.TeacherAttendance;
+
+      for (const block of blocks) {
+        const blockData = [];
+        let blockModified = false;
+        for (const idx of block) {
+          const rowObj = cachedData[idx];
+          const emailKey = String(rowObj.TeacherEmail || '').toLowerCase().trim();
+          
           if (incomingMap[emailKey]) {
             const teacherData = incomingMap[emailKey];
             TEACHER_SESSIONS.forEach(sess => {
@@ -944,22 +1006,30 @@ const ACTIONS = {
                 const rec = teacherData.sessions[sess];
                 const normSt = (rec.status === 'Có mặt' || rec.status === 'Hiện diện') ? 'Hiện diện' : 
                                (rec.status === 'Vắng có phép' || rec.status === 'Có phép') ? 'Có phép' : rec.status;
-                data[i][colInfo.sIdx] = normSt || '';
-                data[i][colInfo.nIdx] = rec.note || '';
+                rowObj[colInfo.status] = normSt || '';
+                rowObj[colInfo.note] = rec.note || '';
               }
             });
             delete incomingMap[emailKey];
+            blockModified = true;
             modified = true;
           }
+          blockData.push(headers.map(h => rowObj[h] !== undefined ? rowObj[h] : ''));
+        }
+        
+        if (blockModified) {
+          const startRow = block[0] + 2;
+          sh.getRange(startRow, 1, blockData.length, headers.length).setValues(blockData);
         }
       }
 
       const roster = rosterFor(b.sector);
+      const newRows = [];
       roster.forEach(u => {
         const emailKey = String(u.email).toLowerCase().trim();
         if (incomingMap[emailKey]) {
           const teacherData = incomingMap[emailKey];
-          const newRow = [year, weekOf, u.email, u.className || 'Xứ đoàn', '', '', '', '', '', '', '', '', '', ''];
+          const newRowObj = { SchoolYear: year, WeekOf: weekOf, TeacherEmail: u.email, ClassName: u.className || 'Xứ đoàn' };
           
           TEACHER_SESSIONS.forEach(sess => {
             const colInfo = SESSION_COL_MAP[sess];
@@ -967,19 +1037,22 @@ const ACTIONS = {
               const rec = teacherData.sessions[sess];
               const normSt = (rec.status === 'Có mặt' || rec.status === 'Hiện diện') ? 'Hiện diện' : 
                              (rec.status === 'Vắng có phép' || rec.status === 'Có phép') ? 'Có phép' : rec.status;
-              newRow[colInfo.sIdx] = normSt || '';
-              newRow[colInfo.nIdx] = rec.note || '';
+              newRowObj[colInfo.status] = normSt || '';
+              newRowObj[colInfo.note] = rec.note || '';
             }
           });
-          data.push(newRow);
+          cachedData.push(newRowObj);
+          newRows.push(headers.map(h => newRowObj[h] !== undefined ? newRowObj[h] : ''));
           modified = true;
         }
       });
 
-      if (modified) {
-        sh.getRange(1, 1, data.length, data[0].length).setValues(data);
-        writeCache('TeacherAttendance', data.slice(1).map(r => rowObj(data[0], r))); // WRITE-THROUGH
+      if (newRows.length > 0) {
+        sh.getRange(sh.getLastRow() + 1, 1, newRows.length, headers.length).setValues(newRows);
       }
+
+      if (modified) writeCache(sheetName, cachedData);
+      
       return { status: 'ok' };
     } finally { lock.releaseLock(); }
   },
@@ -1269,17 +1342,29 @@ const ACTIONS = {
       (b.orderedIds || []).forEach((id, idx) => orderMap[normId(id)] = idx + 1);
       
       let changed = false;
+      let minModifiedIdx = -1;
+      let maxModifiedIdx = -1;
+
       for (let i = 1; i < data.length; i++) {
         const id = normId(data[i][idIdx]);
         if (orderMap[id] !== undefined) {
-          data[i][orderIdx] = orderMap[id];
-          changed = true;
+          if (data[i][orderIdx] !== orderMap[id]) {
+            data[i][orderIdx] = orderMap[id];
+            changed = true;
+            if (minModifiedIdx === -1 || i < minModifiedIdx) minModifiedIdx = i;
+            if (maxModifiedIdx === -1 || i > maxModifiedIdx) maxModifiedIdx = i;
+          }
         }
       }
       
       if (changed) {
-        sh.getRange(1, 1, data.length, data[0].length).setValues(data);
-        writeCache('Students', data.slice(1).map(r => rowObj(head, r))); // WRITE-THROUGH
+        // SMART WRITE
+        if (minModifiedIdx !== -1) {
+          const numRows = maxModifiedIdx - minModifiedIdx + 1;
+          const chunk = data.slice(minModifiedIdx, maxModifiedIdx + 1);
+          sh.getRange(minModifiedIdx + 1, 1, numRows, data[0].length).setValues(chunk);
+        }
+        writeCache('Students', data.slice(1).map(r => rowObj(head, r))); 
       }
       return { status: 'ok' };
     } finally { lock.releaseLock(); }
