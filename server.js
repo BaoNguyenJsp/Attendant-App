@@ -13,10 +13,11 @@ function createApp() {
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '25mb' }));
+  
   app.use(cookieSession({
     name: 'session',
-    secret: cfg.sessionSecret,
-    maxAge: 12 * 60 * 60 * 1000,
+    secret: cfg.sessionSecret, 
+    maxAge: 30 * 24 * 60 * 60 * 1000, 
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.SESSION_SECURE === '1',
