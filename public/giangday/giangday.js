@@ -3,7 +3,7 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, setState, TCLASSES, cur, USERS_ROWS, defaultWeek, normSunday, year } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, setState, TCLASSES, cur, USERS_ROWS, defaultWeek, normSunday, year, fmtDate , toIsoDate } from '../shared/common.js';
 import { userFull, fileLink } from '../shared/ui.js';
 
 await initCommon();
@@ -41,16 +41,15 @@ const glvLabel = em => {
 
 /* ---------- Cards (Active Week Only) ---------- */
 async function renderCards() {
-  if (!$('gd-week').value) {
-    const d = new Date();
-    d.setDate(d.getDate() + (d.getDay() === 0 ? 0 : 7 - d.getDay()));
-    const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
-    $('gd-week').value = `${y}-${m}-${day}`;
+  const weekInp = $('gd-week');
+  
+  if (!weekInp.value) {
+    weekInp.value = defaultWeek();
   }
   
-  normSunday($('gd-week'));
+  normSunday(weekInp);
   
-  const wk = $('gd-week').value;
+  const wk = weekInp.value;
   let recs = [];
   try { recs = (await api('getTeaching', {schoolYear: year(), weekOf: wk})).records || []; }
   catch (e) { return toast(e.message); }
@@ -109,7 +108,7 @@ async function renderHist(force = false) {
 
   $('gd-history').innerHTML = hist.length
     ? hist.map(r => '<tr>' +
-      '<td>' + esc(r.WeekOf) + '</td>' + // 1. Ngày dạy
+      '<td>' + esc(fmtDate(r.WeekOf)) + '</td>' + // 1. Ngày dạy
       '<td>' + esc(r.ClassName) + '</td>' + // 2. Lớp
       '<td>' + esc(glvLabel(r.TeacherEmail)) + '</td>' + // 3. Giáo lý viên
       '<td class="max-w-xs truncate">' + esc(r.LessonContent || '') + '</td>' + // 4. Bài học

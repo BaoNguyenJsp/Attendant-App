@@ -15,17 +15,6 @@ module.exports = {
     // Ghi Thiếu nhi theo lớp (FR-AUTH-10)
     app.post('/api/saveStudent', authz.requireScopeWrite, proxy('saveStudent'));
     app.post('/api/saveStudentOrder', authz.requireScopeWrite, proxy('saveStudentOrder'));
-
-    // Tìm kiếm CCCD: chỉ trả nếu Thiếu nhi thuộc scope[] hoặc admin
-    app.post('/api/searchByIdNumber', async (req, res, next) => {
-      try {
-        const data = await call('searchByIdNumber', req.body || {});
-        const list = (data.students || []).map((x) => (x.CurrentClass ? x : { ...x, CurrentClass: x.className }));
-        if ((RANK[req.session.tier] || 0) < RANK[ADMIN]) {
-          if (list.some((st) => !req.session.scope.includes(st.CurrentClass))) return send(res, 403, 'Thiếu nhi không thuộc phạm vi của bạn.');
-        }
-        res.json(data);
-      } catch (e) { next(e); }
-    });
+    app.post('/api/searchByIdNumber', proxy('searchByIdNumber'));
   },
 };

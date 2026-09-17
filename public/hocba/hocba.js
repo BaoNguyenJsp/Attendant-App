@@ -3,7 +3,7 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, setState, TSTUDENTS, TSCORES, TCLASSES, year, isExec, cur, fmt1, fillClasses, fillSel, exportExcel, sortStudents } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, setState, TSTUDENTS, TSCORES, TCLASSES, year, isExec, cur, fmt1, fillClasses, fillSel, exportExcel, sortStudents , toIsoDate } from '../shared/common.js';
 import { normSummary, activeStudents } from '../shared/ui.js';
 
 await initCommon();
@@ -220,67 +220,93 @@ async function importScores() {
 
 /* ---------- TRÍCH LỤC HỌC BẠ CHUYÊN SÂU ---------- */
 async function renderHBT() {
-  const id = $('hbt-id').value.trim();
-  if (!id) return toast('Vui lòng nhập số CCCD / Định danh');
+  const q = $('hbt-id').value.trim().toLowerCase();
+  if (!q) return toast('Vui lòng nhập tên, tên thánh hoặc CCCD');
   
-  let r;
-  try {
-    r = await api('getHocBa', { idNumber: id });
-  } catch (e) {
-    return toast(e.message);
-  }
-  
-  if (r.status === 'error') return toast(r.message);
-  
-  const st = r.student;
-  if (!st) return toast('Không tìm thấy dữ liệu học sinh.');
-  
-  const records = r.history || [];
-  if (r.currentRec) records.push(r.currentRec);
-  
-  records.sort((a, b) => String(b.SchoolYear).localeCompare(String(a.SchoolYear)));
+  // 1. Search locally across all loaded students
+  const hits = TSTUDENTS.filter(s => 
+    (s.FullName && s.FullName.toLowerCase().includes(q)) || 
+    (s.IdNumber && s.IdNumber.toLowerCase().includes(q)) || 
+    (s.SaintName && s.SaintName.toLowerCase().includes(q))
+  ).slice(0, 10); // Limit to 10 results to prevent API overload/UI freezing
   
   const out = $('hbt-out');
-  out.innerHTML = `
-    <div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm mb-4">
-      <h3 class="text-lg font-bold text-blue-900 mb-2">${esc(st.SaintName || '')} ${esc(st.FullName)}</h3>
-      <div class="text-sm text-slate-700 grid grid-cols-2 md:grid-cols-4 gap-2">
-        <p><b>CCCD:</b> ${esc(st.IdNumber)}</p>
-        <p><b>Lớp hiện tại:</b> ${esc(st.CurrentClass)}</p>
-        <p><b>Trạng thái:</b> ${esc(st.Status)}</p>
-        <p><b>Năm nhập học:</b> ${esc(st.EnrollYear || '—')}</p>
-      </div>
-    </div>
+  
+  if (hits.length === 0) {
+    return out.innerHTML = '<div class="p-4 text-center text-amber-600 font-medium">Không tìm thấy Thiếu nhi nào phù hợp.</div>';
+  }
+
+  out.innerHTML = '<div class="p-4 text-center text-blue-600 font-medium animate-pulse">Đang tra cứu dữ liệu...</div>';
+
+  try {
+    // 2. Fetch academic records concurrently for all matching students
+    const resultsHtml = await Promise.all(hits.map(async (st) => {
+      let r;
+      try {
+        r = await api('getHocBa', { idNumber: st.IdNumber });
+      } catch (e) {
+        return `<div class="p-4 text-red-500">Lỗi tải dữ liệu cho ${esc(st.FullName)}: ${esc(e.message)}</div>`;
+      }
+      
+      if (r.status === 'error') return `<div class="p-4 text-red-500">${esc(r.message)}</div>`;
+      
+      const fetchedSt = r.student || st;
+      const records = r.history || [];
+      if (r.currentRec) records.push(r.currentRec);
+      
+      records.sort((a, b) => String(b.SchoolYear).localeCompare(String(a.SchoolYear)));
+      
+      return `
+        <div class="mb-8">
+          <div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm mb-4">
+            <h3 class="text-lg font-bold text-blue-900 mb-2">${esc(fetchedSt.SaintName || '')} ${esc(fetchedSt.FullName)}</h3>
+            <div class="text-sm text-slate-700 grid grid-cols-2 md:grid-cols-4 gap-2">
+              <p><b>CCCD:</b> ${esc(fetchedSt.IdNumber)}</p>
+              <p><b>Lớp hiện tại:</b> ${esc(fetchedSt.CurrentClass)}</p>
+              <p><b>Trạng thái:</b> ${esc(fetchedSt.Status)}</p>
+              <p><b>Năm nhập học:</b> ${esc(fetchedSt.EnrollYear || '—')}</p>
+            </div>
+          </div>
+          
+          <div class="tbl-scroll">
+            <table class="w-full text-sm border-collapse bg-white">
+              <thead>
+                <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+                  <th class="p-3 border">Năm Học</th>
+                  <th class="p-3 border">Lớp</th>
+                  <th class="p-3 border">ĐTB HK1</th>
+                  <th class="p-3 border">ĐTB HK2</th>
+                  <th class="p-3 border">ĐTB Năm</th>
+                  <th class="p-3 border">Chuyên Cần</th>
+                  <th class="p-3 border">Xếp Loại</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${records.length ? records.map(x => `
+                  <tr>
+                    <td class="p-2 border text-center font-bold text-slate-700">${esc(x.SchoolYear)}</td>
+                    <td class="p-2 border text-center font-medium">${esc(x.ClassName)}</td>
+                    <td class="p-2 border text-center">${fmt1(x.HK1Score)}</td>
+                    <td class="p-2 border text-center">${fmt1(x.HK2Score)}</td>
+                    <td class="p-2 border text-center font-bold text-blue-800">${fmt1(x.YearScore)}</td>
+                    <td class="p-2 border text-center">${x.YearAttendant == null ? '—' : x.YearAttendant + '%'}</td>
+                    <td class="p-2 border text-center font-semibold ${x.Status === 'Giỏi' ? 'text-pink-600' : 'text-slate-700'}">${esc(x.Status || '—')}</td>
+                  </tr>
+                `).join('') : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có hồ sơ học tập.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <hr class="my-8 border-slate-300 border-dashed border-t-2" />
+      `;
+    }));
     
-    <div class="tbl-scroll">
-      <table class="w-full text-sm border-collapse bg-white">
-        <thead>
-          <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
-            <th class="p-3">Năm Học</th>
-            <th class="p-3">Lớp</th>
-            <th class="p-3">ĐTB HK1</th>
-            <th class="p-3">ĐTB HK2</th>
-            <th class="p-3">ĐTB Năm</th>
-            <th class="p-3">Chuyên Cần</th>
-            <th class="p-3">Xếp Loại</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${records.length ? records.map(x => `
-            <tr>
-              <td class="p-2 border text-center font-bold text-slate-700">${esc(x.SchoolYear)}</td>
-              <td class="p-2 border text-center font-medium">${esc(x.ClassName)}</td>
-              <td class="p-2 border text-center">${fmt1(x.HK1Score)}</td>
-              <td class="p-2 border text-center">${fmt1(x.HK2Score)}</td>
-              <td class="p-2 border text-center font-bold text-blue-800">${fmt1(x.YearScore)}</td>
-              <td class="p-2 border text-center">${x.YearAttendant == null ? '—' : x.YearAttendant + '%'}</td>
-              <td class="p-2 border text-center font-semibold ${x.Status === 'Giỏi' ? 'text-pink-600' : 'text-slate-700'}">${esc(x.Status || '—')}</td>
-            </tr>
-          `).join('') : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có hồ sơ học tập.</td></tr>'}
-        </tbody>
-      </table>
-    </div>
-  `;
+    // Join all results and strip the very last <hr> divider
+    out.innerHTML = resultsHtml.join('').replace(/(<hr[^>]*>)\s*$/, '');
+    
+  } catch (e) {
+    out.innerHTML = `<div class="p-4 text-red-500 font-medium">Đã xảy ra lỗi: ${esc(e.message)}</div>`;
+  }
 }
 
 /* ---------- Tổng Hợp & Khen Thưởng ---------- */

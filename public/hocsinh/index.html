@@ -15,8 +15,16 @@
 
   <div id="shell"></div>
 
-  <div class="max-w-7xl mx-auto px-4 pb-6">
-    <div class="bg-white rounded-xl shadow-sm p-5">
+ <div class="max-w-7xl mx-auto px-4 pb-6">
+    
+    <!-- TABS -->
+    <div class="bg-white rounded-t-xl border-b border-slate-300 shadow-sm px-4 pt-2 flex flex-wrap gap-2">
+      <button class="tab-btn active" data-tab="t-class">🏫 Theo Lớp</button>
+      <button class="tab-btn" data-tab="t-search">🔍 Tra Cứu Toàn Đoàn</button>
+    </div>
+
+    <!-- TAB 1: THEO LỚP -->
+    <div id="t-class" class="bg-white rounded-b-xl shadow-sm p-5" data-pane>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
         <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
           <select id="hs-lop" class="w-full border p-2.5 rounded-lg font-semibold"></select>
@@ -45,6 +53,36 @@
         </table>
       </div>
     </div>
+
+    <!-- TAB 2: TRA CỨU TOÀN ĐOÀN -->
+    <div id="t-search" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+      <div class="mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Tìm kiếm Thiếu nhi</label>
+        <input type="text" id="hs-search-input" class="w-full border border-slate-300 p-2.5 rounded-lg font-semibold outline-none focus:border-blue-500" placeholder="Nhập tên, tên thánh hoặc CCCD để tìm kiếm...">
+      </div>
+      <div class="tbl-scroll sticky">
+        <table class="w-full text-sm border-collapse">
+          <thead>
+            <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+              <th class="p-3">Lớp</th>
+              <th class="p-3">Số CCCD</th>
+              <th class="p-3">Họ Và Tên</th>
+              <th class="p-3">Giới Tính</th>
+              <th class="p-3">Ngày Sinh</th>
+              <th class="p-3">Năm Nhập Học</th>
+              <th class="p-3">Trạng Thái</th>
+              <th class="p-3">Anh/Chị/Em</th>
+              <th class="p-3">Ghi Chú</th>
+              <!-- Removed Thao Tác column -->
+            </tr>
+          </thead>
+          <tbody id="hs-search-tbody">
+            <tr><td colspan="9" class="p-4 text-center text-slate-400">Nhập thông tin để tìm kiếm...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
   </div>
 
   <div id="hs-modal" class="modal">

@@ -21,6 +21,7 @@
     <button class="tab-btn" data-tab="t-grp">🗂 Nhóm</button>
     <button class="tab-btn" data-tab="t-cls">🏫 Lớp</button>
     <button class="tab-btn" data-tab="t-hol">🗓 Nghỉ Lễ</button>
+    <button class="tab-btn" data-tab="t-cfg">⚙ Cấu hình</button>
     <button class="tab-btn" data-tab="t-year">🎓 Chuyển năm</button>
   </div>
 
@@ -80,6 +81,29 @@
       <table class="w-full text-sm border-collapse">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center"><th class="p-3">Tuần</th><th class="p-3">Buổi</th><th class="p-3">Lý do</th><th class="p-3"></th></tr></thead>
         <tbody id="hol-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- t-cfg -->
+  <div id="t-cfg" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+    <div class="flex justify-between items-center mb-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
+      <h2 class="font-bold text-lg text-slate-700">⚙ Cấu hình Hệ Thống (Config)</h2>
+      <div class="flex gap-2">
+        <button id="cfg-add-row" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2 rounded-lg text-sm">＋ Thêm Cấu hình</button>
+        <button id="cfg-save" class="bg-blue-900 hover:bg-blue-800 text-white font-bold px-5 py-2 rounded-lg text-sm">💾 Lưu Cấu Hình</button>
+      </div>
+    </div>
+    <div class="tbl-scroll sticky">
+      <table class="w-full text-sm border-collapse">
+        <thead>
+          <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+            <th class="p-3">Tên Cấu Hình (Key)</th>
+            <th class="p-3">Giá Trị (Value)</th>
+            <th class="p-3 w-16">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody id="cfg-tbody"></tbody>
       </table>
     </div>
   </div>

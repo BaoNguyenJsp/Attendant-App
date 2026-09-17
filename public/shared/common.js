@@ -66,10 +66,44 @@ export function toast(m) {
   __tt = setTimeout(() => t.style.display = 'none', 5000); 
 }
 
-export const fmtDate = d => { 
-  const p = n => String(n).padStart(2, '0'); 
-  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate()); 
-};
+/**
+ * Format date string (yyyy-MM-dd) or Date object to dd/MM/yyyy
+ */
+export function fmtDate(val) {
+  if (!val) return '';
+  const str = String(val).trim();
+  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch;
+    return `${d}/${m}/${y}`;
+  }
+  const dt = new Date(str);
+  if (isNaN(dt.getTime())) return str;
+  const d = String(dt.getDate()).padStart(2, '0');
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const y = dt.getFullYear();
+  return `${d}/${m}/${y}`;
+}
+
+export function toIsoDate(val) {
+  if (!val) return '';
+  const str = String(val).trim();
+  
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+
+  const ddmmyyyy = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (ddmmyyyy) {
+    const [, d, m, y] = ddmmyyyy;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+
+  const dt = new Date(str);
+  if (isNaN(dt.getTime())) return '';
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const d = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 
 export const parseLocal = s => { 
   if (!s) return null; 
@@ -77,19 +111,48 @@ export const parseLocal = s => {
   return a.length === 3 ? new Date(a[0], a[1]-1, a[2]) : null; 
 };
 
+/**
+ * Returns upcoming Sunday in strict yyyy-MM-dd format for HTML date inputs
+ */
 export function defaultWeek() { 
   const d = new Date(); 
-  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); 
-  x.setDate(x.getDate() - x.getDay()); 
-  return fmtDate(x); 
+  const day = d.getDay(); 
+  if (day !== 0) d.setDate(d.getDate() + (7 - day)); 
+  const y = d.getFullYear(); 
+  const m = String(d.getMonth() + 1).padStart(2, '0'); 
+  const date = String(d.getDate()).padStart(2, '0'); 
+  return `${y}-${m}-${date}`; 
 }
 
-export function normSunday(input) { 
-  if (!input.value) return; 
-  const [y, m, dd] = input.value.split('-').map(Number); 
-  const x = new Date(y, m-1, dd); 
-  x.setDate(x.getDate() - x.getDay()); 
-  input.value = fmtDate(x); 
+export function normSunday(inputEl) {
+  if (!inputEl || !inputEl.value) {
+    inputEl.value = defaultWeek();
+    return;
+  }
+  
+  const parts = inputEl.value.split('-');
+  let d;
+  if (parts.length === 3) {
+    d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  } else {
+    d = new Date(inputEl.value);
+  }
+
+  if (isNaN(d.getTime())) {
+    inputEl.value = defaultWeek();
+    return;
+  }
+
+  const day = d.getDay();
+  if (day !== 0) {
+    d.setDate(d.getDate() + (7 - day));
+  }
+
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const date = String(d.getDate()).padStart(2, '0');
+  
+  inputEl.value = `${y}-${m}-${date}`;
 }
 
 export const fmt1 = v => v == null || v === '' ? '—' : (Math.round(+v*100)/100).toLocaleString('vi-VN');
@@ -197,7 +260,6 @@ export async function api(action, body, retries = 3, delayMs = 1500) {
   try {
     let lastError = null;
 
-    // Retry Loop Interceptor
     for (let attempt = 1; attempt <= retries; attempt++) {
       try { 
         const r = await fetch('/api/' + action, {
@@ -224,20 +286,18 @@ export async function api(action, body, retries = 3, delayMs = 1500) {
           setStoredCache(action, j);
         }
 
-        return j; // Success! Return data immediately and break the loop.
+        return j;
 
       } catch (e) { 
         lastError = e;
         
-        // If this is not the last attempt, wait and retry
         if (attempt < retries) {
           console.warn(`[API] '${action}' failed (Attempt ${attempt}/${retries}). Retrying in ${delayMs}ms... Error: ${e.message}`);
-          await new Promise(resolve => setTimeout(resolve, delayMs)); // Wait before retrying
+          await new Promise(resolve => setTimeout(resolve, delayMs));
         }
       }
     }
 
-    // If loop finishes and all retries failed, throw the final error to the UI
     throw lastError || new Error('Mất kết nối máy chủ.'); 
     
   } finally {
@@ -257,23 +317,19 @@ export function sortStudents(rows) {
   TCLASSES.forEach((c, i) => cm[c.ClassName] = i);
   
   return rows.slice().sort((a, b) => {
-    // 1. Sort by Class
     const clsA = a.CurrentClass || a.className || '';
     const clsB = b.CurrentClass || b.className || '';
     const ca = cm[clsA] != null ? cm[clsA] : 1e9;
     const cb = cm[clsB] != null ? cm[clsB] : 1e9;
     if (ca !== cb) return ca - cb;
     
-    // 2. Extract ListOrder safely (handling casing & strings)
     const valA = a.ListOrder ?? a.listOrder ?? a.listorder;
     const valB = b.ListOrder ?? b.listOrder ?? b.listorder;
     const oa = (valA !== null && valA !== '' && !isNaN(+valA)) ? +valA : 1e9;
     const ob = (valB !== null && valB !== '' && !isNaN(+valB)) ? +valB : 1e9;
 
-    // 3. Primary Sort: Manual ListOrder
     if (oa !== ob) return oa - ob;
 
-    // 4. Fallback Sort: Gender -> Alphabetical
     const ga = gRank(a.Gender || a.gender), gb = gRank(b.Gender || b.gender);
     if (ga !== gb) return ga - gb;
     const nameA = String(a.FullName || a.fullName || '');

@@ -3,17 +3,18 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, year, isAdmin, SESSIONS, fillSel, normSunday, defaultWeek, clearApiCache } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, year, isAdmin, SESSIONS, fillSel, normSunday, defaultWeek, clearApiCache , toIsoDate } from '../shared/common.js';
 import { groupBadge } from '../shared/ui.js';
 
 await initCommon();
 
 const tabCache = {
-  't-us': false,    // Huynh trưởng
-  't-grp': false,   // Nhóm
-  't-cls': false,   // Lớp
-  't-hol': false,   // Nghỉ lễ
-  't-year': true    // Chuyển năm
+  't-us': false,
+  't-grp': false,
+  't-cls': false,
+  't-hol': false,
+  't-cfg': false,
+  't-year': true
 };
 
 let ALL_USERS = [], ALL_MEMBERS = [], ALL_GROUPS = [], HOLIDAYS = [];
@@ -33,6 +34,7 @@ async function switchTab(tabId) {
     else if (tabId === 't-grp') await renderGroups();
     else if (tabId === 't-cls') await renderClasses();
     else if (tabId === 't-hol') await renderHolidays();
+    else if (tabId === 't-cfg') await renderConfig();
     tabCache[tabId] = true;
   }
 }
@@ -250,7 +252,7 @@ async function renderHolidays() {
 
   const holWeekInput = $('hol-week');
   if (holWeekInput) {
-    if (!holWeekInput.value) holWeekInput.value = defaultWeek();
+    if (!holWeekInput.value) holWeekInput.value = toIsoDate(defaultWeek());
     
     // Đảm bảo không cho phép chọn ngày trước AttendanceStartDate
     if (CONFIG.AttendanceStartDate) {
@@ -371,6 +373,117 @@ if (yearModal) {
       clearApiCache();
       location.reload();
     } catch (e) { toast(e.message); }
+  });
+}
+
+/* ---------- 6. Quản Lý Config ---------- */
+async function renderConfig() {
+  await loadConfig();
+  const tb = $('cfg-tbody');
+  if (!tb) return;
+
+  const keys = Object.keys(CONFIG);
+  tb.innerHTML = keys.length
+    ? keys.map(k => renderConfigRow(k, CONFIG[k])).join('')
+    : '<tr><td colspan="3" class="p-4 text-center text-slate-400">Chưa có cấu hình nào.</td></tr>';
+}
+
+function renderConfigRow(key = '', val = '') {
+  const isDateKey = /date$/i.test(key.trim());
+  const inputType = isDateKey ? 'date' : 'text';
+  const valFormatted = isDateKey && val ? val.split('T')[0] : val; // Ensure yyyy-MM-dd for HTML date input
+
+  return `
+    <tr>
+      <td class="p-2 border font-bold text-blue-900">
+        <input type="text" class="cfg-key w-full border p-1.5 rounded font-mono text-sm bg-slate-50" value="${esc(key)}" readonly>
+      </td>
+      <td class="p-2 border">
+        <input type="${inputType}" class="cfg-val w-full border p-1.5 rounded text-sm font-semibold" value="${esc(valFormatted)}">
+      </td>
+      <td class="p-2 border text-center">
+        <button class="cfg-del text-red-600 font-bold hover:underline">Xóa</button>
+      </td>
+    </tr>
+  `;
+}
+
+function addConfigRow() {
+  const tb = $('cfg-tbody');
+  if (!tb) return;
+  
+  if (tb.querySelector('td[colspan]')) tb.innerHTML = '';
+
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td class="p-2 border">
+      <input type="text" class="cfg-key w-full border p-1.5 rounded font-mono text-sm" placeholder="vd: AttendanceStartDate">
+    </td>
+    <td class="p-2 border">
+      <input type="text" class="cfg-val w-full border p-1.5 rounded text-sm" placeholder="vd: 2026-09-01">
+    </td>
+    <td class="p-2 border text-center">
+      <button class="cfg-del text-red-600 font-bold hover:underline">Xóa</button>
+    </td>
+  `;
+
+  // Dynamic listener: if user types a key ending in "Date", automatically switch value input to datepicker
+  const keyInput = tr.querySelector('.cfg-key');
+  const valInput = tr.querySelector('.cfg-val');
+  
+  keyInput.addEventListener('input', () => {
+    const isDate = /date$/i.test(keyInput.value.trim());
+    valInput.type = isDate ? 'date' : 'text';
+  });
+
+  tb.appendChild(tr);
+}
+
+async function saveConfigData() {
+  const items = [];
+  let isValid = true;
+
+  document.querySelectorAll('#cfg-tbody tr').forEach(tr => {
+    const keyInp = tr.querySelector('.cfg-key');
+    const valInp = tr.querySelector('.cfg-val');
+    if (!keyInp || !valInp) return;
+
+    const k = keyInp.value.trim();
+    const v = valInp.value.trim();
+
+    if (!k) isValid = false;
+    else items.push({ key: k, value: v });
+  });
+
+  if (!isValid) return toast('Tên Cấu hình (Key) không được để trống.');
+  if (!items.length) return toast('Không có dữ liệu để lưu.');
+
+  try {
+    toast('⏳ Đang lưu cấu hình & làm mới bộ nhớ...');
+    await api('saveConfig', { config: items });
+
+    // 1. Wipe all localStorage items
+    localStorage.clear();
+
+    // 2. Clear frontend API cache
+    clearApiCache();
+
+    toast('Đã lưu cấu hình! Trang web sẽ tự làm mới...');
+    setTimeout(() => location.reload(), 1200);
+  } catch (e) {
+    toast('Lỗi khi lưu: ' + e.message);
+  }
+}
+
+// Bind Events for Config Tab
+if ($('cfg-add-row')) $('cfg-add-row').addEventListener('click', addConfigRow);
+if ($('cfg-save')) $('cfg-save').addEventListener('click', saveConfigData);
+
+const cfgTbody = $('cfg-tbody');
+if (cfgTbody) {
+  cfgTbody.addEventListener('click', e => {
+    const btn = e.target.closest('.cfg-del');
+    if (btn) btn.closest('tr').remove();
   });
 }
 

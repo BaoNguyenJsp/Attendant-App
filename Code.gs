@@ -79,7 +79,6 @@ function warmUpCache() {
       const data = readAll(sheetName); 
       
       // We only use a tiny lock just for the split-second we write to the cache
-      // This prevents the warmup from accidentally overwriting a teacher's save
       const lock = LockService.getScriptLock();
       if (lock.tryLock(5000)) {
         writeCache(sheetName, data);
@@ -272,7 +271,7 @@ function upsertRows(name, predicate, newRows) {
       if (predicate(o)) matchIdxs.push(r);
     }
 
-    let finalValues = [...values]; // Memory copy to rewrite cache
+    let finalValues = [...values];
 
     if (matchIdxs.length === 1 && newRows && newRows.length === 1) {
       const targetRow = matchIdxs[0] + 1; 
@@ -299,7 +298,7 @@ function upsertRows(name, predicate, newRows) {
     }
     
     finalValues.shift(); // Remove headers
-    writeCache(name, finalValues.map(r => rowObj(head, r))); // Update cache synchronously!
+    writeCache(name, finalValues.map(r => rowObj(head, r)));
 
   } finally { lock.releaseLock(); }
 }
@@ -608,17 +607,15 @@ function summaryRows(year, list) {
   const getAttDataForClass = (clsName) => {
     const key = normText(clsName);
     if (attDataCache[key] !== undefined) return attDataCache[key];
-    attDataCache[key] = cachedRead(getAttSheetName(clsName)); 
+    attDataCache[key] = cachedRead(getAttSheetName(clsName));
     return attDataCache[key];
   };
 
-  // FIX: Track processed classes to prevent multiplying the attendance count
   const processedClasses = new Set();
 
   (list || []).forEach(st => {
     const cls = st.CurrentClass || st.className;
     
-    // Skip if we already aggregated the attendance for this class
     if (!cls || processedClasses.has(cls)) return;
     processedClasses.add(cls);
     
@@ -714,6 +711,28 @@ function folderOfUrl(urls) {
 
 /* ---------- ACTIONS ---------- */
 const ACTIONS = {
+  saveConfig: b => {
+    const configItems = b.config || [];
+    if (!configItems.length) return { status: 'ok' };
+
+    const rows = configItems.map(item => ({ Key: String(item.key).trim(), Value: String(item.value).trim() }));
+    
+    // Upsert key-value pairs into the Config sheet
+    configItems.forEach(item => {
+      const k = String(item.key).trim();
+      const v = String(item.value).trim();
+      upsertRows('Config', o => o.Key === k, [{ Key: k, Value: v }]);
+    });
+
+    // Invalidate memoized config and backend caches
+    __memoConfig = null;
+    bustCache(['Config']);
+
+    // Trigger full background cache warmup
+    try { warmUpCache(); } catch (e) { console.error('Warmup trigger error:', e); }
+
+    return { status: 'ok' };
+  },
 
   getUser: b => {
     const email = String(b.email || '').toLowerCase();
@@ -769,7 +788,7 @@ const ACTIONS = {
     const sheetName = getAttSheetName(cls);
 
     const recs = {};
-    const data = cachedRead(sheetName); // FAST CACHED READ
+    const data = cachedRead(sheetName);
 
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
@@ -809,13 +828,11 @@ const ACTIONS = {
         sh.getRange(1, 1, 1, TAB_HEADERS.Attendance.length).setValues([TAB_HEADERS.Attendance]);
       }
 
-      // Read from ultra-fast cache instead of downloading 3000 rows from the sheet
       const cachedData = cachedRead(sheetName); 
       let modified = false;
       const incomingMap = {};
       (b.records || []).forEach(r => incomingMap[normId(r.idNumber)] = r);
 
-      // Find EXACT row indices for this week
       const targetIndices = [];
       for (let i = 0; i < cachedData.length; i++) {
         if (String(cachedData[i].WeekOf).trim() === weekOf) {
@@ -823,7 +840,6 @@ const ACTIONS = {
         }
       }
 
-      // Group rows into blocks (so we can update them in one fast API call)
       const blocks = [];
       if (targetIndices.length > 0) {
         let currentBlock = [targetIndices[0]];
@@ -836,7 +852,6 @@ const ACTIONS = {
 
       const headers = TAB_HEADERS.Attendance;
 
-      // UPDATE EXACT ROWS ONLY (Takes ~0.2 seconds instead of 8 seconds)
       for (const block of blocks) {
         const blockData = [];
         let blockModified = false;
@@ -851,9 +866,10 @@ const ACTIONS = {
               const colInfo = SESSION_COL_MAP[sess];
               if (colInfo && studentData.sessions && studentData.sessions[sess]) {
                 const rec = studentData.sessions[sess];
+                // Strict saving normalization
                 const normSt = (rec.status === 'Có mặt' || rec.status === 'Hiện diện') ? 'Hiện diện' : 
-                               (rec.status === 'Vắng có phép' || rec.status === 'Có phép') ? 'Có phép' : rec.status;
-                rowObj[colInfo.status] = normSt || '';
+                               (rec.status === 'Vắng có phép' || rec.status === 'Có phép') ? 'Có phép' : 'Vắng';
+                rowObj[colInfo.status] = normSt;
                 rowObj[colInfo.note] = rec.note || '';
               }
             });
@@ -865,12 +881,11 @@ const ACTIONS = {
         }
         
         if (blockModified) {
-          const startRow = block[0] + 2; // +1 for 0-index, +1 for Header row
+          const startRow = block[0] + 2; 
           sh.getRange(startRow, 1, blockData.length, headers.length).setValues(blockData);
         }
       }
 
-      // Add any leftover new students as NEW rows at the bottom
       const activeList = activeStudents(cls);
       const newRows = [];
       activeList.forEach(st => {
@@ -884,8 +899,8 @@ const ACTIONS = {
             if (colInfo && studentData.sessions && studentData.sessions[sess]) {
               const rec = studentData.sessions[sess];
               const normSt = (rec.status === 'Có mặt' || rec.status === 'Hiện diện') ? 'Hiện diện' : 
-                             (rec.status === 'Vắng có phép' || rec.status === 'Có phép') ? 'Có phép' : rec.status;
-              newRowObj[colInfo.status] = normSt || '';
+                             (rec.status === 'Vắng có phép' || rec.status === 'Có phép') ? 'Có phép' : 'Vắng';
+              newRowObj[colInfo.status] = normSt;
               newRowObj[colInfo.note] = rec.note || '';
             }
           });
@@ -899,7 +914,6 @@ const ACTIONS = {
         sh.getRange(sh.getLastRow() + 1, 1, newRows.length, headers.length).setValues(newRows);
       }
 
-      // Save memory state instantly to cache
       if (modified) writeCache(sheetName, cachedData);
       
       return { status: 'ok' };
@@ -912,21 +926,27 @@ const ACTIONS = {
     if (!st) return { status: 'ok', students: [], attendance: [], absences: [] };
 
     const cls = normText(st.CurrentClass);
-    const data = cachedRead(getAttSheetName(cls)); // FAST CACHED READ
+    const data = cachedRead(getAttSheetName(cls)); 
     const absences = [];
+    const todayYmd = toYmd(new Date());
 
     for (let i = 0; i < data.length; i++) {
       if (normId(data[i].IdNumber) === id) {
         const row = data[i];
         const weekYmd = String(row.WeekOf).trim();
         
-        SESSIONS.forEach(s => {
-          const colInfo = SESSION_COL_MAP[s];
-          const stVal = String(row[colInfo.status] || '').trim();
-          if (stVal !== 'Hiện diện' && stVal !== 'Có mặt' && stVal !== '') {
-            absences.push({ WeekOf: weekYmd, Session: s, AttendanceStatus: stVal || 'Vắng', Note: row[colInfo.note] || '' });
-          }
-        });
+        if (weekYmd <= todayYmd) {
+          SESSIONS.forEach(s => {
+            const colInfo = SESSION_COL_MAP[s];
+            if (colInfo) {
+              const stVal = String(row[colInfo.status] || '').trim();
+              const normSt = (stVal === 'Hiện diện' || stVal === 'Có mặt') ? 'Hiện diện' : (stVal === 'Có phép' || stVal === 'Vắng có phép') ? 'Có phép' : 'Vắng';
+              if (normSt !== 'Hiện diện') {
+                absences.push({ WeekOf: weekYmd, Session: s, AttendanceStatus: normSt, Note: row[colInfo.note] || '' });
+              }
+            }
+          });
+        }
       }
     }
 
@@ -937,7 +957,7 @@ const ACTIONS = {
     const year = currentYear();
     const weekOf = String(b.weekOf).trim();
     const recs = {};
-    const data = cachedRead('TeacherAttendance'); // FAST CACHED READ
+    const data = cachedRead('TeacherAttendance');
 
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
@@ -1013,8 +1033,8 @@ const ACTIONS = {
               if (colInfo && teacherData.sessions && teacherData.sessions[sess]) {
                 const rec = teacherData.sessions[sess];
                 const normSt = (rec.status === 'Có mặt' || rec.status === 'Hiện diện') ? 'Hiện diện' : 
-                               (rec.status === 'Vắng có phép' || rec.status === 'Có phép') ? 'Có phép' : rec.status;
-                rowObj[colInfo.status] = normSt || '';
+                               (rec.status === 'Vắng có phép' || rec.status === 'Có phép') ? 'Có phép' : 'Vắng';
+                rowObj[colInfo.status] = normSt;
                 rowObj[colInfo.note] = rec.note || '';
               }
             });
@@ -1044,8 +1064,8 @@ const ACTIONS = {
             if (colInfo && teacherData.sessions && teacherData.sessions[sess]) {
               const rec = teacherData.sessions[sess];
               const normSt = (rec.status === 'Có mặt' || rec.status === 'Hiện diện') ? 'Hiện diện' : 
-                             (rec.status === 'Vắng có phép' || rec.status === 'Có phép') ? 'Có phép' : rec.status;
-              newRowObj[colInfo.status] = normSt || '';
+                             (rec.status === 'Vắng có phép' || rec.status === 'Có phép') ? 'Có phép' : 'Vắng';
+              newRowObj[colInfo.status] = normSt;
               newRowObj[colInfo.note] = rec.note || '';
             }
           });
@@ -1071,7 +1091,7 @@ const ACTIONS = {
     const emails = new Set(roster.map(u => u.email.toLowerCase()));
     
     const by = {};
-    const data = cachedRead('TeacherAttendance'); // FAST CACHED READ
+    const data = cachedRead('TeacherAttendance');
     
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
@@ -1108,7 +1128,8 @@ const ACTIONS = {
     if (!u) return { status: 'ok', teacher: null, absences: [] };
 
     const absences = [];
-    const data = cachedRead('TeacherAttendance'); // FAST CACHED READ
+    const data = cachedRead('TeacherAttendance');
+    const todayYmd = toYmd(new Date());
     
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
@@ -1116,15 +1137,18 @@ const ACTIONS = {
       const rowEmail = String(row.TeacherEmail || '').toLowerCase().trim();
       if (rowEmail === email) {
         const weekYmd = String(row.WeekOf).trim();
-        TEACHER_SESSIONS.forEach(s => {
-          const colInfo = SESSION_COL_MAP[s];
-          if (colInfo) {
-            const stVal = String(row[colInfo.status] || '').trim();
-            if (stVal !== 'Hiện diện' && stVal !== 'Có mặt' && stVal !== '') {
-              absences.push({ WeekOf: weekYmd, Session: s, Status: stVal || 'Vắng', Note: row[colInfo.note] || '' });
+        if (weekYmd <= todayYmd) {
+          TEACHER_SESSIONS.forEach(s => {
+            const colInfo = SESSION_COL_MAP[s];
+            if (colInfo) {
+              const stVal = String(row[colInfo.status] || '').trim();
+              const normSt = (stVal === 'Hiện diện' || stVal === 'Có mặt') ? 'Hiện diện' : (stVal === 'Có phép' || stVal === 'Vắng có phép') ? 'Có phép' : 'Vắng';
+              if (normSt !== 'Hiện diện') {
+                absences.push({ WeekOf: weekYmd, Session: s, Status: normSt, Note: row[colInfo.note] || '' });
+              }
             }
-          }
-        });
+          });
+        }
       }
     }
     return { status: 'ok', teacher: { email: u.Email, fullName: u.FullName || '', saintName: u.SaintName || '' }, absences };
@@ -1181,7 +1205,7 @@ const ACTIONS = {
     return { status: 'ok', record: row };
   },
 
-  getUploadUrl: b => { /* ...unchanged... */
+  getUploadUrl: b => {
     const folder = teachFolder(b.schoolYear, b.weekOf, b.className, b.kind === 'TBM' ? 'TBM' : 'GLV');
     const url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable';
     const payload = { name: b.filename, parents: [folder.getId()] };
@@ -1201,7 +1225,7 @@ const ACTIONS = {
     return { status: 'ok', uploadUrl: hdrs['Location'] || hdrs['location'] };
   },
 
-  uploadFile: b => { /* ...unchanged... */
+  uploadFile: b => {
     const blob = Utilities.newBlob(Utilities.base64Decode(b.base64), b.mimeType, b.filename);
     const folder = teachFolder(b.schoolYear, b.weekOf, b.className, b.kind === 'TBM' ? 'TBM' : 'GLV');
     const same = folder.getFilesByName(b.filename);
@@ -1222,7 +1246,6 @@ const ACTIONS = {
   getSummary: b => {
     const targetYear = String(b.schoolYear || currentYear()).trim();
     
-    // IF PAST YEAR: Pull from AcademicYear and format perfectly for frontend
     if (targetYear !== String(currentYear()).trim()) {
       const allSts = {};
       cachedRead('Students').forEach(s => allSts[normId(s.IdNumber)] = s);
@@ -1233,23 +1256,22 @@ const ACTIONS = {
       ).map(r => {
         const st = allSts[normId(r.IdNumber)] || {};
         return {
-          ...st,                     // 1. Inherit full profile (Gender, ListOrder, Parents, etc.)
+          ...st,                     
           IdNumber: r.IdNumber,
           SaintName: st.SaintName || '',
           FullName: st.FullName || '',
-          CurrentClass: r.ClassName, // 2. Force the class to be the historical class
+          CurrentClass: r.ClassName, 
           ClassName: r.ClassName,
-          avgH1: r.HK1Score,         // 3. Map older keys to exact modern keys
+          avgH1: r.HK1Score,         
           avgH2: r.HK2Score,
           avgYear: r.YearScore,
           pct: r.YearAttendant,
-          rating: r.Status           // 4. Map historic grade ("Lên lớp", "Giỏi") to rating
+          rating: r.Status           
         };
       });
       return { status: 'ok', summary: history };
     }
     
-    // IF CURRENT YEAR: Calculate dynamically
     const activeSts = cachedRead('Students').filter(s => 
       (!b.className || normText(s.CurrentClass) === normText(b.className)) && 
       normText(s.Status).toLowerCase() === 'hoạt động'
@@ -1397,7 +1419,6 @@ const ACTIONS = {
       }
       
       if (changed) {
-        // SMART WRITE
         if (minModifiedIdx !== -1) {
           const numRows = maxModifiedIdx - minModifiedIdx + 1;
           const chunk = data.slice(minModifiedIdx, maxModifiedIdx + 1);

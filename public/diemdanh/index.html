@@ -119,7 +119,7 @@
   <!-- t-tl -->
   <div id="t-tl" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
-      <div class="md:col-span-2"><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Số CCCD / Định danh</label>
+      <div class="md:col-span-2"><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Số CCCD / Định danh hoặc Họ Tên</label>
         <input type="text" id="tl-id" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold" placeholder="vd: 079212300101"></div>
       <div class="flex gap-3">
         <button id="tl-search" class="bg-blue-900 hover:bg-blue-800 text-white font-bold px-6 py-2.5 rounded-lg flex-1">🔎 Tra cứu</button>
@@ -151,10 +151,19 @@
 
   <!-- t-toandoan -->
   <div id="t-toandoan" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-      <div class="bg-blue-50 border border-blue-200 p-5 rounded-xl text-center"><div class="text-xs font-bold text-blue-700 uppercase">Tổng Thiếu Nhi</div><div class="text-3xl font-extrabold text-blue-900" id="td-total">—</div></div>
-      <div class="bg-emerald-50 border border-emerald-200 p-5 rounded-xl text-center"><div class="text-xs font-bold text-emerald-700 uppercase">Hiện Diện Chúa Nhật TB</div><div class="text-3xl font-extrabold text-emerald-900" id="td-sun">—</div></div>
-      <div class="bg-amber-50 border border-amber-200 p-5 rounded-xl text-center"><div class="text-xs font-bold text-amber-700 uppercase">Hiện Diện Thứ Năm TB</div><div class="text-3xl font-extrabold text-amber-900" id="td-thu">—</div></div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+      <div class="bg-blue-50 border border-blue-200 p-4 rounded-xl text-center">
+        <div class="text-xs font-bold text-blue-900 uppercase">Tổng Thiếu Nhi</div>
+        <div id="td-siso" class="text-2xl font-extrabold text-blue-900 mt-1">—</div>
+      </div>
+      <div class="bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-center">
+        <div class="text-xs font-bold text-emerald-900 uppercase">Hiện Diện Chúa Nhật TB</div>
+        <div id="td-cn" class="text-2xl font-extrabold text-emerald-900 mt-1">—</div>
+      </div>
+      <div class="bg-amber-50 border border-amber-200 p-4 rounded-xl text-center">
+        <div class="text-xs font-bold text-amber-900 uppercase">Hiện Diện Thứ Năm TB</div>
+        <div id="td-t5" class="text-2xl font-extrabold text-amber-900 mt-1">—</div>
+      </div>
     </div>
     <div class="tbl-scroll sticky">
       <table class="w-full text-sm border-collapse min-w-[760px]" id="td-table">

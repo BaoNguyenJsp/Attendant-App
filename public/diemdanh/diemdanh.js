@@ -3,7 +3,7 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, setState, SESSIONS, TCLASSES, TSTUDENTS, year, defaultWeek, normSunday, fillClasses, fillSel, fillSessions, exportExcel, sortStudents } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, setState, SESSIONS, TCLASSES, TSTUDENTS, year, defaultWeek, normSunday, fillClasses, fillSel, fillSessions, exportExcel, sortStudents, fmtDate , toIsoDate } from '../shared/common.js';
 import { rankBadge } from '../shared/ui.js';
 
 await initCommon();
@@ -61,7 +61,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
 /* ---------- Điểm Danh ---------- */
 async function renderDD() {
-  if (!$('dd-week').value) $('dd-week').value = defaultWeek();
+  if (!$('dd-week').value) $('dd-week').value = toIsoDate(defaultWeek());
   normSunday($('dd-week'));
 
   const cls = $('dd-lop').value;
@@ -222,34 +222,81 @@ async function saveAttendance() {
 
 /* ---------- Trích Lục ---------- */
 async function renderTL() {
-  const id = $('tl-id').value.trim();
+  const q = $('tl-id').value.trim().toLowerCase();
   const out = $('tl-out');
-  if (!id) return out.innerHTML = '<p class="text-amber-600 font-medium">Nhập Mã số Thiếu nhi.</p>';
-  let r;
-  try { r = await api('searchByIdNumber', {idNumber: id}); }
-  catch (e) { return out.innerHTML = '<p class="text-amber-600 font-medium">' + esc(e.message) + '</p>'; }
-  const stList = Array.isArray(r?.students) ? r.students : [];
-  const st = stList[0];
-  if (!st) return out.innerHTML = '<p class="text-amber-600 font-medium">Không tìm thấy Thiếu nhi này.</p>';
-  const absList = Array.isArray(r?.absences) ? r.absences : [];
-  const abs = absList.slice().sort((a, b) => String(a.WeekOf || '').localeCompare(String(b.WeekOf || '')));
-  out.innerHTML =
-    '<div class="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4">' +
-      '<h3 class="text-lg font-extrabold text-blue-900">' + esc((st.SaintName ? st.SaintName + ' ' : '') + st.FullName) + '</h3>' +
-      '<dl class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm mt-2">' +
-        '<div><dt class="text-xs font-bold text-slate-500 uppercase">Mã Số</dt><dd class="font-semibold">' + esc(st.IdNumber) + '</dd></div>' +
-        '<div><dt class="text-xs font-bold text-slate-500 uppercase">Tình trạng</dt><dd class="font-semibold">' + esc(st.Status) + '</dd></div>' +
-        '<div><dt class="text-xs font-bold text-slate-500 uppercase">Lớp</dt><dd class="font-semibold">' + esc(st.CurrentClass) + '</dd></div>' +
-      '</dl></div>' +
-    '<div style="overflow-x:auto"><table class="w-full text-sm border-collapse min-w-[560px]" id="tl-table">' +
-      '<thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">' +
-        '<th class="p-3">Tuần</th><th class="p-3">Buổi</th><th class="p-3">Tình trạng</th><th class="p-3">Ghi chú</th></tr></thead>' +
-      '<tbody>' + (abs.length ? abs.map(a => '<tr>' +
-        '<td class="p-2 border text-center">' + esc(a.WeekOf) + '</td>' +
-        '<td class="p-2 border text-center">' + esc(a.Session) + '</td>' +
-        '<td class="p-2 border text-center">' + esc(a.AttendanceStatus || 'Vắng') + '</td>' +
-        '<td class="p-2 border">' + esc(a.Note) + '</td></tr>').join('')
-        : '<tr><td colspan="4" class="p-4 text-center text-slate-400">Không có buổi vắng trong năm học này.</td></tr>') + '</tbody></table></div>';
+  
+  if (!q) return out.innerHTML = '<p class="text-amber-600 font-medium">Vui lòng nhập tên, tên thánh hoặc CCCD Thiếu nhi.</p>';
+
+  // 1. Search locally across all loaded students
+  const hits = TSTUDENTS.filter(s => 
+    (s.FullName && s.FullName.toLowerCase().includes(q)) || 
+    (s.IdNumber && s.IdNumber.toLowerCase().includes(q)) || 
+    (s.SaintName && s.SaintName.toLowerCase().includes(q))
+  ).slice(0, 10); // Limit to 10 to prevent freezing
+
+  if (hits.length === 0) {
+    return out.innerHTML = '<p class="text-amber-600 font-medium">Không tìm thấy Thiếu nhi nào phù hợp.</p>';
+  }
+
+  out.innerHTML = '<div class="p-4 text-center text-blue-600 font-medium animate-pulse">Đang tra cứu dữ liệu...</div>';
+
+  try {
+    // 2. Fetch absence records concurrently for all matching students
+    const resultsHtml = await Promise.all(hits.map(async (st) => {
+      let r;
+      try {
+        r = await api('searchByIdNumber', { idNumber: st.IdNumber });
+      } catch (e) {
+        return `<div class="p-4 text-red-500">Lỗi tải dữ liệu cho ${esc(st.FullName)}: ${esc(e.message)}</div>`;
+      }
+      
+      const fetchedSt = (r.students && r.students[0]) || st;
+      const absList = Array.isArray(r.absences) ? r.absences : [];
+      const abs = absList.slice().sort((a, b) => String(a.WeekOf || '').localeCompare(String(b.WeekOf || '')));
+      
+      return `
+        <div class="mb-8">
+          <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4">
+            <h3 class="text-lg font-extrabold text-blue-900">${esc((fetchedSt.SaintName ? fetchedSt.SaintName + ' ' : '') + fetchedSt.FullName)}</h3>
+            <dl class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm mt-2">
+              <div><dt class="text-xs font-bold text-slate-500 uppercase">Mã Số</dt><dd class="font-semibold">${esc(fetchedSt.IdNumber)}</dd></div>
+              <div><dt class="text-xs font-bold text-slate-500 uppercase">Tình trạng</dt><dd class="font-semibold">${esc(fetchedSt.Status)}</dd></div>
+              <div><dt class="text-xs font-bold text-slate-500 uppercase">Lớp</dt><dd class="font-semibold">${esc(fetchedSt.CurrentClass)}</dd></div>
+            </dl>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="w-full text-sm border-collapse min-w-[560px]">
+              <thead>
+                <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+                  <th class="p-3 border">Tuần</th>
+                  <th class="p-3 border">Buổi</th>
+                  <th class="p-3 border">Tình trạng</th>
+                  <th class="p-3 border">Ghi chú</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${abs.length ? abs.map(a => `
+                  <tr>
+                    <td class="p-2 border text-center">${esc(fmtDate(a.WeekOf))}</td>
+                    <td class="p-2 border text-center">${esc(a.Session)}</td>
+                    <td class="p-2 border text-center">${esc(a.AttendanceStatus || 'Vắng')}</td>
+                    <td class="p-2 border">${esc(a.Note)}</td>
+                  </tr>
+                `).join('') : '<tr><td colspan="4" class="p-4 text-center text-slate-400">Không có buổi vắng trong năm học này.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <hr class="my-8 border-slate-300 border-dashed border-t-2" />
+      `;
+    }));
+
+    // Join all results and remove the very last dashed divider
+    out.innerHTML = resultsHtml.join('').replace(/(<hr[^>]*>)\s*$/, '');
+
+  } catch (e) {
+    out.innerHTML = `<div class="p-4 text-red-500 font-medium">Đã xảy ra lỗi: ${esc(e.message)}</div>`;
+  }
 }
 
 /* ---------- Thống Kê ---------- */
@@ -326,42 +373,48 @@ async function renderTK() {
     : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có dữ liệu.</td></tr>';
 }
 
-/* ---------- Thống Kê Toàn Đoàn ---------- */
+/* ---------- Optimized Thống Kê Toàn Đoàn ---------- */
 async function renderToanDoan() {
   const tb = $('td-tbody');
-  if (!tb) {
-    toast('Lỗi giao diện: Không tìm thấy bảng Toàn Đoàn (td-tbody).');
-    return;
-  }
+  if (!tb) return toast('Không tìm thấy bảng Toàn Đoàn (td-tbody).');
 
   tb.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-slate-500 font-medium animate-pulse">⏳ Đang tổng hợp dữ liệu toàn đoàn...</td></tr>';
 
-  // Lấy danh sách lớp và toàn bộ học sinh đang hoạt động
   const classes = TCLASSES.map(c => c.ClassName || c.className).filter(Boolean);
   const allActive = TSTUDENTS.filter(s => String(s.Status).toLowerCase() !== 'nghỉ');
 
+  if (classes.length === 0) {
+    tb.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-slate-400">Không có danh sách lớp.</td></tr>';
+    return;
+  }
+
+  // 1. Fire API requests for ALL classes simultaneously using Promise.all
+  const statsPromises = classes.map(cls =>
+    api('getClassAttendanceStats', { schoolYear: year(), className: cls })
+      .then(res => ({ cls, res }))
+      .catch(err => ({ cls, res: null, error: err }))
+  );
+
+  const results = await Promise.all(statsPromises);
+
+  // 2. Aggregate and render data
   const rows = [];
   let grandTotal = 0;
   let totalCN = 0, maxTotalCN = 0;
   let totalT5 = 0, maxTotalT5 = 0;
 
-  for (const cls of classes) {
+  results.forEach(({ cls, res }) => {
+    if (!res || !res.stats) return;
+
     const classSts = allActive.filter(s => (s.CurrentClass || s.className) === cls);
     const siso = classSts.length;
-    if (siso === 0) continue;
+    if (siso === 0) return;
 
     grandTotal += siso;
 
-    let statsRes;
-    try {
-      statsRes = await api('getClassAttendanceStats', { schoolYear: year(), className: cls });
-    } catch (e) {
-      continue;
-    }
-
-    const statsObj = statsRes?.stats || {};
-    const backendMax = statsRes?.max || {};
-    const maxTotal = Number(statsRes?.maxTotal || 0);
+    const statsObj = res.stats || {};
+    const backendMax = res.max || {};
+    const maxTotal = Number(res.maxTotal || 0);
 
     const maxCn = Number(backendMax['Lễ Chúa Nhật'] || 0);
     const maxGl = Number(backendMax['Học Giáo Lý'] || 0);
@@ -393,23 +446,20 @@ async function renderToanDoan() {
     const pctCtt = maxCtt > 0 ? Math.round((c_ctt / (maxCtt * siso)) * 100) : 0;
     const pctT5 = maxT5 > 0 ? Math.round((c_t5 / (maxT5 * siso)) * 100) : 0;
 
-    let rating = '';
+    let rating = 'Cần cố gắng';
     if (pctClass >= 80) rating = 'Xuất sắc';
     else if (pctClass >= 65) rating = 'Tốt';
     else if (pctClass >= 50) rating = 'Khá';
-    else rating = 'Cần cố gắng';
 
-    rows.push({
-      cls, siso, pctCn, pctGl, pctCtt, pctT5, pctClass, rating
-    });
-  }
+    rows.push({ cls, siso, pctCn, pctGl, pctCtt, pctT5, pctClass, rating });
+  });
 
   if (rows.length === 0) {
     tb.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-slate-400">Chưa có dữ liệu.</td></tr>';
     return;
   }
 
-  // Cập nhật bảng
+  // 3. Render HTML Table
   tb.innerHTML = rows.map(r => `
     <tr>
       <td class="p-3 border font-extrabold text-center text-blue-900">${esc(r.cls)}</td>
@@ -423,24 +473,11 @@ async function renderToanDoan() {
     </tr>
   `).join('');
 
-  // Tính toán Tỉ lệ tổng quan
+  // 4. Update Summary Cards
   const pctGrandCn = maxTotalCN > 0 ? Math.round((totalCN / maxTotalCN) * 100) : 0;
   const pctGrandT5 = maxTotalT5 > 0 ? Math.round((totalT5 / maxTotalT5) * 100) : 0;
 
-  // Cập nhật 3 Cards phía trên một cách linh hoạt (tìm các thẻ chứa dấu "—" hoặc phần trăm hiện tại)
-  const updateCardVal = (titleFragment, newVal) => {
-    document.querySelectorAll('#t-toandoan div').forEach(div => {
-      if (div.textContent.toUpperCase().includes(titleFragment)) {
-         const valNodes = Array.from(div.querySelectorAll('*')).filter(el =>
-           el.textContent.trim() === '—' || /^[0-9]+%?$/.test(el.textContent.trim())
-         );
-         if (valNodes.length > 0) {
-           valNodes[valNodes.length - 1].textContent = newVal;
-         }
-      }
-    });
-  };
-
+  // Updated text matching to support titles ending with "TB"
   if ($('td-siso')) $('td-siso').textContent = grandTotal;
   else updateCardVal('TỔNG THIẾU NHI', grandTotal);
 

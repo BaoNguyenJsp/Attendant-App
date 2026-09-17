@@ -3,7 +3,7 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, setState, sortStudents, fillClasses, TSTUDENTS, TCLASSES, year, clearApiCache } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, setState, sortStudents, fillClasses, TSTUDENTS, TCLASSES, year, clearApiCache, fmtDate , toIsoDate } from '../shared/common.js';
 import { badgeStatus } from '../shared/ui.js';
 
 await initCommon();
@@ -41,7 +41,7 @@ function renderHS() {
           '<td class="p-2 border text-center whitespace-nowrap">' + esc(st.IdNumber) + '</td>' +
           '<td class="p-2 border font-medium">' + esc(st.FullName) + '</td>' +
           '<td class="p-2 border text-center">' + esc(st.Gender || '') + '</td>' +
-          '<td class="p-2 border text-center whitespace-nowrap">' + esc(st.DateOfBirth || '') + '</td>' +
+          '<td class="p-2 border text-center whitespace-nowrap">' + esc(fmtDate(st.DateOfBirth) || '') + '</td>' +
           '<td class="p-2 border text-center">' + esc(st.EnrollYear || '') + '</td>' +
           '<td class="p-2 border text-center">' + badgeStatus(st.Status) + '</td>' +
           '<td class="p-2 border text-center">' + siblingNames + '</td>' +
@@ -50,6 +50,48 @@ function renderHS() {
           '</tr>';
       }).join('')
     : '<tr><td colspan="10" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi trong lớp ' + esc(cls) + '.</td></tr>';
+}
+
+/* ---------- Render Search Results ---------- */
+function renderSearch() {
+  const q = $('hs-search-input').value.toLowerCase().trim();
+  const tbody = $('hs-search-tbody');
+  
+  if (!q) {
+    tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-slate-400">Nhập tên, tên thánh hoặc CCCD để tìm kiếm...</td></tr>';
+    return;
+  }
+
+  // Filter unconditionally across all TSTUDENTS
+  const hits = TSTUDENTS.filter(s => 
+    (s.FullName && s.FullName.toLowerCase().includes(q)) || 
+    (s.IdNumber && s.IdNumber.includes(q)) || 
+    (s.SaintName && s.SaintName.toLowerCase().includes(q))
+  ).slice(0, 50); // Limit to 50 results for performance
+
+  tbody.innerHTML = hits.length
+    ? hits.map((st) => {
+        const siblingNames = String(st.Siblings || '').split(',')
+          .map(id => id.trim()).filter(Boolean)
+          .map(id => {
+            const sib = TSTUDENTS.find(s => s.IdNumber === id);
+            return sib ? `<span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs whitespace-nowrap">${esc(sib.FullName)} (${esc(sib.CurrentClass)})</span>` : esc(id);
+          }).join(' ');
+
+        // Removed the cursor-pointer class and the edit button td
+        return `<tr data-id="${esc(st.IdNumber)}" class="hover:bg-slate-50 transition-colors bg-white">
+          <td class="p-2 border text-center font-bold text-blue-900">${esc(st.CurrentClass)}</td>
+          <td class="p-2 border text-center whitespace-nowrap">${esc(st.IdNumber)}</td>
+          <td class="p-2 border font-medium">${esc(st.FullName)}</td>
+          <td class="p-2 border text-center">${esc(st.Gender || '')}</td>
+          <td class="p-2 border text-center whitespace-nowrap">${esc(fmtDate(st.DateOfBirth) || '')}</td>
+          <td class="p-2 border text-center">${esc(st.EnrollYear || '')}</td>
+          <td class="p-2 border text-center">${badgeStatus(st.Status)}</td>
+          <td class="p-2 border text-center">${siblingNames}</td>
+          <td class="p-2 border">${esc(st.Note || '')}</td>
+        </tr>`;
+      }).join('')
+    : '<tr><td colspan="9" class="p-4 text-center text-slate-400">Không tìm thấy Thiếu nhi nào phù hợp.</td></tr>';
 }
 
 /* ---------- Drag & Drop Reordering ---------- */
@@ -191,7 +233,7 @@ function openModal(id) {
   $('m-cccd').disabled = !!st;
   $('m-fullname').value = st ? (st.FullName || '') : '';
   $('m-saint').value = st ? (st.SaintName || '') : '';
-  $('m-dob').value = st ? (st.DateOfBirth || '') : '';
+  $('m-dob').value = st ? toIsoDate(st.DateOfBirth) : '';
   $('m-gender').value = st ? (st.Gender || '') : '';
   $('m-enroll').value = st ? (st.EnrollYear || '') : year();
   $('m-status').value = st ? (st.Status || 'Hoạt động') : 'Hoạt động';
@@ -255,6 +297,7 @@ async function saveModal() {
   closeModal();
   toast('Đã lưu.');
   renderHS();
+  if ($('hs-search-input') && $('hs-search-input').value) renderSearch(); // <-- Refresh search results if active
 }
 
 /* ---------- Events ---------- */
@@ -271,6 +314,14 @@ m.addEventListener('click', e => { if (e.target === m) closeModal(); });
 m.querySelector('.btn-cancel').addEventListener('click', closeModal);
 m.querySelector('.btn-save').addEventListener('click', saveModal);
 m.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// Add these to your Events section
+$('hs-search-input').addEventListener('input', renderSearch);
+
+$('hs-search-tbody').addEventListener('click', e => {
+  const btn = e.target.closest('.edit-student');
+  if (btn) openModal(btn.dataset.id);
+});
 
 /* Initial Boot */
 setupSiblingSearch();
