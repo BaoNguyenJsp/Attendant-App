@@ -608,12 +608,20 @@ function summaryRows(year, list) {
   const getAttDataForClass = (clsName) => {
     const key = normText(clsName);
     if (attDataCache[key] !== undefined) return attDataCache[key];
-    attDataCache[key] = cachedRead(getAttSheetName(clsName)); // FAST JSON CACHE READ
+    attDataCache[key] = cachedRead(getAttSheetName(clsName)); 
     return attDataCache[key];
   };
 
+  // FIX: Track processed classes to prevent multiplying the attendance count
+  const processedClasses = new Set();
+
   (list || []).forEach(st => {
     const cls = st.CurrentClass || st.className;
+    
+    // Skip if we already aggregated the attendance for this class
+    if (!cls || processedClasses.has(cls)) return;
+    processedClasses.add(cls);
+    
     const data = getAttDataForClass(cls);
     if (!data || data.length === 0) return;
 
@@ -1212,10 +1220,41 @@ const ACTIONS = {
   saveScores: b => saveScoresOptimized(b),
 
   getSummary: b => {
-    const year = b.schoolYear || currentYear();
+    const targetYear = String(b.schoolYear || currentYear()).trim();
+    
+    // IF PAST YEAR: Pull from AcademicYear and format perfectly for frontend
+    if (targetYear !== String(currentYear()).trim()) {
+      const allSts = {};
+      cachedRead('Students').forEach(s => allSts[normId(s.IdNumber)] = s);
+
+      const history = cachedRead('AcademicYear').filter(r =>
+        String(r.SchoolYear).trim() === targetYear && 
+        (!b.className || normText(r.ClassName) === normText(b.className))
+      ).map(r => {
+        const st = allSts[normId(r.IdNumber)] || {};
+        return {
+          ...st,                     // 1. Inherit full profile (Gender, ListOrder, Parents, etc.)
+          IdNumber: r.IdNumber,
+          SaintName: st.SaintName || '',
+          FullName: st.FullName || '',
+          CurrentClass: r.ClassName, // 2. Force the class to be the historical class
+          ClassName: r.ClassName,
+          avgH1: r.HK1Score,         // 3. Map older keys to exact modern keys
+          avgH2: r.HK2Score,
+          avgYear: r.YearScore,
+          pct: r.YearAttendant,
+          rating: r.Status           // 4. Map historic grade ("Lên lớp", "Giỏi") to rating
+        };
+      });
+      return { status: 'ok', summary: history };
+    }
+    
+    // IF CURRENT YEAR: Calculate dynamically
     const activeSts = cachedRead('Students').filter(s => 
-      (!b.className || normText(s.CurrentClass) === normText(b.className)) && normText(s.Status).toLowerCase() === 'hoạt động');
-    return { status: 'ok', summary: summaryRows(year, activeSts) };
+      (!b.className || normText(s.CurrentClass) === normText(b.className)) && 
+      normText(s.Status).toLowerCase() === 'hoạt động'
+    );
+    return { status: 'ok', summary: summaryRows(targetYear, activeSts) };
   },
 
   getHocBa: b => {

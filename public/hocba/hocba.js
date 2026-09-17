@@ -52,7 +52,10 @@ const [st, cl, sc] = await Promise.all([
 ]);
 
 setState({TSTUDENTS: st.students || [], TCLASSES: cl.classes || [], TSCORES: sc.scores || []});
-fillClasses('nh-lop', 'th-lop', 'kt-lop');
+fillClasses('nh-lop');
+const allClassItems = TCLASSES.map(c => ({ v: c.ClassName || c.className }));
+if ($('th-lop')) fillSel('th-lop', allClassItems);
+if ($('kt-lop')) fillSel('kt-lop', allClassItems);
 if ($('nh-year')) $('nh-year').textContent = year();
 
 let years = [year()];
@@ -303,7 +306,7 @@ async function renderTongHop() {
         const h2 = x.HK2Score ?? x.avgH2 ?? x.h2;
         const avg = x.YearScore ?? x.avgYear;
         const cc = x.YearAttendant ?? x.pct ?? x.cc;
-        const rt = x.Status ?? x.rating;
+        const rt = x.rating !== undefined ? x.rating : (x.Status === 'Hoạt động' ? '' : x.Status);
 
         return '<tr><td class="p-2 border text-center">' + (i + 1) + '</td><td class="p-2 border">' + esc(id) + '</td>' +
           '<td class="p-2 border font-medium">' + esc(fullName) + '</td><td class="p-2 border">' + esc(cName) + '</td>' +
@@ -338,7 +341,7 @@ async function toanDoan() {
         const h2 = x.HK2Score ?? x.avgH2 ?? x.h2;
         const avg = x.YearScore ?? x.avgYear;
         const cc = x.YearAttendant ?? x.pct ?? x.cc;
-        const rt = x.Status ?? x.rating;
+        const rt = x.rating !== undefined ? x.rating : (x.Status === 'Hoạt động' ? '' : x.Status);
 
         return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(cName) + '</td><td>' + esc(id) + '</td><td>' + esc(fullName) + '</td><td class="c">' + fmt1(h1) + '</td><td class="c">' + fmt1(h2) + '</td><td class="c">' + fmt1(avg) + '</td><td class="c">' + (cc == null || cc === '' ? '—' : cc + '%') + '</td><td>' + (rt ? esc(rt) : '—') + '</td></tr>';
     }).join('') +
@@ -354,9 +357,11 @@ async function renderKT() {
   
   // BYPASS normSummary COMPLETELY
   const rawRows = (r.summary || []).filter(x => {
-      const rt = x.Status ?? x.rating;
+      const avg = x.YearScore ?? x.avgYear;
       const cc = x.YearAttendant ?? x.pct ?? x.cc;
-      return rt === 'Giỏi' && cc != null && +cc >= 80;
+      
+      // Strict numerical check: Average >= 8.0 AND Attendance >= 80%
+      return avg !== null && avg !== '' && +avg >= 8 && cc != null && +cc >= 80;
   });
   const rows = sortSummaryRecords(rawRows);
 

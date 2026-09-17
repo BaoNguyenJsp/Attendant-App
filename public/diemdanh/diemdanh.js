@@ -3,7 +3,7 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, setState, SESSIONS, TCLASSES, TSTUDENTS, year, defaultWeek, normSunday, fillClasses, fillSessions, exportExcel, sortStudents } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, setState, SESSIONS, TCLASSES, TSTUDENTS, year, defaultWeek, normSunday, fillClasses, fillSel, fillSessions, exportExcel, sortStudents } from '../shared/common.js';
 import { rankBadge } from '../shared/ui.js';
 
 await initCommon();
@@ -17,7 +17,9 @@ setState({
   TCLASSES: Array.isArray(cl?.classes) ? cl.classes : [],
   TSTUDENTS: Array.isArray(st?.students) ? st.students : []
 });
-fillClasses('dd-lop', 'tk-lop');
+fillClasses('dd-lop');
+const allClassItems = TCLASSES.map(c => ({ v: c.ClassName || c.className }));
+if ($('tk-lop')) fillSel('tk-lop', allClassItems);
 fillSessions('dd-buoi');
 
 let weekCache = [];

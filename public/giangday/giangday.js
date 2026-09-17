@@ -81,8 +81,9 @@ async function renderCards() {
 /* ---------- Frequency ---------- */
 async function renderFreq(force = false) {
   if (sectionCache.freqLoaded && !force) return;
+  const cls = $('gd-cls').value;
   let recs = [];
-  try { recs = (await api('getTeaching', {schoolYear: year()})).records || []; }
+  try { recs = (await api('getTeaching', {schoolYear: year(), className: cls || undefined})).records || []; }
   catch (e) { return toast(e.message); }
   const by = {};
   recs.forEach(r => by[r.TeacherEmail] = (by[r.TeacherEmail] || 0) + 1);
@@ -101,15 +102,26 @@ async function renderHist(force = false) {
   try { j = await api('getTeaching', {schoolYear: year(), page: histPage, pageSize: HIST_PAGE, className: cls || undefined}); }
   catch (e) { return toast(e.message); }
   const hist = j.records || [], total = j.total || 0;
+  
+  // UPDATE BADGE DYNAMICALLY
+  const totalBadge = $('gd-total-updates');
+  if (totalBadge) totalBadge.textContent = 'Tổng số buổi đã cập nhật: ' + total;
+
   $('gd-history').innerHTML = hist.length
     ? hist.map(r => '<tr>' +
-      '<td>' + esc(r.WeekOf) + '</td><td>' + esc(r.ClassName) + '</td><td>' + esc(glvLabel(r.TeacherEmail)) + '</td>' +
-      '<td class="max-w-xs truncate">' + esc(r.LessonContent || '') + '</td>' +
-      '<td class="whitespace-nowrap">' +
+      '<td>' + esc(r.WeekOf) + '</td>' + // 1. Ngày dạy
+      '<td>' + esc(r.ClassName) + '</td>' + // 2. Lớp
+      '<td>' + esc(glvLabel(r.TeacherEmail)) + '</td>' + // 3. Giáo lý viên
+      '<td class="max-w-xs truncate">' + esc(r.LessonContent || '') + '</td>' + // 4. Bài học
+      '<td class="whitespace-nowrap text-center">' +
         (r.LessonFolderUrl ? '<a class="file-badge" href="' + esc(r.LessonFolderUrl) + '" target="_blank" rel="noopener" title="Mở thư mục giáo án (GLV)">📁</a>' : '') +
+      '</td>' + // 5. Giáo án
+      '<td class="whitespace-nowrap text-center">' +
         (r.RevisedFolderUrl ? '<a class="file-badge reviewed" href="' + esc(r.RevisedFolderUrl) + '" target="_blank" rel="noopener" title="Mở thư mục bản chỉnh sửa (TBM)">✏️</a>' : '') +
-      '</td><td>' + esc(userFull(r.UpdatedBy)) + '</td></tr>').join('')
-    : '<tr><td colspan="6" class="text-slate-400">Chưa có dữ liệu.</td></tr>';
+      '</td>' + // 6. Bản chỉnh sửa
+      '<td>' + esc(userFull(r.UpdatedBy)) + '</td>' + // 7. Người cập nhật
+      '</tr>').join('')
+    : '<tr><td colspan="7" class="text-slate-400 text-center py-4">Chưa có dữ liệu.</td></tr>';
   renderPager(total, histPage);
   sectionCache.histLoaded = true;
 }
@@ -294,6 +306,7 @@ $('gd-cls').innerHTML = '<option value="">Tất cả các lớp</option>' +
 $('gd-cls').addEventListener('change', () => { 
   histPage = 1; 
   renderHist(true); 
+  renderFreq(true); // <-- This forces the left card to re-render when changing classes
 });
 
 $('gd-pager').addEventListener('click', e => {
