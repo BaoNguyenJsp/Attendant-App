@@ -3,7 +3,7 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, setState, TCLASSES, cur, USERS_ROWS, defaultWeek, normSunday, year, fmtDate , toIsoDate } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, setState, TCLASSES, cur, USERS_ROWS, defaultWeek, normSunday, year, fmtDate, toIsoDate } from '../shared/common.js';
 import { userFull, fileLink } from '../shared/ui.js';
 
 await initCommon();
@@ -42,20 +42,24 @@ const glvLabel = em => {
 /* ---------- Cards (Active Week Only) ---------- */
 async function renderCards() {
   const weekInp = $('gd-week');
-  
   if (!weekInp.value) {
     weekInp.value = defaultWeek();
   }
   
   normSunday(weekInp);
-  
   const wk = weekInp.value;
   let recs = [];
-  try { recs = (await api('getTeaching', {schoolYear: year(), weekOf: wk})).records || []; }
-  catch (e) { return toast(e.message); }
   
-  const byClass = {}; recs.forEach(r => byClass[r.ClassName] = r);
+  try { 
+    recs = (await api('getTeaching', { schoolYear: year(), weekOf: wk })).records || []; 
+  } catch (e) { 
+    return toast(e.message); 
+  }
+  
+  const byClass = {}; 
+  recs.forEach(r => byClass[r.ClassName] = r);
   TEACHING_BY_CLASS = byClass;
+  
   $('gd-summary').textContent = Object.keys(byClass).length + '/' + TCLASSES.length + ' lớp đã cập nhật';
   $('cards').innerHTML = TCLASSES.map(c => {
     const rec = byClass[c.ClassName];
@@ -64,6 +68,7 @@ async function renderCards() {
     const lesson = rec && rec.LessonContent ? esc(rec.LessonContent) : 'Chưa có nội dung';
     const plan = rec && rec.LessonPlanUrl ? badgeLinks(rec.LessonPlanUrl, rec.LessonPlanNames, false) : '<span style="color:#aaa;">Chưa đính kèm</span>';
     const rev = rec && rec.RevisedPlanUrl ? badgeLinks(rec.RevisedPlanUrl, rec.RevisedPlanNames, true) : '<span style="color:#aaa;">Chưa có bản chỉnh sửa</span>';
+    
     return '<div class="card' + (rec ? ' updated' : '') + '">' +
       '<div>' +
       '<h3><b>' + esc(c.ClassName) + '</b>' + badge + '</h3>' +
@@ -82,14 +87,21 @@ async function renderFreq(force = false) {
   if (sectionCache.freqLoaded && !force) return;
   const cls = $('gd-cls').value;
   let recs = [];
-  try { recs = (await api('getTeaching', {schoolYear: year(), className: cls || undefined})).records || []; }
-  catch (e) { return toast(e.message); }
+  
+  try { 
+    recs = (await api('getTeaching', { schoolYear: year(), className: cls || undefined })).records || []; 
+  } catch (e) { 
+    return toast(e.message); 
+  }
+  
   const by = {};
-  recs.forEach(r => by[r.TeacherEmail] = (by[r.TeacherEmail] || 0) + 1);
+  recs.forEach(r => { if (r.TeacherEmail) by[r.TeacherEmail] = (by[r.TeacherEmail] || 0) + 1; });
   const freq = Object.entries(by).sort((a, b) => b[1] - a[1]);
+  
   $('gd-freq').innerHTML = freq.length
     ? freq.map(([em, cnt]) => '<li class="flex justify-between py-1"><span class="text-slate-600">' + esc(glvLabel(em)) + '</span><span class="freq-count">' + cnt + ' tuần</span></li>').join('')
     : '<p class="text-slate-400">Chưa có dữ liệu.</p>';
+    
   sectionCache.freqLoaded = true;
 }
 
@@ -98,29 +110,34 @@ async function renderHist(force = false) {
   if (sectionCache.histLoaded && !force) return;
   const cls = $('gd-cls').value;
   let j;
-  try { j = await api('getTeaching', {schoolYear: year(), page: histPage, pageSize: HIST_PAGE, className: cls || undefined}); }
-  catch (e) { return toast(e.message); }
+  
+  try { 
+    j = await api('getTeaching', { schoolYear: year(), page: histPage, pageSize: HIST_PAGE, className: cls || undefined }); 
+  } catch (e) { 
+    return toast(e.message); 
+  }
+  
   const hist = j.records || [], total = j.total || 0;
   
-  // UPDATE BADGE DYNAMICALLY
   const totalBadge = $('gd-total-updates');
   if (totalBadge) totalBadge.textContent = 'Tổng số buổi đã cập nhật: ' + total;
 
   $('gd-history').innerHTML = hist.length
     ? hist.map(r => '<tr>' +
-      '<td>' + esc(fmtDate(r.WeekOf)) + '</td>' + // 1. Ngày dạy
-      '<td>' + esc(r.ClassName) + '</td>' + // 2. Lớp
-      '<td>' + esc(glvLabel(r.TeacherEmail)) + '</td>' + // 3. Giáo lý viên
-      '<td class="max-w-xs truncate">' + esc(r.LessonContent || '') + '</td>' + // 4. Bài học
+      '<td>' + esc(fmtDate(r.WeekOf)) + '</td>' +
+      '<td>' + esc(r.ClassName) + '</td>' +
+      '<td>' + esc(glvLabel(r.TeacherEmail)) + '</td>' +
+      '<td class="max-w-xs truncate">' + esc(r.LessonContent || '') + '</td>' +
       '<td class="whitespace-nowrap text-center">' +
-        (r.LessonFolderUrl ? '<a class="file-badge" href="' + esc(r.LessonFolderUrl) + '" target="_blank" rel="noopener" title="Mở thư mục giáo án (GLV)">📁</a>' : '') +
-      '</td>' + // 5. Giáo án
+        (r.LessonFolderUrl ? '<a class="file-badge" href="' + esc(r.LessonFolderUrl) + '" target="_blank" rel="noopener" title="Mở thư mục giáo án (GLV)">📁</a>' : '—') +
+      '</td>' +
       '<td class="whitespace-nowrap text-center">' +
-        (r.RevisedFolderUrl ? '<a class="file-badge reviewed" href="' + esc(r.RevisedFolderUrl) + '" target="_blank" rel="noopener" title="Mở thư mục bản chỉnh sửa (TBM)">✏️</a>' : '') +
-      '</td>' + // 6. Bản chỉnh sửa
-      '<td>' + esc(userFull(r.UpdatedBy)) + '</td>' + // 7. Người cập nhật
+        (r.RevisedFolderUrl ? '<a class="file-badge reviewed" href="' + esc(r.RevisedFolderUrl) + '" target="_blank" rel="noopener" title="Mở thư mục bản chỉnh sửa (TBM)">✏️</a>' : '—') +
+      '</td>' +
+      '<td>' + esc(userFull(r.UpdatedBy)) + '</td>' +
       '</tr>').join('')
     : '<tr><td colspan="7" class="text-slate-400 text-center py-4">Chưa có dữ liệu.</td></tr>';
+    
   renderPager(total, histPage);
   sectionCache.histLoaded = true;
 }
@@ -142,7 +159,7 @@ const splitUrls = s => String(s || '').split(',').map(x => x.trim()).filter(x =>
 const splitNames = s => String(s || '').split('\n');
 const linkList = (urls, names) => {
   const n = splitNames(names);
-  return splitUrls(urls).map((f, i) => ({url: f, name: n[i] || ''}));
+  return splitUrls(urls).map((f, i) => ({ url: f, name: n[i] || '' }));
 };
 
 function openModal(cls) {
@@ -154,7 +171,7 @@ function openModal(cls) {
   planKeep = linkList(editingRec && editingRec.LessonPlanUrl, editingRec && editingRec.LessonPlanNames);
   revKeep = linkList(editingRec && editingRec.RevisedPlanUrl, editingRec && editingRec.RevisedPlanNames);
   planAdd = []; revAdd = [];
-  $('f-plan').value = ''; $('f-rev').value = '';
+  $('f-plan').value = '';$('f-rev').value = '';
   renderLists();
   $('gd-modal').classList.add('open');
 }
@@ -214,10 +231,8 @@ async function uploadBatched(list, keepList, kind, wk, cls, batchSize = 3) {
     await Promise.all(chunk.map(async f => {
       try {
         const driveUrl = await uploadFileDirect(f, wk, cls, kind);
-        
         const idx = list.indexOf(f);
         if (idx > -1) list.splice(idx, 1);
-        
         keepList.push({ url: driveUrl, name: f.name });
         renderLists();
       } catch (e) {
@@ -276,7 +291,7 @@ async function saveTeaching() {
 
 /* ---------- Boot ---------- */
 const [cl, te] = await Promise.all([api('getClasses'), api('getTeachers')]);
-setState({TCLASSES: cl.classes || [], USERS_ROWS: te.users || [], GROUP_MEMBERS: te.members || [], GROUPS_LIST: te.groups || []});
+setState({ TCLASSES: cl.classes || [], USERS_ROWS: te.users || [], GROUP_MEMBERS: te.members || [], GROUPS_LIST: te.groups || [] });
 
 const gdModal = $('gd-modal');
 gdModal.addEventListener('click', e => {
@@ -291,13 +306,13 @@ gdModal.addEventListener('click', e => {
     renderLists();
   }
 });
+
 gdModal.querySelector('.btn-cancel').addEventListener('click', () => { if (!isSaving) gdModal.classList.remove('open'); });
 gdModal.querySelector('.btn-save').addEventListener('click', () => saveTeaching());
 addFiles($('f-plan'), FPLAN);
 addFiles($('f-rev'), FTBM);
 
-$('gd-week').addEventListener('change', () => { normSunday($('gd-week')); renderCards(); });
-$('cards').addEventListener('click', e => { const b = e.target.closest('.btn-update'); if (b) openModal(b.dataset.cls); });
+$('gd-week').addEventListener('change', () => { normSunday($('gd-week')); renderCards(); });$('cards').addEventListener('click', e => { const b = e.target.closest('.btn-update'); if (b) openModal(b.dataset.cls); });
 
 $('gd-cls').innerHTML = '<option value="">Tất cả các lớp</option>' +
   TCLASSES.map(c => '<option value="' + esc(c.ClassName) + '">' + esc(c.ClassName) + '</option>').join('');
@@ -305,7 +320,7 @@ $('gd-cls').innerHTML = '<option value="">Tất cả các lớp</option>' +
 $('gd-cls').addEventListener('change', () => { 
   histPage = 1; 
   renderHist(true); 
-  renderFreq(true); // <-- This forces the left card to re-render when changing classes
+  renderFreq(true);
 });
 
 $('gd-pager').addEventListener('click', e => {
@@ -315,7 +330,7 @@ $('gd-pager').addEventListener('click', e => {
   renderHist(true);
 });
 
-// IntersectionObserver to fetch sub-views only when visible
+// Lazy-load sub-views using IntersectionObserver
 const observer = new IntersectionObserver((entries) => {
   entries.forEach(entry => {
     if (entry.isIntersecting) {
