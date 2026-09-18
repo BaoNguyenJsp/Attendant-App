@@ -412,7 +412,6 @@ $('hs-search-tbody').addEventListener('click', e => {
   if (btn) openModal(btn.dataset.id);
 });
 
-$('hs-template').addEventListener('click', downloadTemplate);
 $('hs-file').addEventListener('change', importStudents);
 $('hs-lop').addEventListener('change', renderHS);
 $('add-student').addEventListener('click', () => openModal());
