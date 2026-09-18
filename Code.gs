@@ -1,5 +1,5 @@
 /**
- * Sổ Thiếu Nhi — Apps Script dịch vụ lưu trữ (web app, chỉ doPost)
+ * SỔ THIẾU NHI — Apps Script dịch vụ lưu trữ (web app, chỉ doPost)
  * Hybrid 1-Week-Per-Row Attendance Support (12 Cols Student / 14 Cols Teacher)
  * ULTIMATE OPTIMIZATION: Memoized Sheets, Write-Through Cache, Cache Warming & Pure JSON Filtering
  */
@@ -75,10 +75,7 @@ function warmUpCache() {
   allSheets.forEach(sh => {
     const sheetName = sh.getName();
     try {
-      // Read data without locking the script
       const data = readAll(sheetName); 
-      
-      // We only use a tiny lock just for the split-second we write to the cache
       const lock = LockService.getScriptLock();
       if (lock.tryLock(5000)) {
         writeCache(sheetName, data);
@@ -207,7 +204,6 @@ function backfillUsersId() {
   bustCache(['Users']);
 }
 
-// WRITE-THROUGH CACHE HELPER
 function writeCache(name, data) {
   const cache = CacheService.getScriptCache();
   const s = JSON.stringify(data);
@@ -237,7 +233,7 @@ function cachedRead(name) {
   }
 
   const data = readAll(name);
-  writeCache(name, data); // Write-through on miss
+  writeCache(name, data);
   return data;
 }
 
@@ -297,7 +293,7 @@ function upsertRows(name, predicate, newRows) {
       finalValues = kept;
     }
     
-    finalValues.shift(); // Remove headers
+    finalValues.shift();
     writeCache(name, finalValues.map(r => rowObj(head, r)));
 
   } finally { lock.releaseLock(); }
@@ -407,11 +403,12 @@ function holidays(schoolYear) {
 }
 
 const isHoliday = (set, weekOf, session) => set[weekOf + '|' + session] || set[weekOf + '|'];
-function sundayOf(ymd) {
-  const [y, m, d] = String(ymd).split('-').map(Number);
-  const x = new Date(y, m - 1, d);
-  x.setDate(x.getDate() - x.getDay());
-  return x;
+
+function extractDriveFolderUrl(urlStr) {
+  if (!urlStr) return '';
+  const firstUrl = String(urlStr).split(',')[0].trim();
+  const m = firstUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) || firstUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  return m ? 'https://drive.google.com/file/d/' + m[1] + '/view' : firstUrl;
 }
 
 function activeUsers() { return cachedRead('Users').filter(u => String(u.Status).toLowerCase() === 'hoạt động'); }
@@ -501,7 +498,7 @@ function getClassAttendanceStats(year, className, startDate) {
   const holList = (cachedRead('Holidays') || []).filter(h => String(h.SchoolYear) === String(year));
   const { max, maxTotal, holidayMap } = getValidSessionsCount(startIso, endIso, holList);
 
-  const data = cachedRead(getAttSheetName(className)); // CACHED READ
+  const data = cachedRead(getAttSheetName(className));
   const todayYmd = toYmd(new Date());
   const startYmd = toYmd(parseIso(startIso));
   const stats = {};
@@ -549,7 +546,7 @@ function getHocBaData(year, className) {
     };
   });
 
-  const data = cachedRead(getAttSheetName(className)); // CACHED READ
+  const data = cachedRead(getAttSheetName(className));
   const todayYmd = toYmd(new Date());
   const startYmd = toYmd(parseIso(startIso));
 
@@ -666,73 +663,8 @@ function summaryRows(year, list) {
   });
 }
 
-function planNames(rec, urlField, nameField) {
-  const cur = String(rec[nameField] || '').trim();
-  if (cur) return cur;
-  const names = [];
-  String(rec[urlField] || '').split(',').forEach(u => {
-    const m = String(u).match(/\/d\/([^/]+)/);
-    let n = '';
-    if (m) { try { n = DriveApp.getFileById(m[1]).getName(); } catch (e) {} }
-    names.push(n);
-  });
-  if (names.length && names.every(Boolean)) {
-    const sh = ss().getSheetByName('Teaching');
-    const data = sh.getDataRange().getValues(), ci = data[0].indexOf(nameField);
-    if (ci >= 0) {
-      let changed = false;
-      for (let r = 1; r < data.length; r++) {
-        if (data[r][0] === rec.SchoolYear && data[r][1] === rec.WeekOf && data[r][2] === rec.ClassName) { 
-          sh.getRange(r + 1, ci + 1).setValue(names.join('\n')); 
-          data[r][ci] = names.join('\n'); // Update the array in memory
-          changed = true;
-          break; 
-        }
-      }
-      if (changed) {
-         writeCache('Teaching', data.slice(1).map(row => rowObj(data[0], row)));
-      }
-    }
-  }
-  return names.join('\n');
-}
-
-function folderOfUrl(urls) {
-  for (const u of String(urls || '').split(',')) {
-    const m = String(u).match(/\/d\/([^/]+)/);
-    if (!m) continue;
-    try {
-      const p = DriveApp.getFileById(m[1]).getParents();
-      if (p.hasNext()) return p.next().getUrl();
-    } catch (e) {}
-  }
-  return '';
-}
-
 /* ---------- ACTIONS ---------- */
 const ACTIONS = {
-  saveConfig: b => {
-    const configItems = b.config || [];
-    if (!configItems.length) return { status: 'ok' };
-
-    const rows = configItems.map(item => ({ Key: String(item.key).trim(), Value: String(item.value).trim() }));
-    
-    // Upsert key-value pairs into the Config sheet
-    configItems.forEach(item => {
-      const k = String(item.key).trim();
-      const v = String(item.value).trim();
-      upsertRows('Config', o => o.Key === k, [{ Key: k, Value: v }]);
-    });
-
-    // Invalidate memoized config and backend caches
-    __memoConfig = null;
-    bustCache(['Config']);
-
-    // Trigger full background cache warmup
-    try { warmUpCache(); } catch (e) { console.error('Warmup trigger error:', e); }
-
-    return { status: 'ok' };
-  },
 
   getUser: b => {
     const email = String(b.email || '').toLowerCase();
@@ -758,6 +690,24 @@ const ACTIONS = {
     return { status: 'ok', users: cachedRead('Users').sort((a, b) => numId(a.Id) - numId(b.Id)), members: cachedRead('GroupMembers'), groups: cachedRead('Groups') };
   },
   getConfig:   () => ({ status: 'ok', config: config() }),
+
+  saveConfig: b => {
+    const configItems = b.config || [];
+    if (!configItems.length) return { status: 'ok' };
+
+    configItems.forEach(item => {
+      const k = String(item.key).trim();
+      const v = String(item.value).trim();
+      upsertRows('Config', o => o.Key === k, [{ Key: k, Value: v }]);
+    });
+
+    __memoConfig = null;
+    bustCache(['Config']);
+
+    try { warmUpCache(); } catch (e) { console.error('Warmup trigger error:', e); }
+
+    return { status: 'ok' };
+  },
 
   getClassAttendanceStats: b => getClassAttendanceStats(b.year || b.schoolYear || currentYear(), b.className, b.startDate),
   getHocBaData: b => getHocBaData(b.year || currentYear(), b.className),
@@ -866,7 +816,6 @@ const ACTIONS = {
               const colInfo = SESSION_COL_MAP[sess];
               if (colInfo && studentData.sessions && studentData.sessions[sess]) {
                 const rec = studentData.sessions[sess];
-                // Strict saving normalization
                 const normSt = (rec.status === 'Có mặt' || rec.status === 'Hiện diện') ? 'Hiện diện' : 
                                (rec.status === 'Vắng có phép' || rec.status === 'Có phép') ? 'Có phép' : 'Vắng';
                 rowObj[colInfo.status] = normSt;
@@ -1155,31 +1104,32 @@ const ACTIONS = {
   },
 
   getTeaching: b => {
-    const year = b.schoolYear || currentYear();
-    const by = {};
-    cachedRead('Teaching').forEach(r => {
-      if (r.SchoolYear !== year || (b.weekOf && r.WeekOf !== b.weekOf)) return;
-      by[r.SchoolYear + '|' + r.WeekOf + '|' + r.ClassName] = r;
-    });
-    let records = Object.values(by);
-    if (b.className) records = records.filter(r => r.ClassName === b.className);
-    records.sort((a, b) => String(b.WeekOf).localeCompare(String(a.WeekOf)));
-    const total = records.length;
-
-    if (b.recent && !b.page) records = records.slice(0, +b.recent);
-    if (b.page) {
-      const size = Math.max(1, Math.min(+b.pageSize || 10, 50));
-      records = records.slice((+b.page - 1) * size, +b.page * size);
+    const targetYear = String(b.schoolYear || currentYear()).trim();
+    const allRows = cachedRead('Teaching');
+    
+    const records = [];
+    for (let i = 0; i < allRows.length; i++) {
+      const r = allRows[i];
+      if (String(r.SchoolYear).trim() === targetYear) {
+        records.push({
+          SchoolYear: r.SchoolYear,
+          WeekOf: String(r.WeekOf || '').trim(),
+          ClassName: r.ClassName,
+          TeacherEmail: r.TeacherEmail,
+          LessonContent: r.LessonContent || '',
+          LessonPlanUrl: r.LessonPlanUrl || '',
+          LessonPlanNames: r.LessonPlanNames || (r.LessonPlanUrl ? 'Giáo án' : ''),
+          RevisedPlanUrl: r.RevisedPlanUrl || '',
+          RevisedPlanNames: r.RevisedPlanNames || (r.RevisedPlanUrl ? 'Bản chỉnh sửa' : ''),
+          UpdatedBy: r.UpdatedBy || '',
+          LessonFolderUrl: r.LessonPlanUrl ? extractDriveFolderUrl(r.LessonPlanUrl) : '',
+          RevisedFolderUrl: r.RevisedPlanUrl ? extractDriveFolderUrl(r.RevisedPlanUrl) : ''
+        });
+      }
     }
-    if (b.recent || b.page) records.forEach(r => {
-      r.LessonFolderUrl = folderOfUrl(r.LessonPlanUrl);
-      r.RevisedFolderUrl = folderOfUrl(r.RevisedPlanUrl);
-    });
-    records.forEach(r => {
-      r.LessonPlanNames = planNames(r, 'LessonPlanUrl', 'LessonPlanNames');
-      r.RevisedPlanNames = planNames(r, 'RevisedPlanUrl', 'RevisedPlanNames');
-    });
-    return { status: 'ok', records, total };
+
+    records.sort((a, b) => String(b.WeekOf).localeCompare(String(a.WeekOf)));
+    return { status: 'ok', records: records, total: records.length };
   },
 
   saveTeaching: b => {

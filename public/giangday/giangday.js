@@ -1,9 +1,9 @@
 /* =====================================================================
-   SỔ THIẾU NHI — giangday/index.js
+   SỔ THIẾU NHI — giangday/index.js (Client-Side Memory Cache Architecture)
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, setState, TCLASSES, cur, USERS_ROWS, defaultWeek, normSunday, year, fmtDate, toIsoDate } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, setState, TCLASSES, cur, USERS_ROWS, defaultWeek, normSunday, year, fmtDate } from '../shared/common.js';
 import { userFull, fileLink } from '../shared/ui.js';
 
 await initCommon();
@@ -14,10 +14,8 @@ const FPLAN = 'GLV', FTBM = 'TBM';
 const HIST_PAGE = 8; let histPage = 1;
 let isSaving = false;
 
-const sectionCache = {
-  freqLoaded: false,
-  histLoaded: false
-};
+// Global memory cache for current school year teaching records
+let ALL_TEACHING_RECORDS = [];
 
 const badgeLinks = (url, names, rev) => {
   const ns = String(names || '').split('\n');
@@ -39,25 +37,30 @@ const glvLabel = em => {
   return s ? s + ' ' + f : f;
 };
 
-/* ---------- Cards (Active Week Only) ---------- */
-async function renderCards() {
+/* ---------- Fetch All Records Once ---------- */
+async function loadAllTeachingData(force = false) {
+  if (ALL_TEACHING_RECORDS.length > 0 && !force) return ALL_TEACHING_RECORDS;
+  try {
+    const res = await api('getTeaching', { schoolYear: year() });
+    ALL_TEACHING_RECORDS = res.records || [];
+  } catch (e) {
+    toast('Lỗi khi tải dữ liệu giảng dạy: ' + e.message);
+    ALL_TEACHING_RECORDS = [];
+  }
+  return ALL_TEACHING_RECORDS;
+}
+
+/* ---------- Cards (Active Week Only - Client Filtered) ---------- */
+function renderCards() {
   const weekInp = $('gd-week');
-  if (!weekInp.value) {
-    weekInp.value = defaultWeek();
-  }
-  
+  if (!weekInp.value) weekInp.value = defaultWeek();
   normSunday(weekInp);
-  const wk = weekInp.value;
-  let recs = [];
   
-  try { 
-    recs = (await api('getTeaching', { schoolYear: year(), weekOf: wk })).records || []; 
-  } catch (e) { 
-    return toast(e.message); 
-  }
+  const wk = weekInp.value;
+  const weekRecords = ALL_TEACHING_RECORDS.filter(r => String(r.WeekOf).trim() === wk);
   
   const byClass = {}; 
-  recs.forEach(r => byClass[r.ClassName] = r);
+  weekRecords.forEach(r => byClass[r.ClassName] = r);
   TEACHING_BY_CLASS = byClass;
   
   $('gd-summary').textContent = Object.keys(byClass).length + '/' + TCLASSES.length + ' lớp đã cập nhật';
@@ -82,48 +85,38 @@ async function renderCards() {
   }).join('');
 }
 
-/* ---------- Frequency ---------- */
-async function renderFreq(force = false) {
-  if (sectionCache.freqLoaded && !force) return;
+/* ---------- Frequency (Client Filtered) ---------- */
+function renderFreq() {
   const cls = $('gd-cls').value;
-  let recs = [];
-  
-  try { 
-    recs = (await api('getTeaching', { schoolYear: year(), className: cls || undefined })).records || []; 
-  } catch (e) { 
-    return toast(e.message); 
-  }
-  
+  const filtered = cls 
+    ? ALL_TEACHING_RECORDS.filter(r => r.ClassName === cls)
+    : ALL_TEACHING_RECORDS;
+    
   const by = {};
-  recs.forEach(r => { if (r.TeacherEmail) by[r.TeacherEmail] = (by[r.TeacherEmail] || 0) + 1; });
+  filtered.forEach(r => { if (r.TeacherEmail) by[r.TeacherEmail] = (by[r.TeacherEmail] || 0) + 1; });
   const freq = Object.entries(by).sort((a, b) => b[1] - a[1]);
   
   $('gd-freq').innerHTML = freq.length
     ? freq.map(([em, cnt]) => '<li class="flex justify-between py-1"><span class="text-slate-600">' + esc(glvLabel(em)) + '</span><span class="freq-count">' + cnt + ' tuần</span></li>').join('')
     : '<p class="text-slate-400">Chưa có dữ liệu.</p>';
-    
-  sectionCache.freqLoaded = true;
 }
 
-/* ---------- History ---------- */
-async function renderHist(force = false) {
-  if (sectionCache.histLoaded && !force) return;
+/* ---------- History (Client Filtered & Paginated) ---------- */
+function renderHist() {
   const cls = $('gd-cls').value;
-  let j;
-  
-  try { 
-    j = await api('getTeaching', { schoolYear: year(), page: histPage, pageSize: HIST_PAGE, className: cls || undefined }); 
-  } catch (e) { 
-    return toast(e.message); 
-  }
-  
-  const hist = j.records || [], total = j.total || 0;
-  
+  const filtered = cls 
+    ? ALL_TEACHING_RECORDS.filter(r => r.ClassName === cls)
+    : ALL_TEACHING_RECORDS;
+    
+  const total = filtered.length;
   const totalBadge = $('gd-total-updates');
   if (totalBadge) totalBadge.textContent = 'Tổng số buổi đã cập nhật: ' + total;
 
-  $('gd-history').innerHTML = hist.length
-    ? hist.map(r => '<tr>' +
+  const startIdx = (histPage - 1) * HIST_PAGE;
+  const pageRecords = filtered.slice(startIdx, startIdx + HIST_PAGE);
+
+  $('gd-history').innerHTML = pageRecords.length
+    ? pageRecords.map(r => '<tr>' +
       '<td>' + esc(fmtDate(r.WeekOf)) + '</td>' +
       '<td>' + esc(r.ClassName) + '</td>' +
       '<td>' + esc(glvLabel(r.TeacherEmail)) + '</td>' +
@@ -139,7 +132,6 @@ async function renderHist(force = false) {
     : '<tr><td colspan="7" class="text-slate-400 text-center py-4">Chưa có dữ liệu.</td></tr>';
     
   renderPager(total, histPage);
-  sectionCache.histLoaded = true;
 }
 
 function renderPager(total, page) {
@@ -196,7 +188,6 @@ function addFiles(input, kind) {
   });
 }
 
-/* Direct-to-Drive Upload for ALL files */
 async function uploadFileDirect(f, wk, cls, kind) {
   const r = await api('getUploadUrl', { 
     schoolYear: year(), 
@@ -220,7 +211,6 @@ async function uploadFileDirect(f, wk, cls, kind) {
   return 'https://drive.google.com/file/d/' + data.id + '/view';
 }
 
-/* Batched Concurrent Uploader */
 async function uploadBatched(list, keepList, kind, wk, cls, batchSize = 3) {
   let failedCount = 0;
   const filesToUpload = [...list]; 
@@ -275,11 +265,12 @@ async function saveTeaching() {
     await api('saveTeaching', body);
     $('gd-modal').classList.remove('open');
     toast('Đã lưu giáo án.');
-    
-    sectionCache.freqLoaded = false;
-    sectionCache.histLoaded = false;
 
-    await renderCards();
+    // Reload full dataset and refresh UI
+    await loadAllTeachingData(true);
+    renderCards();
+    renderFreq();
+    renderHist();
   } catch (e) { 
     toast(e.message); 
   } finally {
@@ -319,28 +310,19 @@ $('gd-cls').innerHTML = '<option value="">Tất cả các lớp</option>' +
 
 $('gd-cls').addEventListener('change', () => { 
   histPage = 1; 
-  renderHist(true); 
-  renderFreq(true);
+  renderHist(); 
+  renderFreq();
 });
 
 $('gd-pager').addEventListener('click', e => {
   const b = e.target.closest('.btn-page');
   if (!b || b.disabled) return;
   histPage += b.dataset.pg === 'next' ? 1 : -1;
-  renderHist(true);
+  renderHist();
 });
 
-// Lazy-load sub-views using IntersectionObserver
-const observer = new IntersectionObserver((entries) => {
-  entries.forEach(entry => {
-    if (entry.isIntersecting) {
-      if (entry.target.id === 'gd-freq') renderFreq();
-      if (entry.target.id === 'gd-history') renderHist();
-    }
-  });
-}, { threshold: 0.1 });
-
-if ($('gd-freq')) observer.observe($('gd-freq'));
-if ($('gd-history')) observer.observe($('gd-history'));
-
-await renderCards();
+// Initial boot: fetch once, then render all client views instantly
+await loadAllTeachingData();
+renderCards();
+renderFreq();
+renderHist();
