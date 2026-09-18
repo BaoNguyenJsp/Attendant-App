@@ -9,7 +9,7 @@ const TAB_HEADERS = {
   Groups:            ['GroupName', 'Type', 'Scope', 'Description'],
   GroupMembers:      ['GroupName', 'Email'],
   Classes:           ['ClassName', 'Grade'],
-  Students:          ['IdNumber', 'SaintName', 'FullName', 'DateOfBirth', 'Gender', 'Father', 'Mother', 'CurrentClass', 'EnrollYear', 'Status', 'Photo', 'Note', 'ListOrder'],  
+  Students: ['IdNumber', 'SaintName', 'FullName', 'DateOfBirth', 'Gender', 'Father', 'Mother', 'CurrentClass', 'EnrollYear', 'Status', 'Photo', 'Note', 'Siblings', 'ListOrder'],
   Teaching:          ['SchoolYear', 'WeekOf', 'ClassName', 'TeacherEmail', 'LessonContent', 'LessonPlanUrl', 'LessonPlanNames', 'RevisedPlanUrl', 'RevisedPlanNames', 'UpdatedBy'],
   Scores:            ['SchoolYear', 'IdNumber', 'ClassName', 'Quiz15_S1', 'Exam_S1', 'Quiz15_S2', 'Exam_S2'],
   Config:            ['Key', 'Value'],
@@ -394,10 +394,10 @@ function config() {
 
 const currentYear = () => config().CurrentSchoolYear || '2026-2027';
 
-function holidays(schoolYear) {
+function holidays() {
   const set = {};
   cachedRead('Holidays').forEach(h => {
-    if (String(h.SchoolYear || schoolYear) === schoolYear) set[h.WeekOf + '|' + (h.Session || '')] = true;
+    set[h.WeekOf + '|' + (h.Session || '')] = true;
   });
   return set;
 }
@@ -495,7 +495,7 @@ function getClassAttendanceStats(year, className, startDate) {
   const cfg = config();
   const startIso = startDate || cfg.AttendanceStartDate;
   const endIso = toYmd(new Date());
-  const holList = (cachedRead('Holidays') || []).filter(h => String(h.SchoolYear) === String(year));
+  const holList = cachedRead('Holidays') || [];
   const { max, maxTotal, holidayMap } = getValidSessionsCount(startIso, endIso, holList);
 
   const data = cachedRead(getAttSheetName(className));
@@ -725,6 +725,7 @@ const ACTIONS = {
       DateOfBirth: b.dateOfBirth || '', Gender: b.gender || '', Father: b.father || '', Mother: b.mother || '',
       CurrentClass: b.className, EnrollYear: b.enrollYear || currentYear(), Status: b.status || 'Hoạt động', 
       Photo: b.photo !== undefined ? b.photo : (old ? (old.Photo || '') : ''), Note: b.note || '',
+      Siblings: b.siblings || '', // <-- Added Siblings mapping here
       ListOrder: b.listOrder !== undefined ? b.listOrder : (old ? (old.ListOrder || '') : '')
     };
     upsertRows('Students', o => normId(o.IdNumber) === normId(b.idNumber), [row]);
@@ -1042,6 +1043,7 @@ const ACTIONS = {
     const by = {};
     const data = cachedRead('TeacherAttendance');
     
+    // 1. Calculate Attendance
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
       if (row.SchoolYear !== year) continue;
@@ -1060,14 +1062,41 @@ const ACTIONS = {
       });
     }
 
+    // 2. Count Teaching (Buổi dạy) from Teaching sheet
+    const taughtCount = {};
+    const teachingData = cachedRead('Teaching');
+    for (let i = 0; i < teachingData.length; i++) {
+      const r = teachingData[i];
+      if (String(r.SchoolYear).trim() === year) {
+        const email = String(r.TeacherEmail || '').toLowerCase().trim();
+        if (emails.has(email)) {
+          taughtCount[email] = (taughtCount[email] || 0) + 1;
+        }
+      }
+    }
+
+    // 3. Map Data to Roster
     const stats = roster.map(u => {
       const e = u.email.toLowerCase();
       const present = {};
       TEACHER_SESSIONS.forEach(s => present[s] = by[e + '|' + normText(s)] || 0);
-      return { id: u.id, email: u.email, fullName: u.fullName, className: u.className, taught: 0, present };
+      
+      return { 
+        id: u.id, 
+        email: u.email, 
+        fullName: u.fullName, 
+        className: u.className, 
+        taught: taughtCount[e] || 0, // Now dynamically maps the calculated taught count!
+        present 
+      };
     });
 
-    return { status: 'ok', max: { 'Lễ Chúa Nhật': 53, 'Học Giáo Lý': 53, 'Chầu Thánh Thể': 53, 'Lễ Thứ Năm': 52, 'Họp Huynh Trưởng': 53 }, maxTotal: 264, stats };
+    return { 
+      status: 'ok', 
+      max: { 'Lễ Chúa Nhật': 53, 'Học Giáo Lý': 53, 'Chầu Thánh Thể': 53, 'Lễ Thứ Năm': 52, 'Họp Huynh Trưởng': 53 }, 
+      maxTotal: 264, 
+      stats 
+    };
   },
 
   getTeacherTrichLuc: b => {
@@ -1378,5 +1407,68 @@ const ACTIONS = {
       }
       return { status: 'ok' };
     } finally { lock.releaseLock(); }
-  }
+  },
+
+  importStudents: b => {
+    const rows = b.students || [];
+    if (!rows.length) return { status: 'ok', count: 0 };
+    
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try {
+      const sh = ss().getSheetByName('Students');
+      const data = sh.getDataRange().getValues();
+      const head = data[0];
+      
+      const idIdx = head.indexOf('IdNumber');
+      const existingMap = {};
+      
+      // Map existing students for fast updates
+      for (let r = 1; r < data.length; r++) {
+        existingMap[normId(data[r][idIdx])] = r;
+      }
+
+      let modified = false;
+      rows.forEach(s => {
+        const id = normId(s.idNumber);
+        const oldRowIdx = existingMap[id];
+        const oldData = oldRowIdx ? rowObj(head, data[oldRowIdx]) : null;
+        
+        const newRowObj = {
+          IdNumber: s.idNumber,
+          SaintName: s.saintName || '',
+          FullName: s.fullName || '',
+          DateOfBirth: s.dateOfBirth || '',
+          Gender: s.gender || '',
+          Father: s.father || '',
+          Mother: s.mother || '',
+          CurrentClass: s.className,
+          EnrollYear: s.enrollYear || currentYear(),
+          Status: s.status || 'Hoạt động',
+          Photo: s.photo !== undefined ? s.photo : (oldData ? (oldData.Photo || '') : ''),
+          Note: s.note || '',
+          Siblings: s.siblings || '',
+          ListOrder: s.listOrder !== undefined ? s.listOrder : (oldData ? (oldData.ListOrder || '') : '')
+        };
+        
+        const rowArr = head.map(h => newRowObj[h] !== undefined ? newRowObj[h] : '');
+        
+        if (oldRowIdx) {
+          data[oldRowIdx] = rowArr; // Update existing
+        } else {
+          data.push(rowArr);        // Insert new
+          existingMap[id] = data.length - 1; 
+        }
+        modified = true;
+      });
+
+      if (modified) {
+        // Bulk write to sheet
+        sh.getRange(1, 1, data.length, head.length).setValues(data);
+        // Write-through cache update
+        writeCache('Students', data.slice(1).map(r => rowObj(head, r)));
+      }
+      return { status: 'ok', count: rows.length };
+    } finally { lock.releaseLock(); }
+  },
 };

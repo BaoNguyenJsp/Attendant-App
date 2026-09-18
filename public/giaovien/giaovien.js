@@ -17,6 +17,7 @@ const NGANH = groups.filter(g => g.Type === 'Ngành');
 let weekCache = [];
 let currentSession = '';
 let gvddBase = [], gvddState = [];
+let TEACHER_ATT_CACHE = {};
 
 /* ---------- Fixed Tab Cache Map ---------- */
 const tabCache = {
@@ -65,23 +66,90 @@ function fillLop() {
   fillSel('gvtk-lop', [{v:'', t:'Tất cả'}].concat(cls.map(c => ({v:c}))));
 }
 
+async function loadTeacherAttendance(sector, force = false) {
+  if (TEACHER_ATT_CACHE[sector] && !force) return;
+  
+  const r = await api('getTeacherAttendance', { sector: sector });
+  TEACHER_ATT_CACHE[sector] = {
+    records: r.records || [],
+    holidays: r.holidays || {}
+  };
+}
+
 /* ---------- Điểm danh Huynh trưởng ---------- */
 async function renderGVDD() {
   if (!isExec()) return;
   if (!$('gvdd-week').value) $('gvdd-week').value = defaultWeek();
   normSunday($('gvdd-week'));
 
-  const body = {sector: $('gvdd-nganh').value, weekOf: $('gvdd-week').value};
-  let r;
-  try { r = await api('getTeacherAttendance', body); }
-  catch (e) { return toast(e.message); }
+  const sector = $('gvdd-nganh').value;
+  const wk = $('gvdd-week').value;
+  currentSession = $('gvdd-session').value;
 
+  try {
+    // Fetch ONLY the selected sector
+    await loadTeacherAttendance(sector);
+  } catch (e) { return toast(e.message); }
+
+  const cacheData = TEACHER_ATT_CACHE[sector];
+
+  const isHolidayWeek = !!cacheData.holidays[wk + '|' + currentSession] || !!cacheData.holidays[wk + '|'];
   const note = $('gvdd-holiday-note');
-  if (r.isHolidayWeek) { note.style.display = 'block'; note.textContent = '⚠ Tuần này là ngày nghỉ đã khai báo trong mục Quản trị.'; }
+  if (isHolidayWeek) { note.style.display = 'block'; note.textContent = '⚠ Tuần này là ngày nghỉ đã khai báo trong mục Quản trị.'; }
   else note.style.display = 'none';
 
-  weekCache = r.recordsByTeacher || [];
-  currentSession = $('gvdd-session').value;
+  // Instant local filtering
+  const weekRecsMap = {};
+  cacheData.records.forEach(r => {
+    if (String(r.WeekOf).trim() === wk) {
+      weekRecsMap[r.email] = r;
+    }
+  });
+
+  // Rebuild roster locally based on selected Sector
+  const adminGroups = new Set();
+  const sectorClasses = new Set();
+  
+  groups.forEach(g => {
+    if (g.Type === 'Quản trị') adminGroups.add(g.GroupName);
+    if (g.Type === 'Ngành' && (sector === '' || g.GroupName === sector)) {
+      String(g.Scope || '').split(',').forEach(c => sectorClasses.add(c.trim()));
+    }
+  });
+  
+  const clsOfGroup = {};
+  groups.forEach(g => { if (g.Type === 'Lớp') clsOfGroup[g.GroupName] = g.Scope || g.GroupName; });
+
+  const activeUsersMap = {};
+  USERS.filter(u => String(u.Status).toLowerCase() === 'hoạt động').forEach(u => activeUsersMap[u.Email.toLowerCase()] = u);
+
+  const localRoster = {};
+  const groupMembers = (await api('getTeachers')).members || [];
+  
+  groupMembers.forEach(m => {
+    const email = String(m.Email || '').toLowerCase();
+    const u = activeUsersMap[email];
+    if (!u) return;
+
+    if (sector === XUDOAN) {
+      if (adminGroups.has(m.GroupName)) {
+        localRoster[email] = { id: u.Id, email: u.Email, fullName: u.FullName, saintName: u.SaintName, className: '' };
+      }
+    } else {
+      const cls = clsOfGroup[m.GroupName];
+      if (cls && sectorClasses.has(cls)) {
+        localRoster[email] = { id: u.Id, email: u.Email, fullName: u.FullName, saintName: u.SaintName, className: cls };
+      }
+    }
+  });
+
+  const rosterArr = Object.values(localRoster).sort((a, b) => (Number(a.id) - Number(b.id)) || a.fullName.localeCompare(b.fullName, 'vi'));
+
+  weekCache = rosterArr.map(u => {
+    const existing = weekRecsMap[u.email.toLowerCase()] || {};
+    return { ...u, sessions: existing.sessions || {} };
+  });
+
   renderSessionFromCache();
 }
 
@@ -179,12 +247,13 @@ function calcGVDD() {
 
 async function saveGVDD() {
   normSunday($('gvdd-week'));
-  syncStateToCache(); // Sync the active screen to cache before saving
+  syncStateToCache(); 
 
+  const sector = $('gvdd-nganh').value;
   const body = {
-    sector: $('gvdd-nganh').value, 
+    sector: sector, 
     weekOf: $('gvdd-week').value, 
-    records: weekCache // Send the entire week with all sessions
+    records: weekCache 
   };
 
   try { await api('saveTeacherAttendance', body); }
@@ -193,6 +262,10 @@ async function saveGVDD() {
   gvddBase = gvddState.map(x => ({...x}));
   markDirtyGVDD();
   toast('Đã lưu điểm danh Huynh trưởng cho cả tuần.');
+  
+  // Reload the cache instantly for THIS sector
+  await loadTeacherAttendance(sector, true);
+  
   invalidateStatsCache();
 }
 
@@ -259,6 +332,121 @@ async function renderGVTK() {
     : '<tr><td colspan="11" class="p-4 text-center text-slate-400">Chưa có Huynh trưởng trong phạm vi này.</td></tr>';
 }
 
+/* ---------- In Bảng Thống Kê Huynh Trưởng ---------- */
+async function printTeacherStats() {
+  const sector = $('gvtk-nganh').value;
+  const cls = $('gvtk-lop').value;
+  
+  toast('⏳ Đang tạo bảng thống kê...');
+  
+  let r;
+  try { 
+    r = await api('getTeacherStats', {sector: sector, className: cls || undefined}); 
+  } catch (e) { 
+    return toast(e.message); 
+  }
+  
+  const rows = r.stats || [];
+  const max = r.max || {};
+  const maxTotal = r.maxTotal || 0;
+  
+  if (!rows.length) return toast('Không có dữ liệu để in.');
+  
+  const sectorName = sector === XUDOAN ? 'Xứ đoàn' : (sector || 'Toàn đoàn');
+  const docTitle = `Thống kê HT - ${esc(sectorName)}`;
+  const subHeader = `Phân đoàn/Ngành: <b>${esc(sectorName)}</b> &nbsp;|&nbsp; Lớp: <b>${esc(cls || 'Tất cả')}</b> &nbsp;|&nbsp; Năm học: <b>${esc(year())}</b>`;
+
+  const printWindow = window.open('', '_blank');
+  
+  let html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>${docTitle}</title>
+      <style>
+        body { font-family: 'Times New Roman', Times, serif; padding: 20px; color: #000; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .header h2 { margin: 0; font-size: 20px; text-transform: uppercase; }
+        .header h3 { margin: 5px 0 0 0; font-size: 16px; font-weight: normal; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
+        th, td { border: 1px solid #000; padding: 6px; text-align: center; }
+        th { background-color: #f4f4f4; font-weight: bold; }
+        td.left { text-align: left; }
+        .footer { margin-top: 40px; display: flex; justify-content: space-between; font-size: 15px; }
+        .signature { text-align: center; width: 40%; }
+        @media print {
+          /* Dùng Landscape vì bảng giáo viên có nhiều cột */
+          @page { size: A4 landscape; margin: 15mm; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h2>BẢNG THỐNG KÊ CHUYÊN CẦN HUYNH TRƯỞNG</h2>
+        <h3>${subHeader}</h3>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 4%">STT</th>
+            <th style="width: 8%">Mã Số</th>
+            <th style="width: 18%">Họ và Tên</th>
+            <th style="width: 15%">Email</th>
+            <th style="width: 8%">Lớp</th>
+            <th style="width: 7%">Buổi dạy</th>
+            ${TSESS.map(s => `<th>${s}</th>`).join('')}
+            <th style="width: 7%">Tổng %</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+
+  rows.forEach((x, i) => {
+    const sum = TSESS.reduce((a, s) => a + (x.present[s] || 0), 0);
+    
+    html += `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${esc(x.id)}</td>
+        <td class="left font-medium">${esc(x.fullName)}</td>
+        <td class="left">${esc(x.email)}</td>
+        <td>${esc(x.className)}</td>
+        <td>${x.taught || 0}</td>
+        ${TSESS.map(s => `<td>${pct(x.present[s] || 0, max[s] || 0)}</td>`).join('')}
+        <td><strong>${pct(sum, maxTotal)}</strong></td>
+      </tr>
+    `;
+  });
+
+  html += `
+        </tbody>
+      </table>
+      <div class="footer">
+        <div class="signature">
+          <p><b>Trưởng phân đoàn / Khối trưởng</b></p>
+          <br><br><br>
+        </div>
+        <div class="signature">
+          <p><b>Xứ đoàn trưởng</b></p>
+          <br><br><br>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+  
+  // Chờ HTML load xong cấu trúc trước khi gọi lệnh In
+  setTimeout(() => {
+    printWindow.print();
+    printWindow.close();
+  }, 250);
+}
+
 /* ---------- Events ---------- */
 $('gvdd-nganh').addEventListener('change', async () => { tabCache['t-gvdd'] = false; await renderGVDD(); tabCache['t-gvdd'] = true; });
 $('gvdd-week').addEventListener('change', async () => { normSunday($('gvdd-week')); tabCache['t-gvdd'] = false; await renderGVDD(); tabCache['t-gvdd'] = true; });
@@ -295,7 +483,7 @@ $('gvtrich-out').addEventListener('click', e => {
 $('gvtk-nganh').addEventListener('change', async () => { fillLop(); tabCache['t-gvtk'] = false; await renderGVTK(); tabCache['t-gvtk'] = true; });
 $('gvtk-lop').addEventListener('change', async () => { tabCache['t-gvtk'] = false; await renderGVTK(); tabCache['t-gvtk'] = true; });
 $('gvtk-excel').addEventListener('click', () => exportExcel('gvtk-table', 'Thống kê Huynh trưởng'));
-$('gvtk-print').addEventListener('click', () => window.print());
+$('gvtk-print').addEventListener('click', printTeacherStats);
 
 /* ---------- Boot ---------- */
 fillNganh('gvdd-nganh');

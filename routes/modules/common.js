@@ -16,5 +16,6 @@ module.exports = {
     app.post('/api/saveStudent', authz.requireScopeWrite, proxy('saveStudent'));
     app.post('/api/saveStudentOrder', authz.requireScopeWrite, proxy('saveStudentOrder'));
     app.post('/api/searchByIdNumber', proxy('searchByIdNumber'));
+    app.post('/api/importStudents', authz.requireScopeWrite, proxy('importStudents'));
   },
 };

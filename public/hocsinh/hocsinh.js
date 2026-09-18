@@ -300,6 +300,95 @@ async function saveModal() {
   if ($('hs-search-input') && $('hs-search-input').value) renderSearch(); // <-- Refresh search results if active
 }
 
+/* ---------- Excel Import & Template ---------- */
+function downloadTemplate() {
+  const cls = $('hs-lop').value;
+  const sortedSts = sortStudents(TSTUDENTS.filter(s => s.CurrentClass === cls));
+  
+  const aoa = [['Số CCCD', 'Tên Thánh', 'Họ Và Tên', 'Giới Tính', 'Ngày Sinh', 'Lớp', 'Năm Nhập Học', 'Trạng Thái', 'Cha', 'Mẹ', 'Anh/Chị/Em', 'Ghi Chú']];
+  
+  if (sortedSts.length) {
+    sortedSts.forEach(s => {
+      aoa.push([
+        s.IdNumber, s.SaintName || '', s.FullName, s.Gender || '', s.DateOfBirth || '', 
+        s.CurrentClass || cls, s.EnrollYear || '', s.Status || 'Hoạt động', 
+        s.Father || '', s.Mother || '', s.Siblings || '', s.Note || ''
+      ]);
+    });
+  } else {
+    // Generates 1 blank row strictly typed to the current class
+    aoa.push(['', '', '', '', '', cls, year(), 'Hoạt động', '', '', '', '']);
+  }
+  
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'DanhSach');
+  XLSX.writeFile(wb, 'Danh_sach_thieu_nhi_' + cls + '.xlsx');
+}
+
+async function importStudents() {
+  const f = $('hs-file').files[0];
+  $('hs-file').value = '';
+  if (!f) return;
+  
+  let ws;
+  try { 
+    const wb = XLSX.read(await f.arrayBuffer()); 
+    ws = wb.Sheets[wb.SheetNames[0]]; 
+  } catch (e) { return toast('Không đọc được file Excel.'); }
+  
+  // Đọc dữ liệu theo dạng Object, tự động lấy Dòng 1 làm Tiêu đề (Header)
+  const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  if (rows.length === 0) return toast('File không có dữ liệu.');
+  
+  const students = [];
+  rows.forEach(r => {
+    // Gọi đúng tên cột (Hỗ trợ nhiều cách viết để tránh gõ sai)
+    const rawId = r['Số CCCD'] || r['CCCD'] || r['IdNumber'] || '';
+    const rawName = r['Họ Và Tên'] || r['Họ tên'] || r['Họ và tên'] || '';
+    
+    // Chỉ loại bỏ dấu nháy đơn (') ở đầu nếu Excel tự định dạng, KHÔNG loại bỏ số 0
+    const id = String(rawId).replace(/^[']+/, '').trim();
+    const fullName = String(rawName).trim();
+    
+    // Bắt buộc phải có ID và Tên mới tính là một dòng hợp lệ
+    if (!id || !fullName) return;
+    
+    students.push({
+      idNumber: id,
+      saintName: String(r['Tên Thánh'] || '').trim(),
+      fullName: fullName,
+      gender: String(r['Giới Tính'] || '').trim(),
+      dateOfBirth: String(r['Ngày Sinh'] || '').trim(),
+      className: String(r['Lớp'] || $('hs-lop').value).trim(),
+      enrollYear: String(r['Năm Nhập Học'] || '').trim(),
+      status: String(r['Trạng Thái'] || 'Hoạt động').trim(),
+      father: String(r['Cha'] || '').trim(),
+      mother: String(r['Mẹ'] || '').trim(),
+      siblings: String(r['Anh/Chị/Em'] || '').trim(),
+      note: String(r['Ghi Chú'] || '').trim()
+    });
+  });
+  
+  if (!students.length) return toast('Không tìm thấy dòng dữ liệu hợp lệ (Cần cột "Số CCCD" và "Họ Và Tên").');
+  
+  toast('⏳ Đang nhập ' + students.length + ' Thiếu nhi...');
+  
+  try {
+    const res = await api('importStudents', { students });
+    toast('Đã lưu ' + res.count + ' Thiếu nhi.');
+    
+    // Xóa bộ nhớ đệm và tải lại danh sách mới
+    clearApiCache('getStudents');
+    const st = await api('getStudents');
+    setState({TSTUDENTS: st.students || []});
+    
+    renderHS();
+    if ($('hs-search-input') && $('hs-search-input').value) renderSearch(); 
+  } catch (e) {
+    toast('Lỗi: ' + e.message);
+  }
+}
+
 /* ---------- Events ---------- */
 $('hs-lop').addEventListener('change', renderHS);
 $('add-student').addEventListener('click', () => openModal());
@@ -322,6 +411,18 @@ $('hs-search-tbody').addEventListener('click', e => {
   const btn = e.target.closest('.edit-student');
   if (btn) openModal(btn.dataset.id);
 });
+
+$('hs-template').addEventListener('click', downloadTemplate);
+$('hs-file').addEventListener('change', importStudents);
+$('hs-lop').addEventListener('change', renderHS);
+$('add-student').addEventListener('click', () => openModal());
+
+if ($('hs-template-link')) {
+  $('hs-template-link').addEventListener('click', downloadTemplate);
+}
+if ($('hs-file')) {
+  $('hs-file').addEventListener('change', importStudents);
+}
 
 /* Initial Boot */
 setupSiblingSearch();

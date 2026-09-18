@@ -265,7 +265,7 @@ async function renderHolidays() {
   }
 
   let r;
-  try { r = await api('getHolidays', { schoolYear: year() }); }
+  try { r = await api('getHolidays'); }
   catch (e) { return toast(e.message); }
 
   HOLIDAYS = r.holidays || [];

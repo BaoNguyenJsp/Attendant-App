@@ -23,6 +23,7 @@ if ($('tk-lop')) fillSel('tk-lop', allClassItems);
 fillSessions('dd-buoi');
 
 let weekCache = [];
+let CLASS_ATT_CACHE = { cls: '', records: [], holidays: {} };
 let currentSession = '';
 let ddBase = [], ddState = [];
 
@@ -59,6 +60,17 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
 });
 
+async function loadClassAttendance(cls, force = false) {
+  if (CLASS_ATT_CACHE.cls === cls && !force) return; // Do not fetch if already loaded
+  
+  const r = await api('getAttendance', { schoolYear: year(), className: cls });
+  CLASS_ATT_CACHE = {
+    cls: cls,
+    records: r.records || [],
+    holidays: r.holidays || {}
+  };
+}
+
 /* ---------- Điểm Danh ---------- */
 async function renderDD() {
   if (!$('dd-week').value) $('dd-week').value = toIsoDate(defaultWeek());
@@ -66,43 +78,45 @@ async function renderDD() {
 
   const cls = $('dd-lop').value;
   if (!cls) return toast('Chọn lớp.');
-  let r;
+
+  // Fetch from backend ONLY if class changed
   try {
-    r = await api('getAttendance', {
-      schoolYear: year(),
-      weekOf: $('dd-week').value,
-      className: cls
-    });
+    await loadClassAttendance(cls);
   } catch (e) { return toast(e.message); }
 
+  const wk = $('dd-week').value;
+  currentSession = $('dd-buoi').value;
+
+  // Check holidays from local dictionary
+  const isHolidayWeek = !!CLASS_ATT_CACHE.holidays[wk + '|' + currentSession] || !!CLASS_ATT_CACHE.holidays[wk + '|'];
+
   const note = $('dd-holiday-note');
-  if (r?.isHolidayWeek) {
+  if (isHolidayWeek) {
     note.style.display = 'block';
     note.textContent = '⚠ Tuần này là ngày nghỉ đã khai báo trong mục Quản trị.';
   } else note.style.display = 'none';
 
-  const rawRecords = Array.isArray(r?.recordsByStudent) ? r.recordsByStudent : (Array.isArray(r?.records) ? r.records : []);
-  const orderedList = sortStudents(rawRecords.map(x => {
-    const baseSt = (Array.isArray(TSTUDENTS) ? TSTUDENTS : []).find(s => s.IdNumber === x.idNumber) || {};
-    return {
-      ...x,
-      CurrentClass: cls,
-      IdNumber: x.idNumber,
-      ListOrder: baseSt.ListOrder,
-      Gender: baseSt.Gender,
-      photo: x.photo || baseSt.Photo || ''
-    };
-  }));
+  // Instant local filtering
+  const weekRecs = CLASS_ATT_CACHE.records.filter(r => r.WeekOf === wk);
+  const weekRecsMap = {};
+  weekRecs.forEach(r => weekRecsMap[r.idNumber] = r);
 
-  weekCache = orderedList.map(o => {
-    const rec = rawRecords.find(r => r.idNumber === o.idNumber) || o;
-    return { ...rec, photo: o.photo };
+  // Cross-reference with global students list
+  const classStudents = sortStudents(TSTUDENTS.filter(s => s.CurrentClass === cls && String(s.Status).toLowerCase() === 'hoạt động'));
+
+  weekCache = classStudents.map(st => {
+    const existing = weekRecsMap[st.IdNumber] || {};
+    return {
+      idNumber: st.IdNumber,
+      saintName: st.SaintName || '',
+      fullName: st.FullName,
+      photo: st.Photo || st.PhotoURL || st.Image || '',
+      sessions: existing.sessions || {}
+    };
   });
 
-  currentSession = $('dd-buoi').value;
   renderSessionFromCache();
 
-  // Face Scan Step: build reference descriptors in the background
   if (typeof buildReferenceDescriptors === 'function') {
     buildReferenceDescriptors(weekCache, updateRefBadge).catch(e => console.warn('[face-scan] build refs error:', e.message));
   }
@@ -217,6 +231,7 @@ async function saveAttendance() {
   ddBase = ddState.map(x => ({...x}));
   markDirty();
   toast('Đã lưu điểm danh cho cả tuần.');
+  await loadClassAttendance($('dd-lop').value, true);
   invalidateStatsCache();
 }
 
@@ -1169,6 +1184,112 @@ $('fs-apply')?.addEventListener('click', async () => {
   }
 });
 
+/* ---------- In Bảng Thống Kê (Lớp / Toàn Đoàn) ---------- */
+function printAttendanceStats(isWholeDeanery = false) {
+  const cls = $('tk-lop').value;
+  if (!isWholeDeanery && !cls) return toast('Vui lòng chọn một lớp để in.');
+
+  const tbodyId = isWholeDeanery ? 'td-tbody' : 'tk-tbody';
+  const tableId = isWholeDeanery ? 'td-table' : 'tk-table';
+  
+  const tbody = $(tbodyId);
+  if (!tbody || tbody.textContent.includes('Chưa có dữ liệu') || tbody.textContent.includes('Đang tổng hợp')) {
+    return toast('Không có dữ liệu để in.');
+  }
+
+  toast(`⏳ Đang tạo bảng in thống kê ${isWholeDeanery ? 'toàn đoàn' : 'lớp'}...`);
+
+  const docTitle = isWholeDeanery ? `Thống Kê Điểm Danh Toàn Đoàn - ${esc(year())}` : `Thống Kê Điểm Danh - ${esc(cls)}`;
+  const headerTitle = isWholeDeanery ? 'BẢNG THỐNG KÊ CHUYÊN CẦN TOÀN ĐOÀN' : 'BẢNG THỐNG KÊ CHUYÊN CẦN LỚP';
+  const subHeader = isWholeDeanery ? `Năm học: <b>${esc(year())}</b>` : `Lớp: <b>${esc(cls)}</b> &nbsp;|&nbsp; Năm học: <b>${esc(year())}</b>`;
+
+  // Clone headers dynamically
+  const thead = $(tableId).querySelector('thead');
+  let theadHtml = '';
+  if (thead) {
+    theadHtml = Array.from(thead.querySelectorAll('th')).map((th, i) => {
+      let w = '';
+      if (!isWholeDeanery) {
+        if (i === 1) w = 'width: 30%'; // Họ và tên
+        else if (i === 0) w = 'width: 5%'; // STT
+      } else {
+        if (i === 0) w = 'width: 15%'; // Lớp
+      }
+      return `<th style="${w}">${esc(th.textContent.trim())}</th>`;
+    }).join('');
+  }
+
+  // Clone rows dynamically, preserving bold formatting and aligning names
+  const rowsHtml = Array.from(tbody.querySelectorAll('tr')).map(tr => {
+    const tds = Array.from(tr.querySelectorAll('td')).map((td, i) => {
+      const isLeft = !isWholeDeanery && i === 1; // Left align "Họ và Tên" in class view
+      const isBold = td.classList.contains('font-bold') || td.classList.contains('font-extrabold');
+      const content = isBold ? `<strong>${esc(td.textContent.trim())}</strong>` : esc(td.textContent.trim());
+      return `<td class="${isLeft ? 'left font-medium' : ''}">${content}</td>`;
+    }).join('');
+    return `<tr>${tds}</tr>`;
+  }).join('');
+
+  const printWindow = window.open('', '_blank');
+  let html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>${docTitle}</title>
+      <style>
+        body { font-family: 'Times New Roman', Times, serif; padding: 20px; color: #000; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .header h2 { margin: 0; font-size: 20px; text-transform: uppercase; }
+        .header h3 { margin: 5px 0 0 0; font-size: 16px; font-weight: normal; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
+        th, td { border: 1px solid #000; padding: 6px 8px; text-align: center; }
+        th { background-color: #f4f4f4; font-weight: bold; }
+        td.left { text-align: left; }
+        .footer { margin-top: 40px; display: flex; justify-content: space-between; font-size: 15px; }
+        .signature { text-align: center; width: 40%; }
+        @media print {
+          @page { size: A4 landscape; margin: 15mm; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h2>${headerTitle}</h2>
+        <h3>${subHeader}</h3>
+      </div>
+      <table>
+        <thead>
+          <tr>${theadHtml}</tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+      <div class="footer">
+        <div class="signature">
+          <p><b>${isWholeDeanery ? 'Ban Điều Hành' : 'Giáo lý viên phụ trách'}</b></p>
+          <br><br><br>
+        </div>
+        <div class="signature">
+          <p><b>Xứ đoàn trưởng</b></p>
+          <br><br><br>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+  
+  setTimeout(() => {
+    printWindow.print();
+    printWindow.close();
+  }, 250);
+}
+
 /* ---------- Event Listeners ---------- */
 $('dd-lop').addEventListener('change', async () => { tabCache['t-dd'] = false; await renderDD(); tabCache['t-dd'] = true; });
 $('dd-week').addEventListener('change', async () => { normSunday($('dd-week')); tabCache['t-dd'] = false; await renderDD(); tabCache['t-dd'] = true; });
@@ -1197,10 +1318,10 @@ $('tl-excel').addEventListener('click', () => exportExcel('tl-table', 'Trích l�
 
 $('tk-lop').addEventListener('change', async () => { tabCache['t-tk'] = false; await renderTK(); tabCache['t-tk'] = true; });
 $('tk-excel').addEventListener('click', () => exportExcel('tk-table', 'Thống kê chuyên cần lớp'));
-$('tk-print').addEventListener('click', () => window.print());
+$('tk-print').addEventListener('click', () => printAttendanceStats(false));
 
 $('td-excel').addEventListener('click', () => exportExcel('td-table', 'Thống kê toàn đoàn'));
-$('td-print').addEventListener('click', () => window.print());
+$('td-print').addEventListener('click', () => printAttendanceStats(true));
 
 /* Boot */
 switchTab('t-dd');

@@ -344,37 +344,6 @@ async function renderTongHop() {
     : '<tr><td colspan="' + heads.length + '" class="p-4 text-center text-slate-400">Chưa có dữ liệu.</td></tr>';
 }
 
-async function toanDoan() {
-  if (!isExec()) return;
-  let r;
-  try { r = await api('getSummary', {schoolYear: year(), wholeDeanery: true}); }
-  catch (e) { return toast(e.message); }
-  
-  // BYPASS normSummary COMPLETELY
-  const rows = sortSummaryRecords(r.summary || []);
-  
-  const w = window.open('', '_blank');
-  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Xếp loại toàn đoàn ' + esc(year()) + '</title>' +
-    '<style>body{font-family:Arial,sans-serif;padding:24px}h1{font-size:18px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #999;padding:4px 6px;text-align:left}th{background:#eee}.c{text-align:center}</style></head><body>' +
-    '<h1>Xếp loại toàn đoàn — Năm học ' + esc(year()) + '</h1>' +
-    '<table><thead><tr><th>STT</th><th>Lớp</th><th>Số CCCD</th><th>Họ Tên</th><th class="c">ĐTB HK1</th><th class="c">ĐTB HK2</th><th class="c">ĐTB Năm</th><th class="c">% Chuyên Cần</th><th>Xếp loại</th></tr></thead><tbody>' +
-    rows.map((x, i) => {
-        const id = x.IdNumber || x.idNumber || '';
-        const fullName = [x.SaintName || x.saintName, x.FullName || x.fullName].filter(Boolean).join(' ');
-        const cName = x.CurrentClass || x.ClassName || x.className || '';
-
-        const h1 = x.HK1Score ?? x.avgH1 ?? x.h1;
-        const h2 = x.HK2Score ?? x.avgH2 ?? x.h2;
-        const avg = x.YearScore ?? x.avgYear;
-        const cc = x.YearAttendant ?? x.pct ?? x.cc;
-        const rt = x.rating !== undefined ? x.rating : (x.Status === 'Hoạt động' ? '' : x.Status);
-
-        return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(cName) + '</td><td>' + esc(id) + '</td><td>' + esc(fullName) + '</td><td class="c">' + fmt1(h1) + '</td><td class="c">' + fmt1(h2) + '</td><td class="c">' + fmt1(avg) + '</td><td class="c">' + (cc == null || cc === '' ? '—' : cc + '%') + '</td><td>' + (rt ? esc(rt) : '—') + '</td></tr>';
-    }).join('') +
-    '</tbody></table><script>window.print()<\/script></body></html>');
-  w.document.close();
-}
-
 async function renderKT() {
   const yr = $('kt-nam').value, cls = $('kt-lop').value;
   let r;
@@ -408,6 +377,135 @@ async function renderKT() {
     : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi đạt chuẩn.</td></tr>';
 }
 
+/* ---------- In Bảng Xếp Loại (Lớp / Toàn Đoàn) ---------- */
+async function printRanking(isWholeDeanery = false) {
+  if (isWholeDeanery && !isExec()) return toast('Chỉ Ban Điều Hành mới được in toàn đoàn.');
+
+  const yr = $('th-nam').value || year();
+  const cls = $('th-lop').value;
+
+  if (!isWholeDeanery && !cls) return toast('Vui lòng chọn một lớp để in.');
+
+  toast(`⏳ Đang tạo bảng xếp loại ${isWholeDeanery ? 'toàn đoàn' : 'lớp'}...`);
+
+  let r;
+  try {
+    const payload = isWholeDeanery ? { schoolYear: yr, wholeDeanery: true } : { schoolYear: yr, className: cls };
+    r = await api('getSummary', payload);
+  } catch (e) {
+    return toast(e.message);
+  }
+
+  const rawRows = r.summary || [];
+  if (!rawRows.length) return toast('Không có dữ liệu để in.');
+
+  // BYPASS normSummary COMPLETELY - Uses sorting engine (Class -> Name)
+  const rows = sortSummaryRecords(rawRows);
+
+  const printWindow = window.open('', '_blank');
+  
+  // Layout Variables
+  const docTitle = isWholeDeanery ? `Xếp Loại Toàn Đoàn - ${esc(yr)}` : `Bảng Xếp Loại - ${esc(cls)}`;
+  const headerTitle = isWholeDeanery ? 'BẢNG TỔNG KẾT VÀ XẾP LOẠI TOÀN ĐOÀN' : 'BẢNG TỔNG KẾT VÀ XẾP LOẠI HỌC TẬP';
+  const subHeader = isWholeDeanery ? `Năm học: <b>${esc(yr)}</b>` : `Lớp: <b>${esc(cls)}</b> &nbsp;|&nbsp; Năm học: <b>${esc(yr)}</b>`;
+
+  let html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>${docTitle}</title>
+      <style>
+        body { font-family: 'Times New Roman', Times, serif; padding: 20px; color: #000; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .header h2 { margin: 0; font-size: 20px; text-transform: uppercase; }
+        .header h3 { margin: 5px 0 0 0; font-size: 16px; font-weight: normal; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
+        th, td { border: 1px solid #000; padding: 6px 8px; text-align: center; }
+        th { background-color: #f4f4f4; font-weight: bold; }
+        td.left { text-align: left; }
+        .footer { margin-top: 40px; display: flex; justify-content: space-between; font-size: 15px; }
+        .signature { text-align: center; width: 40%; }
+        @media print {
+          @page { size: A4 portrait; margin: 15mm; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h2>${headerTitle}</h2>
+        <h3>${subHeader}</h3>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 5%">STT</th>
+            ${isWholeDeanery ? '<th style="width: 10%">Lớp</th>' : ''}
+            <th style="width: 15%">Số CCCD</th>
+            <th style="width: 30%">Họ và Tên</th>
+            <th style="width: 8%">Đ. HK1</th>
+            <th style="width: 8%">Đ. HK2</th>
+            <th style="width: 8%">Cả Năm</th>
+            <th style="width: 8%">Chuyên Cần</th>
+            <th style="width: 8%">Xếp Loại</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+
+  rows.forEach((x, i) => {
+    const id = x.IdNumber || x.idNumber || '';
+    const fullName = [x.SaintName || x.saintName, x.FullName || x.fullName].filter(Boolean).join(' ');
+    const cName = x.CurrentClass || x.ClassName || x.className || '';
+
+    const h1 = x.HK1Score ?? x.avgH1 ?? x.h1;
+    const h2 = x.HK2Score ?? x.avgH2 ?? x.h2;
+    const avg = x.YearScore ?? x.avgYear;
+    const cc = x.YearAttendant ?? x.pct ?? x.cc;
+    const rt = x.rating !== undefined ? x.rating : (x.Status === 'Hoạt động' ? '' : x.Status);
+
+    html += `
+      <tr>
+        <td>${i + 1}</td>
+        ${isWholeDeanery ? `<td>${esc(cName)}</td>` : ''}
+        <td>${esc(id)}</td>
+        <td class="left font-medium">${esc(fullName)}</td>
+        <td>${h1 !== '' && h1 !== null ? fmt1(h1) : '—'}</td>
+        <td>${h2 !== '' && h2 !== null ? fmt1(h2) : '—'}</td>
+        <td><strong>${avg !== '' && avg !== null ? fmt1(avg) : '—'}</strong></td>
+        <td>${cc !== '' && cc !== null ? cc + '%' : '—'}</td>
+        <td><strong>${rt ? esc(rt) : '—'}</strong></td>
+      </tr>
+    `;
+  });
+
+  html += `
+        </tbody>
+      </table>
+      <div class="footer">
+        <div class="signature">
+          <p><b>${isWholeDeanery ? 'Ban Điều Hành' : 'Giáo lý viên phụ trách'}</b></p>
+          <br><br><br>
+        </div>
+        <div class="signature">
+          <p><b>Xứ đoàn trưởng</b></p>
+          <br><br><br>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+  
+  setTimeout(() => {
+    printWindow.print();
+    printWindow.close();
+  }, 250);
+}
+
 /* ---------- Events ---------- */
 $('nh-lop').addEventListener('change', async () => { tabCache['t-nhap'] = false; await renderNhap(); tabCache['t-nhap'] = true; });
 $('save-scores').addEventListener('click', saveScores);
@@ -419,10 +517,10 @@ $('hbt-search').addEventListener('click', renderHBT);
 $('th-nam').addEventListener('change', async () => { tabCache['t-tonghop'] = false; await renderTongHop(); tabCache['t-tonghop'] = true; });
 $('th-lop').addEventListener('change', async () => { tabCache['t-tonghop'] = false; await renderTongHop(); tabCache['t-tonghop'] = true; });
 $('th-excel').addEventListener('click', () => exportExcel('th-table', 'Tổng hợp & xếp loại'));
-$('th-print').addEventListener('click', () => window.print());
+$('th-print').addEventListener('click', () => printRanking(false));
 
 const btnToanDoan = $('th-toandoan');
-if (btnToanDoan) btnToanDoan.addEventListener('click', toanDoan);
+if (btnToanDoan) btnToanDoan.addEventListener('click', () => printRanking(true));
 
 $('kt-nam').addEventListener('change', async () => { tabCache['t-kt'] = false; await renderKT(); tabCache['t-kt'] = true; });
 $('kt-lop').addEventListener('change', async () => { tabCache['t-kt'] = false; await renderKT(); tabCache['t-kt'] = true; });

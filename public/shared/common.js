@@ -191,7 +191,7 @@ if (document.body && document.body.dataset.role) {
 
 /* ---------- Advanced Persistent TTL Cache Engine ---------- */
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 mins
-const CACHEABLE_ACTIONS = new Set(['getConfig', 'getClasses', 'getStudents', 'getTeachers']);
+const CACHEABLE_ACTIONS = new Set(['getConfig', 'getClasses', 'getStudents', 'getTeachers', 'getHolidays']);
 
 const CACHE_INVALIDATIONS = {
   'saveConfig': ['getConfig'],
