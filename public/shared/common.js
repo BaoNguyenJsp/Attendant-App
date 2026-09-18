@@ -4,6 +4,19 @@
    ===================================================================== */
 'use strict';
 
+const APP_VERSION = 'v1.0.0'; 
+
+// 2. Check if the user's browser has this exact version
+if (localStorage.getItem('app_version') !== APP_VERSION) {
+  // If it doesn't match, wipe their localStorage completely
+  localStorage.clear();
+  
+  // Save the new version so it doesn't wipe again on their next refresh
+  localStorage.setItem('app_version', APP_VERSION);
+  
+  console.log('Busted local cache for new version: ' + APP_VERSION);
+}
+
 import { highestType } from './ui.js';
 
 /* ---------- Hằng số ---------- */
