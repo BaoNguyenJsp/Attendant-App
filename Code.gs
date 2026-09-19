@@ -1,7 +1,7 @@
 /**
  * SỔ THIẾU NHI — Apps Script dịch vụ lưu trữ (web app, chỉ doPost)
  * Hybrid 1-Week-Per-Row Attendance Support (12 Cols Student / 14 Cols Teacher)
- * ULTIMATE OPTIMIZATION: Memoized Sheets, Write-Through Cache, Cache Warming & Pure JSON Filtering
+ * PERFORMANCE OPTIMIZED: Hash Maps, Bounded Date-Stats, Non-blocking Drive Ops, Static Cache Bounding
  */
 
 const TAB_HEADERS = {
@@ -9,7 +9,7 @@ const TAB_HEADERS = {
   Groups:            ['GroupName', 'Type', 'Scope', 'Description'],
   GroupMembers:      ['GroupName', 'Email'],
   Classes:           ['ClassName', 'Grade'],
-  Students: ['IdNumber', 'SaintName', 'FullName', 'DateOfBirth', 'Gender', 'Father', 'Mother', 'CurrentClass', 'EnrollYear', 'Status', 'Photo', 'Note', 'Siblings', 'ListOrder'],
+  Students:          ['IdNumber', 'SaintName', 'FullName', 'DateOfBirth', 'Gender', 'Father', 'Mother', 'CurrentClass', 'EnrollYear', 'Status', 'Photo', 'Note', 'Siblings', 'ListOrder'],
   Teaching:          ['SchoolYear', 'WeekOf', 'ClassName', 'TeacherEmail', 'LessonContent', 'LessonPlanUrl', 'LessonPlanNames', 'RevisedPlanUrl', 'RevisedPlanNames', 'UpdatedBy'],
   Scores:            ['SchoolYear', 'IdNumber', 'ClassName', 'Quiz15_S1', 'Exam_S1', 'Quiz15_S2', 'Exam_S2'],
   Config:            ['Key', 'Value'],
@@ -417,12 +417,12 @@ function rosterFor(sector) {
   if (sector === XUDOAN) {
     const adminGroups = new Set();
     cachedRead('Groups').forEach(g => { if (g.Type === 'Quản trị') adminGroups.add(normText(g.GroupName)); });
-    const active = {};
-    activeUsers().forEach(u => active[String(u.Email).toLowerCase()] = u);
+    const activeMap = {};
+    activeUsers().forEach(u => activeMap[String(u.Email).toLowerCase()] = u);
     const out = {};
     cachedRead('GroupMembers').forEach(m => {
       if (!adminGroups.has(normText(m.GroupName))) return;
-      const u = active[String(m.Email || '').toLowerCase()];
+      const u = activeMap[String(m.Email || '').toLowerCase()];
       if (u) out[String(u.Email).toLowerCase()] = { email: u.Email, fullName: u.FullName || '', saintName: u.SaintName || '', className: '', id: numId(u.Id) };
     });
     return Object.values(out).sort((a, b) => (a.id - b.id) || String(a.fullName).localeCompare(String(a.fullName), 'vi'));
@@ -434,13 +434,13 @@ function rosterFor(sector) {
   });
   const clsOfGroup = {};
   cachedRead('Groups').forEach(g => { if (g.Type === 'Lớp') clsOfGroup[normText(g.GroupName)] = normText(g.Scope || g.GroupName); });
-  const active = {};
-  activeUsers().forEach(u => active[String(u.Email).toLowerCase()] = u);
+  const activeMap = {};
+  activeUsers().forEach(u => activeMap[String(u.Email).toLowerCase()] = u);
   const out = {};
   cachedRead('GroupMembers').forEach(m => {
     const cls = clsOfGroup[normText(m.GroupName)];
     if (!cls || !sectorClasses.has(cls)) return;
-    const u = active[String(m.Email || '').toLowerCase()];
+    const u = activeMap[String(m.Email || '').toLowerCase()];
     if (u) out[String(u.Email).toLowerCase()] = { email: u.Email, fullName: u.FullName || '', saintName: u.SaintName || '', className: cls, id: numId(u.Id) };
   });
   return Object.values(out).sort((a, b) => (a.id - b.id) || String(a.fullName).localeCompare(String(a.fullName), 'vi'));
@@ -449,7 +449,7 @@ function rosterFor(sector) {
 function dtbHK(q, e) { return (q == null || q === '' || e == null || e === '') ? null : (+q + 2 * +e) / 3; }
 function xepLoai(n) { return n >= 8 ? 'Giỏi' : n >= 6.5 ? 'Tiên tiến' : 'Trung bình'; }
 
-function getValidSessionsCount(startIso, endIso, holidaysList) {
+function getValidSessionsCount(startIso, endIso, holidaysList, sessionList = SESSIONS) {
   if (!startIso) return { max: {}, maxTotal: 0, holidayMap: {} };
   
   const start = parseIso(startIso);
@@ -471,7 +471,7 @@ function getValidSessionsCount(startIso, endIso, holidaysList) {
   });
   
   const max = {};
-  SESSIONS.forEach(s => max[s] = 0);
+  sessionList.forEach(s => max[s] = 0);
   let maxTotal = 0;
 
   let d = new Date(start);
@@ -479,7 +479,7 @@ function getValidSessionsCount(startIso, endIso, holidaysList) {
     const currentYmd = toYmd(d);
     const hols = holidayMap[currentYmd] || {};
     if (!hols['All']) {
-      SESSIONS.forEach(sess => {
+      sessionList.forEach(sess => {
         if (!hols[sess]) {
           max[sess]++;
           maxTotal++;
@@ -597,8 +597,13 @@ function summaryRows(year, list) {
   const startYmd = toYmd(parseIso(startIso));
   const coBy = {};
 
+  // OPTIMIZATION 2: Map Lookup for Scores O(1)
   const scoreMap = {};
-  cachedRead('Scores').forEach(sc => { if (String(sc.SchoolYear).trim() === String(year).trim()) scoreMap[normId(sc.IdNumber)] = sc; });
+  cachedRead('Scores').forEach(sc => { 
+    if (String(sc.SchoolYear).trim() === String(year).trim()) {
+      scoreMap[normId(sc.IdNumber)] = sc;
+    }
+  });
 
   const attDataCache = {};
   const getAttDataForClass = (clsName) => {
@@ -663,17 +668,51 @@ function summaryRows(year, list) {
   });
 }
 
+/* ---------- Background Cleanup Task ---------- */
+function processPendingTrashFiles() {
+  const ps = PropertiesService.getScriptProperties();
+  const queue = JSON.parse(ps.getProperty('PENDING_TRASH_FILES') || '[]');
+  if (!queue.length) return;
+
+  console.log('Bắt đầu dọn dẹp ' + queue.length + ' file rác trong hàng đợi...');
+  const remaining = [];
+
+  queue.forEach(fileId => {
+    try {
+      DriveApp.getFileById(fileId).setTrashed(true);
+      console.log('Đã chuyển vào thùng rác file:', fileId);
+    } catch (e) {
+      console.error('Lỗi khi xóa file ' + fileId + ':', e.message);
+      // Nếu lỗi tạm thời, giữ lại để thử lại lần sau
+      if (!e.message.includes('File not found')) {
+        remaining.push(fileId);
+      }
+    }
+  });
+
+  ps.setProperty('PENDING_TRASH_FILES', JSON.stringify(remaining));
+}
+
 /* ---------- ACTIONS ---------- */
 const ACTIONS = {
 
+  // OPTIMIZATION 2: O(1) Hash Map for User Lookup
   getUser: b => {
     const email = String(b.email || '').toLowerCase();
-    let u = null;
+    const usersMap = {};
     cachedRead('Users').forEach(r => {
-      if (String(r.Email).toLowerCase() === email) u = { email, fullName: r.FullName || email, saintName: r.SaintName || '', status: r.Status };
+      usersMap[String(r.Email).toLowerCase()] = { 
+        email, 
+        fullName: r.FullName || email, 
+        saintName: r.SaintName || '', 
+        status: r.Status 
+      };
     });
+    
+    const u = usersMap[email];
     if (!u) return { status: 'error', message: 'Email ' + email + ' chưa được cấp quyền. Liên hệ admin.' };
     if (String(u.status).toLowerCase() !== 'hoạt động') return { status: 'error', message: 'Tài khoản đã bị khóa.' };
+    
     const byName = {};
     cachedRead('Groups').forEach(g => byName[g.GroupName] = { name: g.GroupName, type: g.Type, scope: g.Scope });
     const groups = [];
@@ -725,7 +764,7 @@ const ACTIONS = {
       DateOfBirth: b.dateOfBirth || '', Gender: b.gender || '', Father: b.father || '', Mother: b.mother || '',
       CurrentClass: b.className, EnrollYear: b.enrollYear || currentYear(), Status: b.status || 'Hoạt động', 
       Photo: b.photo !== undefined ? b.photo : (old ? (old.Photo || '') : ''), Note: b.note || '',
-      Siblings: b.siblings || '', // <-- Added Siblings mapping here
+      Siblings: b.siblings || '',
       ListOrder: b.listOrder !== undefined ? b.listOrder : (old ? (old.ListOrder || '') : '')
     };
     upsertRows('Students', o => normId(o.IdNumber) === normId(b.idNumber), [row]);
@@ -736,14 +775,12 @@ const ACTIONS = {
     const year = currentYear();
     const cls = String(b.className || '').trim();
     
-    // THE FIX: Use the specific class sheet, NOT the word 'Attendance'!
     const sheetName = getAttSheetName(cls); 
     const data = cachedRead(sheetName) || [];
     const records = [];
 
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
-      // Ensure we only grab this year and this exact class
       if (String(row.SchoolYear).trim() === year && String(row.ClassName).trim() === cls) {
         records.push({
           WeekOf: String(row.WeekOf).trim(),
@@ -769,7 +806,6 @@ const ACTIONS = {
     const year = currentYear();
     const cls = String(b.className || '').trim();
     
-    // THE FIX: Save back to the specific class sheet!
     const sheetName = getAttSheetName(cls);
     const rows = [];
     
@@ -791,7 +827,6 @@ const ACTIONS = {
       });
     });
 
-    // Chỉ ghi đè dữ liệu của ĐÚNG tuần đó và Lớp đó trên sheet tương ứng
     upsertRows(sheetName, 
       o => String(o.SchoolYear) === year && String(o.WeekOf) === String(b.weekOf) && String(o.ClassName) === cls, 
       rows
@@ -800,9 +835,13 @@ const ACTIONS = {
     return { status: 'ok', ok: true };
   },
 
+  // OPTIMIZATION 2: O(1) Student Map Lookup
   searchByIdNumber: b => {
     const id = normId(b.idNumber);
-    const st = cachedRead('Students').find(s => normId(s.IdNumber) === id);
+    const studentsMap = {};
+    cachedRead('Students').forEach(s => studentsMap[normId(s.IdNumber)] = s);
+    
+    const st = studentsMap[id];
     if (!st) return { status: 'ok', students: [], attendance: [], absences: [] };
 
     const cls = normText(st.CurrentClass);
@@ -820,7 +859,7 @@ const ACTIONS = {
             const colInfo = SESSION_COL_MAP[s];
             if (colInfo) {
               const stVal = String(row[colInfo.status] || '').trim();
-              const normSt = (stVal === 'Hiện diện' || stVal === 'Có mặt') ? 'Hiện diện' : (stVal === 'Có phép' || stVal === 'Vắng có phép') ? 'Có phép' : 'Vắng';
+              const normSt = stVal === 'Hiện diện' ? 'Hiện diện' : stVal === 'Có phép' ? 'Có phép' : 'Vắng';
               if (normSt !== 'Hiện diện') {
                 absences.push({ WeekOf: weekYmd, Session: s, AttendanceStatus: normSt, Note: row[colInfo.note] || '' });
               }
@@ -835,14 +874,11 @@ const ACTIONS = {
 
   getTeacherAttendance: b => {
     const year = currentYear();
-    
-    // Get emails of all teachers in the requested sector
     const sectorEmails = new Set(rosterFor(b.sector).map(u => u.email.toLowerCase()));
     
     const data = cachedRead('TeacherAttendance');
     const records = [];
 
-    // Return ALL weeks, but filter by the sector's emails
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
       if (String(row.SchoolYear).trim() === year) {
@@ -899,7 +935,6 @@ const ACTIONS = {
       });
     });
 
-    // Update ONLY the specific week and the specific teachers being saved
     upsertRows('TeacherAttendance', 
       o => String(o.SchoolYear) === year && 
            String(o.WeekOf) === String(b.weekOf) && 
@@ -912,20 +947,33 @@ const ACTIONS = {
 
   getTeacherStats: b => {
     const year = currentYear();
+    const cfg = config();
+    const startIso = cfg.AttendanceStartDate;
+    const holList = cachedRead('Holidays') || [];
+    
+    const { max: maxPerSession, maxTotal, holidayMap } = getValidSessionsCount(startIso, toYmd(new Date()), holList, TEACHER_SESSIONS);
+
     const roster = rosterFor(b.sector).filter(u => !b.className || normText(u.className) === normText(b.className));
     const emails = new Set(roster.map(u => u.email.toLowerCase()));
     
     const by = {};
     const data = cachedRead('TeacherAttendance');
-    
-    // 1. Calculate Attendance
+    const todayYmd = toYmd(new Date());
+    const startYmd = toYmd(parseIso(startIso));
+
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
-      if (row.SchoolYear !== year) continue;
+      const rowYear = String(row.SchoolYear).trim();
+      const rowWk = String(row.WeekOf).trim();
       const email = String(row.TeacherEmail || '').toLowerCase().trim();
-      if (!emails.has(email)) continue;
+
+      if (rowYear !== String(year).trim() || rowWk > todayYmd || rowWk < startYmd || !emails.has(email)) continue;
+
+      const hols = holidayMap[rowWk] || {};
+      if (hols['All']) continue;
 
       TEACHER_SESSIONS.forEach(s => {
+        if (hols[s]) return;
         const colInfo = SESSION_COL_MAP[s];
         if (colInfo) {
           const stVal = String(row[colInfo.status] || '').trim();
@@ -937,7 +985,6 @@ const ACTIONS = {
       });
     }
 
-    // 2. Count Teaching (Buổi dạy) from Teaching sheet
     const taughtCount = {};
     const teachingData = cachedRead('Teaching');
     for (let i = 0; i < teachingData.length; i++) {
@@ -950,7 +997,6 @@ const ACTIONS = {
       }
     }
 
-    // 3. Map Data to Roster
     const stats = roster.map(u => {
       const e = u.email.toLowerCase();
       const present = {};
@@ -961,23 +1007,28 @@ const ACTIONS = {
         email: u.email, 
         fullName: u.fullName, 
         className: u.className, 
-        taught: taughtCount[e] || 0, // Now dynamically maps the calculated taught count!
+        taught: taughtCount[e] || 0,
         present 
       };
     });
 
     return { 
       status: 'ok', 
-      max: { 'Lễ Chúa Nhật': 53, 'Học Giáo Lý': 53, 'Chầu Thánh Thể': 53, 'Lễ Thứ Năm': 52, 'Họp Huynh Trưởng': 53 }, 
-      maxTotal: 264, 
+      max: maxPerSession, 
+      maxTotal: maxTotal, 
       stats 
     };
   },
 
+  // OPTIMIZATION 2: O(1) User Map Lookup
   getTeacherTrichLuc: b => {
     const year = b.schoolYear || currentYear();
     const email = String(b.teacherEmail || '').toLowerCase();
-    const u = cachedRead('Users').find(x => String(x.Email).toLowerCase() === email);
+    
+    const userMap = {};
+    cachedRead('Users').forEach(x => userMap[String(x.Email).toLowerCase()] = x);
+    const u = userMap[email];
+    
     if (!u) return { status: 'ok', teacher: null, absences: [] };
 
     const absences = [];
@@ -1036,15 +1087,25 @@ const ACTIONS = {
     return { status: 'ok', records: records, total: records.length };
   },
 
+  // OPTIMIZATION 3: Non-blocking Drive operations in saveTeaching
   saveTeaching: b => {
-    const old = cachedRead('Teaching').find(o =>
-      o.SchoolYear === b.schoolYear && o.WeekOf === b.weekOf && o.ClassName === b.className);
-    if (old) {
-      const keep = new Set([...driveFileIds(b.lessonPlanUrl), ...driveFileIds(b.revisedPlanUrl)]);
-      [...driveFileIds(old.LessonPlanUrl), ...driveFileIds(old.RevisedPlanUrl)]
-        .filter(id => !keep.has(id))
-        .forEach(id => { try { DriveApp.getFileById(id).setTrashed(true); } catch (e) {} });
+  const old = cachedRead('Teaching').find(o =>
+    o.SchoolYear === b.schoolYear && o.WeekOf === b.weekOf && o.ClassName === b.className);
+  
+  if (old) {
+    const keep = new Set([...driveFileIds(b.lessonPlanUrl), ...driveFileIds(b.revisedPlanUrl)]);
+    const toDelete = [...driveFileIds(old.LessonPlanUrl), ...driveFileIds(old.RevisedPlanUrl)]
+      .filter(id => !keep.has(id));
+    
+    // Đẩy ID file rác vào hàng đợi PropertyService thay vì xóa trực tiếp
+    if (toDelete.length > 0) {
+      const ps = PropertiesService.getScriptProperties();
+      const currentQueue = JSON.parse(ps.getProperty('PENDING_TRASH_FILES') || '[]');
+      const updatedQueue = [...new Set([...currentQueue, ...toDelete])];
+      ps.setProperty('PENDING_TRASH_FILES', JSON.stringify(updatedQueue));
     }
+  }
+
     const row = {
       SchoolYear: b.schoolYear, WeekOf: b.weekOf, ClassName: b.className,
       TeacherEmail: (old ? (old.TeacherEmail || '') : '') || b.teacherEmail || '',
@@ -1053,9 +1114,11 @@ const ACTIONS = {
       RevisedPlanUrl: b.revisedPlanUrl || '', RevisedPlanNames: b.revisedPlanNames || '',
       UpdatedBy: b.updatedBy || b.teacherEmail || '',
     };
+    
     upsertRows('Teaching',
       o => o.SchoolYear === b.schoolYear && o.WeekOf === b.weekOf && o.ClassName === b.className,
       [row]);
+
     return { status: 'ok', record: row };
   },
 
@@ -1101,8 +1164,6 @@ const ACTIONS = {
     const file = folder.createFile(blob);
     
     if (b.isPhoto) {
-      // SỬ DỤNG SERVER ẢNH CHUYÊN DỤNG CỦA GOOGLE (Bỏ qua lỗi cookie)
-      // Thêm =w500 để tự động nén ảnh hiển thị cho mượt, không làm nặng trang web
       const displayUrl = 'https://lh3.googleusercontent.com/d/' + file.getId() + '=w500';
       return { status: 'ok', url: displayUrl, driveUrl: file.getUrl() };
     } else {
@@ -1155,9 +1216,13 @@ const ACTIONS = {
     return { status: 'ok', summary: summaryRows(targetYear, activeSts) };
   },
 
+  // OPTIMIZATION 2: O(1) Student Map Lookup
   getHocBa: b => {
     const id = normId(b.idNumber);
-    const st = cachedRead('Students').find(s => normId(s.IdNumber) === id);
+    const studentMap = {};
+    cachedRead('Students').forEach(s => studentMap[normId(s.IdNumber)] = s);
+    const st = studentMap[id];
+    
     if (!st) return { status: 'error', message: 'Không tìm thấy Thiếu nhi với CCCD này.' };
 
     const history = cachedRead('AcademicYear').filter(r => normId(r.IdNumber) === id).map(r => ({
@@ -1320,7 +1385,6 @@ const ACTIONS = {
       const idIdx = head.indexOf('IdNumber');
       const existingMap = {};
       
-      // Map existing students for fast updates
       for (let r = 1; r < data.length; r++) {
         existingMap[normId(data[r][idIdx])] = r;
       }
@@ -1351,18 +1415,16 @@ const ACTIONS = {
         const rowArr = head.map(h => newRowObj[h] !== undefined ? newRowObj[h] : '');
         
         if (oldRowIdx) {
-          data[oldRowIdx] = rowArr; // Update existing
+          data[oldRowIdx] = rowArr;
         } else {
-          data.push(rowArr);        // Insert new
+          data.push(rowArr);
           existingMap[id] = data.length - 1; 
         }
         modified = true;
       });
 
       if (modified) {
-        // Bulk write to sheet
         sh.getRange(1, 1, data.length, head.length).setValues(data);
-        // Write-through cache update
         writeCache('Students', data.slice(1).map(r => rowObj(head, r)));
       }
       return { status: 'ok', count: rows.length };

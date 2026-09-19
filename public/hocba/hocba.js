@@ -56,7 +56,7 @@ fillClasses('nh-lop');
 const allClassItems = TCLASSES.map(c => ({ v: c.ClassName || c.className }));
 if ($('th-lop')) fillSel('th-lop', allClassItems);
 if ($('kt-lop')) fillSel('kt-lop', allClassItems);
-if ($('nh-year')) $('nh-year').textContent = year();
+if ($('nh-year'))$('nh-year').textContent = year();
 
 let years = [year()];
 try { 
@@ -75,12 +75,10 @@ function sortSummaryRecords(records) {
     const baseSt = TSTUDENTS.find(s => s.IdNumber === id) || {};
     return {
       ...x,
-      // Ensure lowerCamelCase properties are preserved for template rendering
       className: x.className || x.ClassName || baseSt.CurrentClass || '',
       idNumber: id,
       fullName: x.fullName || x.FullName || baseSt.FullName,
       saintName: x.saintName || x.SaintName || baseSt.SaintName,
-      // Enforce PascalCase properties needed by `sortStudents` logic
       CurrentClass: x.className || x.ClassName || baseSt.CurrentClass || '',
       IdNumber: id,
       ListOrder: x.ListOrder ?? x.listOrder ?? baseSt.ListOrder,
@@ -156,7 +154,6 @@ function downloadTemplate() {
   const sortedSts = sortStudents(activeStudents(cls));
   const scoreMap = {};
   
-  // Fetch existing scores so downloading and re-uploading doesn't wipe them
   TSCORES.filter(s => s.SchoolYear === year() && s.ClassName === cls).forEach(s => scoreMap[s.IdNumber] = s);
   
   const aoa = [['Số CCCD', 'Tên thánh', 'Họ và tên', "Điểm 15' HK1", 'Kiểm tra HK1', "Điểm 15' HK2", 'Kiểm tra HK2']];
@@ -179,15 +176,13 @@ function downloadTemplate() {
 }
 
 async function importScores() {
-  const f = $('nh-file').files[0];
-  $('nh-file').value = '';
+  const f = $('nh-file').files[0];$('nh-file').value = '';
   if (!f) return;
   let ws;
   try { const wb = XLSX.read(await f.arrayBuffer()); ws = wb.Sheets[wb.SheetNames[0]]; }
   catch (e) { return toast('Không đọc được file Excel.'); }
   const rows = XLSX.utils.sheet_to_json(ws, {header: 1, defval: ''});
   
-  // Safe extraction (allows alphanumeric IDs while ignoring Excel's leading zero removal)
   const keyOf = s => String(s || '').trim().replace(/^0+/, '').toLowerCase(); 
   const byId = {};
   
@@ -201,7 +196,6 @@ async function importScores() {
     const tr = byId[keyOf(r[0])];
     if (!tr) { if (String(r[0] || '').trim()) skipped++; return; }
     
-    // Replace comma with dot to support Vietnamese decimal formatting properly
     const vals = SCORE_FIELDS.map((f, i) => String(r[i + 3] == null ? '' : r[i + 3]).trim().replace(',', '.'));
     if (vals.some(v => v !== '' && (isNaN(+v) || +v < 0 || +v > 10))) {
       const who = tr.children[2] ? tr.children[2].textContent.trim() : tr.children[1].textContent.trim();
@@ -223,12 +217,11 @@ async function renderHBT() {
   const q = $('hbt-id').value.trim().toLowerCase();
   if (!q) return toast('Vui lòng nhập tên, tên thánh hoặc CCCD');
   
-  // 1. Search locally across all loaded students
   const hits = TSTUDENTS.filter(s => 
     (s.FullName && s.FullName.toLowerCase().includes(q)) || 
     (s.IdNumber && s.IdNumber.toLowerCase().includes(q)) || 
     (s.SaintName && s.SaintName.toLowerCase().includes(q))
-  ).slice(0, 10); // Limit to 10 results to prevent API overload/UI freezing
+  ).slice(0, 10);
   
   const out = $('hbt-out');
   
@@ -239,7 +232,6 @@ async function renderHBT() {
   out.innerHTML = '<div class="p-4 text-center text-blue-600 font-medium animate-pulse">Đang tra cứu dữ liệu...</div>';
 
   try {
-    // 2. Fetch academic records concurrently for all matching students
     const resultsHtml = await Promise.all(hits.map(async (st) => {
       let r;
       try {
@@ -256,7 +248,6 @@ async function renderHBT() {
       
       records.sort((a, b) => String(b.SchoolYear).localeCompare(String(a.SchoolYear)));
       
-      // Generate safe unique ID for this student's table
       const safeId = esc(fetchedSt.IdNumber).replace(/[^a-zA-Z0-9]/g, '');
       const tableId = 'hbt-table-' + safeId;
       const displayFullName = esc((fetchedSt.SaintName ? fetchedSt.SaintName + ' ' : '') + fetchedSt.FullName);
@@ -273,7 +264,6 @@ async function renderHBT() {
                 <p><b>Năm nhập học:</b> ${esc(fetchedSt.EnrollYear || '—')}</p>
               </div>
             </div>
-            <!-- Per-record Excel Export Button -->
             <button type="button" class="export-hbt-btn bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg text-sm flex-shrink-0" data-table="${tableId}" data-name="${esc(fetchedSt.FullName)}">
               ⬇ Xuất Excel
             </button>
@@ -312,16 +302,16 @@ async function renderHBT() {
       `;
     }));
     
-    // Join all results and strip the very last <hr> divider
     out.innerHTML = resultsHtml.join('').replace(/(<hr[^>]*>)\s*$/, '');
     
   } catch (e) {
     out.innerHTML = `<div class="p-4 text-red-500 font-medium">Đã xảy ra lỗi: ${esc(e.message)}</div>`;
   }
 }
+
 /* ---------- Tổng Hợp & Khen Thưởng ---------- */
 async function renderTongHop() {
-  const yr = $('th-nam').value, cls = $('th-lop').value;
+  const yr = $('th-nam').value, cls =$('th-lop').value;
   const showRating = cur.tier === 'Lớp';
   const heads = ['STT', 'Số CCCD', 'Họ Tên', 'Lớp', 'ĐTB HK1', 'ĐTB HK2', 'ĐTB Năm', '% Chuyên Cần'].concat(showRating ? ['Xếp Loại'] : []);
   $('th-head').innerHTML = '<tr class="bg-slate-100">' + heads.map(h => '<th class="p-2 border text-left">' + h + '</th>').join('') + '</tr>';
@@ -329,7 +319,6 @@ async function renderTongHop() {
   try { r = await api('getSummary', {schoolYear: yr, className: cls}); }
   catch (e) { return toast(e.message); }
   
-  // BYPASS normSummary COMPLETELY - It is destroying the data keys
   const rows = sortSummaryRecords(r.summary || []);
 
   $('th-tbody').innerHTML = rows.length
@@ -355,17 +344,15 @@ async function renderTongHop() {
 }
 
 async function renderKT() {
-  const yr = $('kt-nam').value, cls = $('kt-lop').value;
+  const yr = $('kt-nam').value, cls =$('kt-lop').value;
   let r;
   try { r = await api('getSummary', {schoolYear: yr, className: cls}); }
   catch (e) { return toast(e.message); }
   
-  // BYPASS normSummary COMPLETELY
   const rawRows = (r.summary || []).filter(x => {
       const avg = x.YearScore ?? x.avgYear;
       const cc = x.YearAttendant ?? x.pct ?? x.cc;
       
-      // Strict numerical check: Average >= 8.0 AND Attendance >= 80%
       return avg !== null && avg !== '' && +avg >= 8 && cc != null && +cc >= 80;
   });
   const rows = sortSummaryRecords(rawRows);
@@ -409,12 +396,10 @@ async function printRanking(isWholeDeanery = false) {
   const rawRows = r.summary || [];
   if (!rawRows.length) return toast('Không có dữ liệu để in.');
 
-  // BYPASS normSummary COMPLETELY - Uses sorting engine (Class -> Name)
   const rows = sortSummaryRecords(rawRows);
 
   const printWindow = window.open('', '_blank');
   
-  // Layout Variables
   const docTitle = isWholeDeanery ? `Xếp Loại Toàn Đoàn - ${esc(yr)}` : `Bảng Xếp Loại - ${esc(cls)}`;
   const headerTitle = isWholeDeanery ? 'BẢNG TỔNG KẾT VÀ XẾP LOẠI TOÀN ĐOÀN' : 'BẢNG TỔNG KẾT VÀ XẾP LOẠI HỌC TẬP';
   const subHeader = isWholeDeanery ? `Năm học: <b>${esc(yr)}</b>` : `Lớp: <b>${esc(cls)}</b> &nbsp;|&nbsp; Năm học: <b>${esc(yr)}</b>`;
@@ -517,13 +502,10 @@ async function printRanking(isWholeDeanery = false) {
 }
 
 /* ---------- Events ---------- */
-$('nh-lop').addEventListener('change', async () => { tabCache['t-nhap'] = false; await renderNhap(); tabCache['t-nhap'] = true; });
-$('save-scores').addEventListener('click', saveScores);
-$('nh-template').addEventListener('click', e => { e.preventDefault(); downloadTemplate(); });
-$('nh-file').addEventListener('change', importScores);
+$('nh-lop').addEventListener('change', async () => { tabCache['t-nhap'] = false; await renderNhap(); tabCache['t-nhap'] = true; });$('save-scores').addEventListener('click', saveScores);
+$('nh-template').addEventListener('click', e => { e.preventDefault(); downloadTemplate(); });$('nh-file').addEventListener('change', importScores);
 
-$('hbt-search').addEventListener('click', renderHBT);
-$('hbt-out').addEventListener('click', e => {
+$('hbt-search').addEventListener('click', renderHBT);$('hbt-out').addEventListener('click', e => {
   const btn = e.target.closest('.export-hbt-btn');
   if (btn) {
     const tableId = btn.getAttribute('data-table');
@@ -533,16 +515,14 @@ $('hbt-out').addEventListener('click', e => {
 });
 
 $('th-nam').addEventListener('change', async () => { tabCache['t-tonghop'] = false; await renderTongHop(); tabCache['t-tonghop'] = true; });
-$('th-lop').addEventListener('change', async () => { tabCache['t-tonghop'] = false; await renderTongHop(); tabCache['t-tonghop'] = true; });
-$('th-excel').addEventListener('click', () => exportExcel('th-table', 'Tổng hợp & xếp loại'));
+$('th-lop').addEventListener('change', async () => { tabCache['t-tonghop'] = false; await renderTongHop(); tabCache['t-tonghop'] = true; });$('th-excel').addEventListener('click', () => exportExcel('th-table', 'Tổng hợp & xếp loại'));
 $('th-print').addEventListener('click', () => printRanking(false));
 
 const btnToanDoan = $('th-toandoan');
 if (btnToanDoan) btnToanDoan.addEventListener('click', () => printRanking(true));
 
 $('kt-nam').addEventListener('change', async () => { tabCache['t-kt'] = false; await renderKT(); tabCache['t-kt'] = true; });
-$('kt-lop').addEventListener('change', async () => { tabCache['t-kt'] = false; await renderKT(); tabCache['t-kt'] = true; });
-$('kt-excel').addEventListener('click', () => exportExcel('kt-table', 'Danh sách khen thưởng'));
+$('kt-lop').addEventListener('change', async () => { tabCache['t-kt'] = false; await renderKT(); tabCache['t-kt'] = true; });$('kt-excel').addEventListener('click', () => exportExcel('kt-table', 'Danh sách khen thưởng'));
 $('kt-print').addEventListener('click', () => window.print());
 
 /* Boot default active tab */
