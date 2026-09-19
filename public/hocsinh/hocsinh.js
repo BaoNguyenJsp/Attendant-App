@@ -16,6 +16,7 @@ const [st, cl] = await Promise.all([
 
 setState({TSTUDENTS: st.students || [], TCLASSES: cl.classes || []});
 fillClasses('hs-lop');
+if ($('gallery-lop')) fillClasses('gallery-lop');
 
 let editingId = null;
 let draggingRow = null;
@@ -89,12 +90,11 @@ function renderSearch() {
     return;
   }
 
-  // Filter unconditionally across all TSTUDENTS
   const hits = TSTUDENTS.filter(s => 
     (s.FullName && s.FullName.toLowerCase().includes(q)) || 
     (s.IdNumber && s.IdNumber.includes(q)) || 
     (s.SaintName && s.SaintName.toLowerCase().includes(q))
-  ).slice(0, 50); // Limit to 50 results for performance
+  ).slice(0, 50);
 
   tbody.innerHTML = hits.length
     ? hits.map((st) => {
@@ -122,13 +122,13 @@ function renderSearch() {
 
 /* ---------- Thư Viện Ảnh (Gallery) ---------- */
 async function renderGallery() {
-  const cls = $('hs-lop').value;
+  const cls = $('gallery-lop') ? $('gallery-lop').value :$('hs-lop').value;
   if (!cls) return;
 
   const classStudents = sortStudents(TSTUDENTS.filter(s => s.CurrentClass === cls && String(s.Status).toLowerCase() !== 'nghỉ'));
   const grid = $('gallery-grid');
   
-  if (!grid) return; // Ensure grid exists in HTML
+  if (!grid) return;
 
   if (!classStudents.length) {
     grid.innerHTML = `<div class="col-span-full text-center p-8 text-slate-400">Không có Thiếu nhi nào trong lớp ${esc(cls)}.</div>`;
@@ -178,7 +178,6 @@ async function handlePhotoUpload(idNumber, file) {
 
   toast('⏳ Đang tải ảnh lên (có thể mất vài giây)...');
   
-  // Format filename: [CCCD]_[Staint Name] [Full Name]
   const saint = (st.SaintName || '').trim();
   const full = (st.FullName || '').trim();
   const ext = file.name.split('.').pop();
@@ -238,8 +237,8 @@ async function savePhotoData(st) {
 }
 
 function refreshActiveTabs() {
-  if (tabCache['t-class']) renderHS();
-  if (tabCache['t-gallery']) renderGallery();
+  renderHS();
+  renderGallery();
 }
 
 /* ---------- Drag & Drop Reordering ---------- */
@@ -391,14 +390,12 @@ function openModal(id) {
   $('m-siblings').value = st ? (st.Siblings || '') : ''; 
   $('m-note').value = st ? (st.Note || '') : '';
 
-  // Setup Photo UI in Modal
   if ($('hs-photo-preview')) {
     const photoUrl = st ? (st.Photo || '') : '';
     $('hs-photo-preview').src = photoUrl;
     if ($('hs-photo-remove'))$('hs-photo-remove').style.display = photoUrl ? 'block' : 'none';
   }
 
-  // Safe string casting before split
   selectedSiblings = st && st.Siblings ? String(st.Siblings).split(',').map(s => s.trim()).filter(Boolean) : [];
   renderSiblingTags();
   if ($('m-sibling-search'))$('m-sibling-search').value = '';
@@ -408,7 +405,6 @@ function openModal(id) {
   mcls.value = st ? (st.CurrentClass || $('hs-lop').value) :$('hs-lop').value;
   $('hs-modal').classList.add('open');
   
-  // Safe timeout focus to prevent crashing if the element is not immediately ready
   setTimeout(() => { if ($('m-fullname'))$('m-fullname').focus(); }, 50);
 }
 
@@ -454,6 +450,8 @@ async function saveModal() {
 
   closeModal();
   toast('Đã lưu.');
+  
+  // If the class was changed in the modal, update both active views
   refreshActiveTabs();
   if ($('hs-search-input') &&$('hs-search-input').value) renderSearch(); 
 }
@@ -542,11 +540,16 @@ async function importStudents() {
 
 /* ---------- Events ---------- */
 $('hs-lop').addEventListener('change', () => { 
-  tabCache['t-class'] = false; 
-  tabCache['t-gallery'] = false; 
-  refreshActiveTabs();
   tabCache['t-class'] = true; 
+  renderHS();
 });
+
+if ($('gallery-lop')) {$('gallery-lop').addEventListener('change', () => {
+    tabCache['t-gallery'] = true;
+    renderGallery();
+  });
+}
+
 $('add-student').addEventListener('click', () => openModal());
 
 tbody.addEventListener('click', e => {
@@ -560,14 +563,12 @@ m.querySelector('.btn-cancel').addEventListener('click', closeModal);
 m.querySelector('.btn-save').addEventListener('click', saveModal);
 m.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
-if ($('hs-photo-btn')) {
-  $('hs-photo-btn').addEventListener('click', () => {
+if ($('hs-photo-btn')) {$('hs-photo-btn').addEventListener('click', () => {
     if (editingId) triggerPhotoUpload(editingId);
     else toast('Vui lòng lưu hồ sơ mới trước khi tải ảnh lên.');
   });
 }
-if ($('hs-photo-remove')) {
-  $('hs-photo-remove').addEventListener('click', () => {
+if ($('hs-photo-remove')) {$('hs-photo-remove').addEventListener('click', () => {
     if (editingId) removePhoto(editingId);
   });
 }
