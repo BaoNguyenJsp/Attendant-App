@@ -256,20 +256,31 @@ async function renderHBT() {
       
       records.sort((a, b) => String(b.SchoolYear).localeCompare(String(a.SchoolYear)));
       
+      // Generate safe unique ID for this student's table
+      const safeId = esc(fetchedSt.IdNumber).replace(/[^a-zA-Z0-9]/g, '');
+      const tableId = 'hbt-table-' + safeId;
+      const displayFullName = esc((fetchedSt.SaintName ? fetchedSt.SaintName + ' ' : '') + fetchedSt.FullName);
+
       return `
         <div class="mb-8">
-          <div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm mb-4">
-            <h3 class="text-lg font-bold text-blue-900 mb-2">${esc(fetchedSt.SaintName || '')} ${esc(fetchedSt.FullName)}</h3>
-            <div class="text-sm text-slate-700 grid grid-cols-2 md:grid-cols-4 gap-2">
-              <p><b>CCCD:</b> ${esc(fetchedSt.IdNumber)}</p>
-              <p><b>Lớp hiện tại:</b> ${esc(fetchedSt.CurrentClass)}</p>
-              <p><b>Trạng thái:</b> ${esc(fetchedSt.Status)}</p>
-              <p><b>Năm nhập học:</b> ${esc(fetchedSt.EnrollYear || '—')}</p>
+          <div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm mb-4 flex justify-between items-start flex-wrap gap-4">
+            <div>
+              <h3 class="text-lg font-bold text-blue-900 mb-2">${displayFullName}</h3>
+              <div class="text-sm text-slate-700 grid grid-cols-2 md:grid-cols-4 gap-2">
+                <p><b>CCCD:</b> ${esc(fetchedSt.IdNumber)}</p>
+                <p><b>Lớp hiện tại:</b> ${esc(fetchedSt.CurrentClass)}</p>
+                <p><b>Trạng thái:</b> ${esc(fetchedSt.Status)}</p>
+                <p><b>Năm nhập học:</b> ${esc(fetchedSt.EnrollYear || '—')}</p>
+              </div>
             </div>
+            <!-- Per-record Excel Export Button -->
+            <button type="button" class="export-hbt-btn bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg text-sm flex-shrink-0" data-table="${tableId}" data-name="${esc(fetchedSt.FullName)}">
+              ⬇ Xuất Excel
+            </button>
           </div>
           
           <div class="tbl-scroll">
-            <table class="w-full text-sm border-collapse bg-white">
+            <table id="${tableId}" class="w-full text-sm border-collapse bg-white">
               <thead>
                 <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
                   <th class="p-3 border">Năm Học</th>
@@ -308,7 +319,6 @@ async function renderHBT() {
     out.innerHTML = `<div class="p-4 text-red-500 font-medium">Đã xảy ra lỗi: ${esc(e.message)}</div>`;
   }
 }
-
 /* ---------- Tổng Hợp & Khen Thưởng ---------- */
 async function renderTongHop() {
   const yr = $('th-nam').value, cls = $('th-lop').value;
@@ -513,6 +523,14 @@ $('nh-template').addEventListener('click', e => { e.preventDefault(); downloadTe
 $('nh-file').addEventListener('change', importScores);
 
 $('hbt-search').addEventListener('click', renderHBT);
+$('hbt-out').addEventListener('click', e => {
+  const btn = e.target.closest('.export-hbt-btn');
+  if (btn) {
+    const tableId = btn.getAttribute('data-table');
+    const studentName = btn.getAttribute('data-name');
+    exportExcel(tableId, `Hoc_ba_${studentName}`);
+  }
+});
 
 $('th-nam').addEventListener('change', async () => { tabCache['t-tonghop'] = false; await renderTongHop(); tabCache['t-tonghop'] = true; });
 $('th-lop').addEventListener('change', async () => { tabCache['t-tonghop'] = false; await renderTongHop(); tabCache['t-tonghop'] = true; });

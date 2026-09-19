@@ -269,18 +269,29 @@ async function renderTL() {
       const absList = Array.isArray(r.absences) ? r.absences : [];
       const abs = absList.slice().sort((a, b) => String(a.WeekOf || '').localeCompare(String(b.WeekOf || '')));
       
+      // Tạo ID an toàn và duy nhất cho bảng của từng record
+      const safeId = esc(fetchedSt.IdNumber).replace(/[^a-zA-Z0-9]/g, '');
+      const tableId = 'tl-table-' + safeId;
+      const displayFullName = esc((fetchedSt.SaintName ? fetchedSt.SaintName + ' ' : '') + fetchedSt.FullName);
+      
       return `
         <div class="mb-8">
-          <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4">
-            <h3 class="text-lg font-extrabold text-blue-900">${esc((fetchedSt.SaintName ? fetchedSt.SaintName + ' ' : '') + fetchedSt.FullName)}</h3>
-            <dl class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm mt-2">
-              <div><dt class="text-xs font-bold text-slate-500 uppercase">Mã Số</dt><dd class="font-semibold">${esc(fetchedSt.IdNumber)}</dd></div>
-              <div><dt class="text-xs font-bold text-slate-500 uppercase">Tình trạng</dt><dd class="font-semibold">${esc(fetchedSt.Status)}</dd></div>
-              <div><dt class="text-xs font-bold text-slate-500 uppercase">Lớp</dt><dd class="font-semibold">${esc(fetchedSt.CurrentClass)}</dd></div>
-            </dl>
+          <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4 flex justify-between items-start flex-wrap gap-4">
+            <div>
+              <h3 class="text-lg font-extrabold text-blue-900">${displayFullName}</h3>
+              <dl class="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-2 text-sm mt-2">
+                <div><dt class="text-xs font-bold text-slate-500 uppercase">Mã Số</dt><dd class="font-semibold">${esc(fetchedSt.IdNumber)}</dd></div>
+                <div><dt class="text-xs font-bold text-slate-500 uppercase">Tình trạng</dt><dd class="font-semibold">${esc(fetchedSt.Status)}</dd></div>
+                <div><dt class="text-xs font-bold text-slate-500 uppercase">Lớp</dt><dd class="font-semibold">${esc(fetchedSt.CurrentClass)}</dd></div>
+              </dl>
+            </div>
+            <!-- Nút xuất Excel riêng cho từng record -->
+            <button type="button" class="export-tl-btn bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg text-sm flex-shrink-0" data-table="${tableId}" data-name="${esc(fetchedSt.FullName)}">
+              ⬇ Xuất Excel
+            </button>
           </div>
           <div style="overflow-x:auto">
-            <table class="w-full text-sm border-collapse min-w-[560px]">
+            <table id="${tableId}" class="w-full text-sm border-collapse min-w-[560px]">
               <thead>
                 <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
                   <th class="p-3 border">Tuần</th>
@@ -1320,7 +1331,14 @@ $('dd-tbody').addEventListener('input', e => {
 });
 
 $('tl-search').addEventListener('click', renderTL);
-$('tl-excel').addEventListener('click', () => exportExcel('tl-table', 'Trích lục CCCD'));
+$('tl-out').addEventListener('click', e => {
+  const btn = e.target.closest('.export-tl-btn');
+  if (btn) {
+    const tableId = btn.getAttribute('data-table');
+    const studentName = btn.getAttribute('data-name');
+    exportExcel(tableId, `Trich_luc_${studentName}`);
+  }
+});
 
 $('tk-lop').addEventListener('change', async () => { tabCache['t-tk'] = false; await renderTK(); tabCache['t-tk'] = true; });
 $('tk-excel').addEventListener('click', () => exportExcel('tk-table', 'Thống kê chuyên cần lớp'));
