@@ -458,7 +458,13 @@ $('gvdd-session').addEventListener('change', () => {
   renderSessionFromCache(); 
 });
 
-$('gvdd-refresh').addEventListener('click', async () => { tabCache['t-gvdd'] = false; await renderGVDD(); tabCache['t-gvdd'] = true; });
+$('gvdd-refresh').addEventListener('click', async () => { 
+  tabCache['t-gvdd'] = false; 
+  await loadTeacherAttendance($('gvdd-nganh').value, true); // Force fetch from server
+  await renderGVDD(); 
+  tabCache['t-gvdd'] = true; 
+  toast('Đã làm mới dữ liệu từ máy chủ.');
+});
 $('gvdd-markall').addEventListener('click', markAllGVDD);
 $('gvdd-save').addEventListener('click', saveGVDD);
 

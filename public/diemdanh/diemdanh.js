@@ -1301,7 +1301,13 @@ $('dd-buoi').addEventListener('change', () => {
 });
 
 $('dd-markall').addEventListener('click', markAllPresent);
-$('dd-refresh').addEventListener('click', async () => { tabCache['t-dd'] = false; await renderDD(); tabCache['t-dd'] = true; });
+$('dd-refresh').addEventListener('click', async () => { 
+  tabCache['t-dd'] = false; 
+  if ($('dd-lop').value) await loadClassAttendance($('dd-lop').value, true); // Force fetch from server
+  await renderDD(); 
+  tabCache['t-dd'] = true; 
+  toast('Đã làm mới dữ liệu từ máy chủ.');
+});
 $('dd-save').addEventListener('click', saveAttendance);
 
 $('dd-tbody').addEventListener('change', e => {
