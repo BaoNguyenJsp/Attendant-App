@@ -1081,11 +1081,33 @@ const ACTIONS = {
 
   uploadFile: b => {
     const blob = Utilities.newBlob(Utilities.base64Decode(b.base64), b.mimeType, b.filename);
-    const folder = teachFolder(b.schoolYear, b.weekOf, b.className, b.kind === 'TBM' ? 'TBM' : 'GLV');
+    let folder;
+    
+    if (b.isPhoto) {
+      const folderId = String(config().PhotoFolder || '').trim();
+      if (!folderId) return { status: 'error', message: 'Chưa cấu hình Key "PhotoFolder" trong tab Config.' };
+      try {
+        folder = DriveApp.getFolderById(folderId);
+      } catch(e) {
+        return { status: 'error', message: 'ID PhotoFolder không hợp lệ hoặc bị từ chối truy cập.' };
+      }
+    } else {
+      folder = teachFolder(b.schoolYear, b.weekOf, b.className, b.kind === 'TBM' ? 'TBM' : 'GLV');
+    }
+
     const same = folder.getFilesByName(b.filename);
     while (same.hasNext()) same.next().setTrashed(true);
+    
     const file = folder.createFile(blob);
-    return { status: 'ok', url: file.getUrl() };
+    
+    if (b.isPhoto) {
+      // SỬ DỤNG SERVER ẢNH CHUYÊN DỤNG CỦA GOOGLE (Bỏ qua lỗi cookie)
+      // Thêm =w500 để tự động nén ảnh hiển thị cho mượt, không làm nặng trang web
+      const displayUrl = 'https://lh3.googleusercontent.com/d/' + file.getId() + '=w500';
+      return { status: 'ok', url: displayUrl, driveUrl: file.getUrl() };
+    } else {
+      return { status: 'ok', url: file.getUrl() };
+    }
   },
 
   getScores: b => {

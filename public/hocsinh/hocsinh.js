@@ -20,7 +20,34 @@ fillClasses('hs-lop');
 let editingId = null;
 let draggingRow = null;
 
-/* ---------- Render Roster ---------- */
+/* ---------- Tab Management ---------- */
+const tabCache = {
+  't-class': false, 
+  't-gallery': false, 
+  't-search': true
+};
+
+async function switchTab(tabId) {
+  document.querySelectorAll('[data-pane]').forEach(pane => pane.style.display = 'none');
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+
+  const targetPane = document.getElementById(tabId);
+  const targetBtn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
+  if (targetPane) targetPane.style.display = 'block';
+  if (targetBtn) targetBtn.classList.add('active');
+
+  if (!tabCache[tabId]) {
+    if (tabId === 't-class') renderHS();
+    else if (tabId === 't-gallery') await renderGallery();
+    tabCache[tabId] = true;
+  }
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
+});
+
+/* ---------- Render Roster (Danh sách) ---------- */
 function renderHS() {
   const cls = $('hs-lop').value;
   const sts = sortStudents(TSTUDENTS.filter(s => s.CurrentClass === cls));
@@ -39,7 +66,7 @@ function renderHS() {
         return '<tr data-id="' + esc(st.IdNumber) + '" class="cursor-pointer hover:bg-slate-50 transition-colors bg-white" draggable="true">' +
           '<td class="p-2 border text-center text-slate-400 cursor-grab active:cursor-grabbing" title="Kéo thả để sắp xếp">☰</td>' +
           '<td class="p-2 border text-center whitespace-nowrap">' + esc(st.IdNumber) + '</td>' +
-          '<td class="p-2 border font-medium">' + esc(st.FullName) + '</td>' +
+            '<td class="p-2 border font-medium">' + esc(st.FullName) + '</td>' +
           '<td class="p-2 border text-center">' + esc(st.Gender || '') + '</td>' +
           '<td class="p-2 border text-center whitespace-nowrap">' + esc(fmtDate(st.DateOfBirth) || '') + '</td>' +
           '<td class="p-2 border text-center">' + esc(st.EnrollYear || '') + '</td>' +
@@ -49,7 +76,7 @@ function renderHS() {
           '<td class="p-2 border text-center sticky-col"><button data-id="' + esc(st.IdNumber) + '" class="edit-student bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs px-4 py-2 rounded-lg whitespace-nowrap">Cập nhật</button></td>' +
           '</tr>';
       }).join('')
-    : '<tr><td colspan="10" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi trong lớp ' + esc(cls) + '.</td></tr>';
+    : '<tr><td colspan="11" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi trong lớp ' + esc(cls) + '.</td></tr>';
 }
 
 /* ---------- Render Search Results ---------- */
@@ -78,7 +105,6 @@ function renderSearch() {
             return sib ? `<span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs whitespace-nowrap">${esc(sib.FullName)} (${esc(sib.CurrentClass)})</span>` : esc(id);
           }).join(' ');
 
-        // Removed the cursor-pointer class and the edit button td
         return `<tr data-id="${esc(st.IdNumber)}" class="hover:bg-slate-50 transition-colors bg-white">
           <td class="p-2 border text-center font-bold text-blue-900">${esc(st.CurrentClass)}</td>
           <td class="p-2 border text-center whitespace-nowrap">${esc(st.IdNumber)}</td>
@@ -92,6 +118,128 @@ function renderSearch() {
         </tr>`;
       }).join('')
     : '<tr><td colspan="9" class="p-4 text-center text-slate-400">Không tìm thấy Thiếu nhi nào phù hợp.</td></tr>';
+}
+
+/* ---------- Thư Viện Ảnh (Gallery) ---------- */
+async function renderGallery() {
+  const cls = $('hs-lop').value;
+  if (!cls) return;
+
+  const classStudents = sortStudents(TSTUDENTS.filter(s => s.CurrentClass === cls && String(s.Status).toLowerCase() !== 'nghỉ'));
+  const grid = $('gallery-grid');
+  
+  if (!grid) return; // Ensure grid exists in HTML
+
+  if (!classStudents.length) {
+    grid.innerHTML = `<div class="col-span-full text-center p-8 text-slate-400">Không có Thiếu nhi nào trong lớp ${esc(cls)}.</div>`;
+    return;
+  }
+
+  grid.innerHTML = classStudents.map(st => {
+    const fullName = [st.SaintName, st.FullName].filter(Boolean).join(' ');
+    
+    if (st.Photo) {
+      return `
+        <div class="border rounded-lg p-2 flex flex-col items-center bg-white shadow-sm relative group hover:border-blue-300 transition-colors">
+          <img src="${st.Photo}" referrerpolicy="no-referrer" class="w-full aspect-[3/4] object-cover rounded-md mb-2 bg-slate-100">
+          <button class="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-md hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity" onclick="removePhoto('${st.IdNumber}')" title="Xóa ảnh">✕</button>
+          <div class="text-xs font-bold text-center w-full truncate text-slate-800" title="${esc(fullName)}">${esc(fullName)}</div>
+          <div class="text-[10px] text-slate-500 text-center font-mono">${esc(st.IdNumber)}</div>
+        </div>
+      `;
+    } else {
+      return `
+        <div class="border rounded-lg p-2 flex flex-col items-center bg-white shadow-sm">
+          <div class="w-full aspect-[3/4] bg-slate-50 border-2 border-dashed border-slate-300 rounded-md mb-2 flex flex-col items-center justify-center cursor-pointer hover:bg-blue-50 hover:border-blue-400 text-slate-400 transition-colors" onclick="triggerPhotoUpload('${st.IdNumber}')" title="Nhấn để tải ảnh lên">
+            <span class="text-3xl mb-1">+</span>
+            <span class="text-[10px] font-medium">Tải ảnh</span>
+          </div>
+          <div class="text-xs font-bold text-center w-full truncate text-slate-800" title="${esc(fullName)}">${esc(fullName)}</div>
+          <div class="text-[10px] text-slate-500 text-center font-mono">${esc(st.IdNumber)}</div>
+        </div>
+      `;
+    }
+  }).join('');
+}
+
+/* ---------- Ảnh Thiếu Nhi (Core Upload Logic) ---------- */
+window.triggerPhotoUpload = function(idNumber) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'image/*';
+  inp.onchange = (e) => handlePhotoUpload(idNumber, e.target.files[0]);
+  inp.click();
+};
+
+async function handlePhotoUpload(idNumber, file) {
+  if (!file) return;
+  const st = TSTUDENTS.find(s => s.IdNumber === idNumber);
+  if (!st) return;
+
+  toast('⏳ Đang tải ảnh lên (có thể mất vài giây)...');
+  
+  // Format filename: [CCCD]_[Staint Name] [Full Name]
+  const saint = (st.SaintName || '').trim();
+  const full = (st.FullName || '').trim();
+  const ext = file.name.split('.').pop();
+  const filename = `${idNumber}_${saint ? saint + ' ' : ''}${full}.${ext}`.trim();
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const base64 = e.target.result.split(',')[1];
+    try {
+      const res = await api('uploadFile', {
+        isPhoto: true,
+        filename: filename,
+        mimeType: file.type,
+        base64: base64
+      });
+      
+      if (res.status === 'error') return toast(res.message);
+      
+      st.Photo = res.url;
+      await savePhotoData(st);
+      toast('✅ Đã tải ảnh lên thành công.');
+      
+      refreshActiveTabs();
+      if ($('hs-photo-preview'))$('hs-photo-preview').src = res.url;
+      if ($('hs-photo-remove'))$('hs-photo-remove').style.display = 'block';
+    } catch (err) { toast('Lỗi: ' + err.message); }
+  };
+  reader.readAsDataURL(file);
+}
+
+window.removePhoto = async function(idNumber) {
+  if (!confirm('Bạn có chắc muốn xóa ảnh của Thiếu nhi này?')) return;
+  const st = TSTUDENTS.find(s => s.IdNumber === idNumber);
+  if (!st) return;
+  
+  toast('⏳ Đang xóa ảnh...');
+  st.Photo = '';
+  
+  try {
+    await savePhotoData(st);
+    toast('✅ Đã xóa ảnh.');
+    
+    refreshActiveTabs();
+    if ($('hs-photo-preview'))$('hs-photo-preview').src = ''; 
+    if ($('hs-photo-remove'))$('hs-photo-remove').style.display = 'none';
+  } catch (e) { toast('Lỗi: ' + e.message); }
+};
+
+async function savePhotoData(st) {
+  await api('saveStudent', {
+     idNumber: st.IdNumber, saintName: st.SaintName, fullName: st.FullName,
+     dateOfBirth: st.DateOfBirth, gender: st.Gender, father: st.Father, mother: st.Mother,
+     className: st.CurrentClass, enrollYear: st.EnrollYear, status: st.Status,
+     note: st.Note, siblings: st.Siblings, listOrder: st.ListOrder, photo: st.Photo
+  });
+  if (typeof clearApiCache === 'function') clearApiCache('getStudents');
+}
+
+function refreshActiveTabs() {
+  if (tabCache['t-class']) renderHS();
+  if (tabCache['t-gallery']) renderGallery();
 }
 
 /* ---------- Drag & Drop Reordering ---------- */
@@ -166,7 +314,7 @@ function renderSiblingTags() {
       </span>`;
   }).join('');
   
-  if ($('m-siblings')) $('m-siblings').value = selectedSiblings.join(',');
+  if ($('m-siblings'))$('m-siblings').value = selectedSiblings.join(',');
 }
 
 function setupSiblingSearch() {
@@ -228,7 +376,10 @@ function setupSiblingSearch() {
 function openModal(id) {
   editingId = id || null;
   const st = editingId ? TSTUDENTS.find(s => s.IdNumber === editingId) : null;
+  
   $('hs-m-title').textContent = st ? 'Cập nhật Thiếu nhi — ' + editingId : 'Thêm Thiếu nhi';
+  $('hs-id').value = st ? (st.IdNumber || '') : '';
+  
   $('m-cccd').value = st ? (st.IdNumber || '') : '';
   $('m-cccd').disabled = !!st;
   $('m-fullname').value = st ? (st.FullName || '') : '';
@@ -242,16 +393,22 @@ function openModal(id) {
   $('m-siblings').value = st ? (st.Siblings || '') : ''; 
   $('m-note').value = st ? (st.Note || '') : '';
 
+  // Setup Photo UI in Modal
+  if ($('hs-photo-preview')) {
+    const photoUrl = st ? (st.Photo || '') : '';
+    $('hs-photo-preview').src = photoUrl;
+    if ($('hs-photo-remove'))$('hs-photo-remove').style.display = photoUrl ? 'block' : 'none';
+  }
+
   // Safe string casting before split
   selectedSiblings = st && st.Siblings ? String(st.Siblings).split(',').map(s => s.trim()).filter(Boolean) : [];
   renderSiblingTags();
-  if ($('m-sibling-search')) $('m-sibling-search').value = '';
+  if ($('m-sibling-search'))$('m-sibling-search').value = '';
 
   const mcls = $('m-class');
   mcls.innerHTML = $('hs-lop').innerHTML;
-  mcls.value = st ? (st.CurrentClass || $('hs-lop').value) : $('hs-lop').value;
-  $('hs-modal').classList.add('open');
-  $('m-fullname').focus();
+  mcls.value = st ? (st.CurrentClass || $('hs-lop').value) :$('hs-lop').value;
+  $('hs-modal').classList.add('open');$('m-fullname').focus();
 }
 
 function closeModal() { 
@@ -296,8 +453,8 @@ async function saveModal() {
 
   closeModal();
   toast('Đã lưu.');
-  renderHS();
-  if ($('hs-search-input') && $('hs-search-input').value) renderSearch(); // <-- Refresh search results if active
+  refreshActiveTabs();
+  if ($('hs-search-input') &&$('hs-search-input').value) renderSearch(); 
 }
 
 /* ---------- Excel Import & Template ---------- */
@@ -316,7 +473,6 @@ function downloadTemplate() {
       ]);
     });
   } else {
-    // Generates 1 blank row strictly typed to the current class
     aoa.push(['', '', '', '', '', cls, year(), 'Hoạt động', '', '', '', '']);
   }
   
@@ -326,8 +482,7 @@ function downloadTemplate() {
 }
 
 async function importStudents() {
-  const f = $('hs-file').files[0];
-  $('hs-file').value = '';
+  const f = $('hs-file').files[0];$('hs-file').value = '';
   if (!f) return;
   
   let ws;
@@ -336,21 +491,17 @@ async function importStudents() {
     ws = wb.Sheets[wb.SheetNames[0]]; 
   } catch (e) { return toast('Không đọc được file Excel.'); }
   
-  // Đọc dữ liệu theo dạng Object, tự động lấy Dòng 1 làm Tiêu đề (Header)
   const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
   if (rows.length === 0) return toast('File không có dữ liệu.');
   
   const students = [];
   rows.forEach(r => {
-    // Gọi đúng tên cột (Hỗ trợ nhiều cách viết để tránh gõ sai)
     const rawId = r['Số CCCD'] || r['CCCD'] || r['IdNumber'] || '';
     const rawName = r['Họ Và Tên'] || r['Họ tên'] || r['Họ và tên'] || '';
     
-    // Chỉ loại bỏ dấu nháy đơn (') ở đầu nếu Excel tự định dạng, KHÔNG loại bỏ số 0
     const id = String(rawId).replace(/^[']+/, '').trim();
     const fullName = String(rawName).trim();
     
-    // Bắt buộc phải có ID và Tên mới tính là một dòng hợp lệ
     if (!id || !fullName) return;
     
     students.push({
@@ -377,20 +528,24 @@ async function importStudents() {
     const res = await api('importStudents', { students });
     toast('Đã lưu ' + res.count + ' Thiếu nhi.');
     
-    // Xóa bộ nhớ đệm và tải lại danh sách mới
     clearApiCache('getStudents');
     const st = await api('getStudents');
     setState({TSTUDENTS: st.students || []});
     
-    renderHS();
-    if ($('hs-search-input') && $('hs-search-input').value) renderSearch(); 
+    refreshActiveTabs();
+    if ($('hs-search-input') &&$('hs-search-input').value) renderSearch(); 
   } catch (e) {
     toast('Lỗi: ' + e.message);
   }
 }
 
 /* ---------- Events ---------- */
-$('hs-lop').addEventListener('change', renderHS);
+$('hs-lop').addEventListener('change', () => { 
+  tabCache['t-class'] = false; 
+  tabCache['t-gallery'] = false; 
+  refreshActiveTabs();
+  tabCache['t-class'] = true; 
+});
 $('add-student').addEventListener('click', () => openModal());
 
 tbody.addEventListener('click', e => {
@@ -404,7 +559,18 @@ m.querySelector('.btn-cancel').addEventListener('click', closeModal);
 m.querySelector('.btn-save').addEventListener('click', saveModal);
 m.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
-// Add these to your Events section
+if ($('hs-photo-btn')) {$('hs-photo-btn').addEventListener('click', () => {
+    const currentId = $('hs-id').value;
+    if (currentId) triggerPhotoUpload(currentId);
+    else toast('Vui lòng lưu hồ sơ mới trước khi tải ảnh lên.');
+  });
+}
+if ($('hs-photo-remove')) {$('hs-photo-remove').addEventListener('click', () => {
+    const currentId = $('hs-id').value;
+    if (currentId) removePhoto(currentId);
+  });
+}
+
 $('hs-search-input').addEventListener('input', renderSearch);
 
 $('hs-search-tbody').addEventListener('click', e => {
@@ -412,17 +578,9 @@ $('hs-search-tbody').addEventListener('click', e => {
   if (btn) openModal(btn.dataset.id);
 });
 
-$('hs-file').addEventListener('change', importStudents);
-$('hs-lop').addEventListener('change', renderHS);
-$('add-student').addEventListener('click', () => openModal());
-
-if ($('hs-template-link')) {
-  $('hs-template-link').addEventListener('click', downloadTemplate);
-}
-if ($('hs-file')) {
-  $('hs-file').addEventListener('change', importStudents);
-}
+if ($('hs-template-link'))$('hs-template-link').addEventListener('click', downloadTemplate);
+if ($('hs-file'))$('hs-file').addEventListener('change', importStudents);
 
 /* Initial Boot */
 setupSiblingSearch();
-renderHS();
+switchTab('t-class');
