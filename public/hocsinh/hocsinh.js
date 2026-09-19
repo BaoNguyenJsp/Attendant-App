@@ -66,7 +66,7 @@ function renderHS() {
         return '<tr data-id="' + esc(st.IdNumber) + '" class="cursor-pointer hover:bg-slate-50 transition-colors bg-white" draggable="true">' +
           '<td class="p-2 border text-center text-slate-400 cursor-grab active:cursor-grabbing" title="Kéo thả để sắp xếp">☰</td>' +
           '<td class="p-2 border text-center whitespace-nowrap">' + esc(st.IdNumber) + '</td>' +
-            '<td class="p-2 border font-medium">' + esc(st.FullName) + '</td>' +
+          '<td class="p-2 border font-medium">' + esc(st.FullName) + '</td>' +
           '<td class="p-2 border text-center">' + esc(st.Gender || '') + '</td>' +
           '<td class="p-2 border text-center whitespace-nowrap">' + esc(fmtDate(st.DateOfBirth) || '') + '</td>' +
           '<td class="p-2 border text-center">' + esc(st.EnrollYear || '') + '</td>' +
@@ -76,7 +76,7 @@ function renderHS() {
           '<td class="p-2 border text-center sticky-col"><button data-id="' + esc(st.IdNumber) + '" class="edit-student bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs px-4 py-2 rounded-lg whitespace-nowrap">Cập nhật</button></td>' +
           '</tr>';
       }).join('')
-    : '<tr><td colspan="11" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi trong lớp ' + esc(cls) + '.</td></tr>';
+    : '<tr><td colspan="10" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi trong lớp ' + esc(cls) + '.</td></tr>';
 }
 
 /* ---------- Render Search Results ---------- */
@@ -408,7 +408,10 @@ function openModal(id) {
   const mcls = $('m-class');
   mcls.innerHTML = $('hs-lop').innerHTML;
   mcls.value = st ? (st.CurrentClass || $('hs-lop').value) :$('hs-lop').value;
-  $('hs-modal').classList.add('open');$('m-fullname').focus();
+  $('hs-modal').classList.add('open');
+  
+  // Safe timeout focus to prevent crashing if the element is not immediately ready
+  setTimeout(() => { if ($('m-fullname'))$('m-fullname').focus(); }, 50);
 }
 
 function closeModal() { 
