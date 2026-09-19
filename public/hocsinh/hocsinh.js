@@ -378,8 +378,6 @@ function openModal(id) {
   const st = editingId ? TSTUDENTS.find(s => s.IdNumber === editingId) : null;
   
   $('hs-m-title').textContent = st ? 'Cập nhật Thiếu nhi — ' + editingId : 'Thêm Thiếu nhi';
-  $('hs-id').value = st ? (st.IdNumber || '') : '';
-  
   $('m-cccd').value = st ? (st.IdNumber || '') : '';
   $('m-cccd').disabled = !!st;
   $('m-fullname').value = st ? (st.FullName || '') : '';
@@ -562,15 +560,15 @@ m.querySelector('.btn-cancel').addEventListener('click', closeModal);
 m.querySelector('.btn-save').addEventListener('click', saveModal);
 m.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
-if ($('hs-photo-btn')) {$('hs-photo-btn').addEventListener('click', () => {
-    const currentId = $('hs-id').value;
-    if (currentId) triggerPhotoUpload(currentId);
+if ($('hs-photo-btn')) {
+  $('hs-photo-btn').addEventListener('click', () => {
+    if (editingId) triggerPhotoUpload(editingId);
     else toast('Vui lòng lưu hồ sơ mới trước khi tải ảnh lên.');
   });
 }
-if ($('hs-photo-remove')) {$('hs-photo-remove').addEventListener('click', () => {
-    const currentId = $('hs-id').value;
-    if (currentId) removePhoto(currentId);
+if ($('hs-photo-remove')) {
+  $('hs-photo-remove').addEventListener('click', () => {
+    if (editingId) removePhoto(editingId);
   });
 }
 
