@@ -127,7 +127,6 @@ async function renderGallery() {
 
   const classStudents = sortStudents(TSTUDENTS.filter(s => s.CurrentClass === cls && String(s.Status).toLowerCase() !== 'nghỉ'));
   const grid = $('gallery-grid');
-  
   if (!grid) return;
 
   if (!classStudents.length) {
@@ -135,31 +134,43 @@ async function renderGallery() {
     return;
   }
 
-  grid.innerHTML = classStudents.map(st => {
-    const fullName = [st.SaintName, st.FullName].filter(Boolean).join(' ');
+  grid.innerHTML = ''; // Clear container
+
+  // Render in batches of 6 to prevent hitting 429 Rate Limits
+  const BATCH_SIZE = 6;
+  for (let i = 0; i < classStudents.length; i += BATCH_SIZE) {
+    const batch = classStudents.slice(i, i + BATCH_SIZE);
     
-    if (st.Photo) {
-      return `
-        <div class="border rounded-lg p-2 flex flex-col items-center bg-white shadow-sm relative group hover:border-blue-300 transition-colors">
-          <img src="${st.Photo}" referrerpolicy="no-referrer" class="w-full aspect-[3/4] object-cover rounded-md mb-2 bg-slate-100">
-          <button class="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-md hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity" onclick="removePhoto('${st.IdNumber}')" title="Xóa ảnh">✕</button>
-          <div class="text-xs font-bold text-center w-full truncate text-slate-800" title="${esc(fullName)}">${esc(fullName)}</div>
-          <div class="text-[10px] text-slate-500 text-center font-mono">${esc(st.IdNumber)}</div>
-        </div>
-      `;
-    } else {
-      return `
-        <div class="border rounded-lg p-2 flex flex-col items-center bg-white shadow-sm">
-          <div class="w-full aspect-[3/4] bg-slate-50 border-2 border-dashed border-slate-300 rounded-md mb-2 flex flex-col items-center justify-center cursor-pointer hover:bg-blue-50 hover:border-blue-400 text-slate-400 transition-colors" onclick="triggerPhotoUpload('${st.IdNumber}')" title="Nhấn để tải ảnh lên">
-            <span class="text-3xl mb-1">+</span>
-            <span class="text-[10px] font-medium">Tải ảnh</span>
-          </div>
-          <div class="text-xs font-bold text-center w-full truncate text-slate-800" title="${esc(fullName)}">${esc(fullName)}</div>
-          <div class="text-[10px] text-slate-500 text-center font-mono">${esc(st.IdNumber)}</div>
-        </div>
-      `;
+    const batchHtml = batch.map(st => {
+      const fullName = [st.SaintName, st.FullName].filter(Boolean).join(' ');
+      if (st.Photo) {
+        return `
+          <div class="border rounded-lg p-2 flex flex-col items-center bg-white shadow-sm relative group hover:border-blue-300 transition-colors">
+            <img src="${st.Photo}" loading="lazy" decoding="async" referrerpolicy="no-referrer" class="w-full aspect-[3/4] object-cover rounded-md mb-2 bg-slate-100">
+            <button class="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-md hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity" onclick="removePhoto('${st.IdNumber}')" title="Xóa ảnh">✕</button>
+            <div class="text-xs font-bold text-center w-full truncate text-slate-800" title="${esc(fullName)}">${esc(fullName)}</div>
+            <div class="text-[10px] text-slate-500 text-center font-mono">${esc(st.IdNumber)}</div>
+          </div>`;
+      } else {
+        return `
+          <div class="border rounded-lg p-2 flex flex-col items-center bg-white shadow-sm">
+            <div class="w-full aspect-[3/4] bg-slate-50 border-2 border-dashed border-slate-300 rounded-md mb-2 flex flex-col items-center justify-center cursor-pointer hover:bg-blue-50 hover:border-blue-400 text-slate-400 transition-colors" onclick="triggerPhotoUpload('${st.IdNumber}')" title="Nhấn để tải ảnh lên">
+              <span class="text-3xl mb-1">+</span>
+              <span class="text-[10px] font-medium">Tải ảnh</span>
+            </div>
+            <div class="text-xs font-bold text-center w-full truncate text-slate-800" title="${esc(fullName)}">${esc(fullName)}</div>
+            <div class="text-[10px] text-slate-500 text-center font-mono">${esc(st.IdNumber)}</div>
+          </div>`;
+      }
+    }).join('');
+
+    grid.insertAdjacentHTML('beforeend', batchHtml);
+    
+    // Introduce a 150ms delay between batches
+    if (i + BATCH_SIZE < classStudents.length) {
+      await new Promise(r => setTimeout(r, 150));
     }
-  }).join('');
+  }
 }
 
 /* ---------- Ảnh Thiếu Nhi (Core Upload Logic) ---------- */
