@@ -14,6 +14,10 @@ const FPLAN = 'GLV', FTBM = 'TBM';
 const HIST_PAGE = 8; let histPage = 1;
 let isSaving = false;
 
+// Validation Constants
+const MAX_FILE_COUNT = 5;
+const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30MB Limit
+
 // Global memory cache for current school year teaching records
 let ALL_TEACHING_RECORDS = [];
 
@@ -35,6 +39,13 @@ const glvLabel = em => {
   const s = u ? String(u.SaintName || '').trim() : '';
   const f = userFull(em);
   return s ? s + ' ' + f : f;
+};
+
+const fmtSize = bytes => {
+  if (!bytes) return '';
+  const k = 1024, sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 };
 
 /* ---------- Fetch All Records Once ---------- */
@@ -168,23 +179,114 @@ function openModal(cls) {
   $('gd-modal').classList.add('open');
 }
 
-const chip = (inner, list, grp, i) => '<div class="file-chip">' + inner +
-  '<button type="button" class="chip-rm" data-list="' + list + '" data-grp="' + grp + '" data-i="' + i + '" title="Gỡ bỏ">✕</button></div>';
+function renderFileCard(name, url, isUploading, size, listKind, groupKind, index, isReviewed) {
+  const ext = (name || '').split('.').pop().toLowerCase();
+  
+  let iconClass = 'icon-default';
+  let iconLabel = '📄';
 
-function renderLists() {
-  const addChip = (f, list, i) => chip('<span class="chip-name">⏳ ' + esc(f.name) + '</span>', list, 'add', i);
-  $('plan-list').innerHTML = planKeep.map((k, i) => chip(fileLink(k.url, k.name, false), FPLAN, 'keep', i)).join('') +
-    planAdd.map((f, i) => addChip(f, FPLAN, i)).join('');
-  $('rev-list').innerHTML = revKeep.map((k, i) => chip(fileLink(k.url, k.name, true), FTBM, 'keep', i)).join('') +
-    revAdd.map((f, i) => addChip(f, FTBM, i)).join('');
+  if (['doc', 'docx'].includes(ext)) { iconClass = 'icon-docx'; iconLabel = 'W'; }
+  else if (['ppt', 'pptx'].includes(ext)) { iconClass = 'icon-pptx'; iconLabel = 'P'; }
+  else if (ext === 'pdf') { iconClass = 'icon-pdf'; iconLabel = 'P'; }
+  else if (ext === 'mp4') { iconClass = 'icon-mp4'; iconLabel = '▶'; }
+
+  const nameHtml = url 
+    ? `<a href="${esc(url)}" target="_blank" rel="noopener" class="file-name hover:underline" title="${esc(name)}">${esc(name)}</a>` 
+    : `<div class="file-name" title="${esc(name)}">${esc(name)}</div>`;
+
+  // Status indicator logic:
+  // 1. Actively uploading -> Spinner + "Đang upload"
+  // 2. Local file pending save -> "⏳ Chờ upload" (No checkmark)
+  // 3. Finished / Saved on Drive -> "✓ Đã thêm"
+  let metaHtml = '';
+  if (isUploading) {
+    metaHtml = `<span class="text-blue-600 font-medium animate-pulse flex items-center gap-1">
+         <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+         Đang upload (${fmtSize(size)})
+       </span>`;
+  } else if (!url) {
+    metaHtml = `${fmtSize(size) ? fmtSize(size) + ' • ' : ''}<span class="text-amber-600 font-medium">⏳ Chờ upload</span>`;
+  } else {
+    metaHtml = `${fmtSize(size) ? fmtSize(size) + ' • ' : ''}<span class="text-emerald-600 font-semibold">✓ Đã thêm</span>`;
+  }
+
+  return `
+    <div class="file-card">
+      <div class="file-icon ${iconClass}">${iconLabel}</div>
+      <div class="file-info">
+        ${nameHtml}
+        <div class="file-meta">${metaHtml}</div>
+      </div>
+      <button type="button" class="btn-remove-file chip-rm" data-list="${listKind}" data-grp="${groupKind}" data-i="${index}" title="Gỡ bỏ">✕</button>
+    </div>
+  `;
 }
 
-function addFiles(input, kind) {
+function renderLists() {
+  const planHtml = [
+    ...planKeep.map((k, i) => renderFileCard(k.name, k.url, false, k.size, FPLAN, 'keep', i, false)),
+    ...planAdd.map((f, i) => renderFileCard(f.name, null, f.isUploading, f.size, FPLAN, 'add', i, false))
+  ].join('');
+
+  const revHtml = [
+    ...revKeep.map((k, i) => renderFileCard(k.name, k.url, false, k.size, FTBM, 'keep', i, true)),
+    ...revAdd.map((f, i) => renderFileCard(f.name, null, f.isUploading, f.size, FTBM, 'add', i, true))
+  ].join('');
+
+  $('plan-list').innerHTML = planHtml;
+  $('rev-list').innerHTML = revHtml;
+}
+
+function processIncomingFiles(files, kind) {
+  const isPlan = kind === FPLAN;
+  const currentKeep = isPlan ? planKeep : revKeep;
+  const currentAdd = isPlan ? planAdd : revAdd;
+
+  for (const f of files) {
+    if (currentKeep.length + currentAdd.length >= MAX_FILE_COUNT) {
+      toast(`Chỉ được phép tối đa ${MAX_FILE_COUNT} file cho phần này.`);
+      break;
+    }
+
+    if (f.size > MAX_FILE_SIZE) {
+      toast(`File "${f.name}" vượt quá kích thước tối đa 30MB.`);
+      continue;
+    }
+
+    currentAdd.push(f);
+  }
+  renderLists();
+}
+
+function attachFileHandlers(input, dropzone, kind) {
   input.addEventListener('change', () => {
-    const list = kind === FPLAN ? planAdd : revAdd;
-    [...input.files].forEach(f => list.push(f));
+    processIncomingFiles([...input.files], kind);
     input.value = '';
-    renderLists();
+  });
+
+  if (!dropzone) return;
+
+  ['dragenter', 'dragover'].forEach(eventName => {
+    dropzone.addEventListener(eventName, e => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.classList.add('border-blue-500', 'bg-blue-50/40');
+    }, false);
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+    dropzone.addEventListener(eventName, e => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.classList.remove('border-blue-500', 'bg-blue-50/40');
+    }, false);
+  });
+
+  dropzone.addEventListener('drop', e => {
+    const dt = e.dataTransfer;
+    if (dt && dt.files && dt.files.length) {
+      processIncomingFiles([...dt.files], kind);
+    }
   });
 }
 
@@ -218,15 +320,20 @@ async function uploadBatched(list, keepList, kind, wk, cls, batchSize = 3) {
   for (let i = 0; i < filesToUpload.length; i += batchSize) {
     const chunk = filesToUpload.slice(i, i + batchSize);
     
+    chunk.forEach(f => f.isUploading = true);
+    renderLists();
+
     await Promise.all(chunk.map(async f => {
       try {
         const driveUrl = await uploadFileDirect(f, wk, cls, kind);
         const idx = list.indexOf(f);
         if (idx > -1) list.splice(idx, 1);
-        keepList.push({ url: driveUrl, name: f.name });
-        renderLists();
+        keepList.push({ url: driveUrl, name: f.name, size: f.size });
       } catch (e) {
+        f.isUploading = false;
         failedCount++;
+      } finally {
+        renderLists();
       }
     }));
   }
@@ -266,7 +373,6 @@ async function saveTeaching() {
     $('gd-modal').classList.remove('open');
     toast('Đã lưu giáo án.');
 
-    // Reload full dataset and refresh UI
     await loadAllTeachingData(true);
     renderCards();
     renderFreq();
@@ -300,8 +406,9 @@ gdModal.addEventListener('click', e => {
 
 gdModal.querySelector('.btn-cancel').addEventListener('click', () => { if (!isSaving) gdModal.classList.remove('open'); });
 gdModal.querySelector('.btn-save').addEventListener('click', () => saveTeaching());
-addFiles($('f-plan'), FPLAN);
-addFiles($('f-rev'), FTBM);
+
+attachFileHandlers($('f-plan'),$('f-plan')?.closest('.dropzone'), FPLAN);
+attachFileHandlers($('f-rev'),$('f-rev')?.closest('.dropzone'), FTBM);
 
 $('gd-week').addEventListener('change', () => { normSunday($('gd-week')); renderCards(); });$('cards').addEventListener('click', e => { const b = e.target.closest('.btn-update'); if (b) openModal(b.dataset.cls); });
 
