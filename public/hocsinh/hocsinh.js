@@ -55,8 +55,7 @@ function renderHS() {
   
   $('hs-tbody').innerHTML = sts.length
     ? sts.map((st, i) => {
-        // Safe string casting before split to prevent TypeError
-        const siblingNames = String(st.Siblings || '').split(',')
+        const siblingNames = String(st.Siblings || '').split(/[.,\s]+/)
           .map(id => id.trim())
           .filter(Boolean)
           .map(id => {
@@ -64,12 +63,14 @@ function renderHS() {
             return sib ? `<span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs whitespace-nowrap">${esc(sib.FullName)} (${esc(sib.CurrentClass)})</span>` : esc(id);
           }).join(' ');
 
-        return '<tr data-id="' + esc(st.IdNumber) + '" class="cursor-pointer hover:bg-slate-50 transition-colors bg-white" draggable="true">' +
-          '<td class="p-2 border text-center text-slate-400 cursor-grab active:cursor-grabbing" title="Kéo thả để sắp xếp">☰</td>' +
+        return '<tr data-id="' + esc(st.IdNumber) + '" class="hover:bg-slate-50 transition-colors bg-white">' +
+          '<td class="p-2 border text-center text-slate-400 cursor-grab active:cursor-grabbing drag-handle select-none" draggable="true" title="Kéo thả để sắp xếp">☰</td>' +
           '<td class="p-2 border text-center whitespace-nowrap">' + esc(st.IdNumber) + '</td>' +
-          '<td class="p-2 border font-medium">' + esc(st.FullName) + '</td>' +
+          '<td class="p-2 border font-medium">' + esc([st.SaintName, st.FullName].filter(Boolean).join(' ')) + '</td>' +
           '<td class="p-2 border text-center">' + esc(st.Gender || '') + '</td>' +
           '<td class="p-2 border text-center whitespace-nowrap">' + esc(fmtDate(st.DateOfBirth) || '') + '</td>' +
+          '<td class="p-2 border text-sm">' + esc(st.Father || '') + (st.FatherNumber ? ' (' + esc(st.FatherNumber) + ')' : '') + '</td>' +
+          '<td class="p-2 border text-sm">' + esc(st.Mother || '') + (st.MotherNumber ? ' (' + esc(st.MotherNumber) + ')' : '') + '</td>' +
           '<td class="p-2 border text-center">' + esc(st.EnrollYear || '') + '</td>' +
           '<td class="p-2 border text-center">' + badgeStatus(st.Status) + '</td>' +
           '<td class="p-2 border text-center">' + siblingNames + '</td>' +
@@ -77,7 +78,7 @@ function renderHS() {
           '<td class="p-2 border text-center sticky-col"><button data-id="' + esc(st.IdNumber) + '" class="edit-student bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs px-4 py-2 rounded-lg whitespace-nowrap">Cập nhật</button></td>' +
           '</tr>';
       }).join('')
-    : '<tr><td colspan="10" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi trong lớp ' + esc(cls) + '.</td></tr>';
+    : '<tr><td colspan="12" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi trong lớp ' + esc(cls) + '.</td></tr>';
 }
 
 /* ---------- Render Search Results ---------- */
@@ -86,7 +87,7 @@ function renderSearch() {
   const tbody = $('hs-search-tbody');
   
   if (!q) {
-    tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-slate-400">Nhập tên, tên thánh hoặc CCCD để tìm kiếm...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="p-4 text-center text-slate-400">Nhập tên, tên thánh hoặc CCCD để tìm kiếm...</td></tr>';
     return;
   }
 
@@ -98,7 +99,7 @@ function renderSearch() {
 
   tbody.innerHTML = hits.length
     ? hits.map((st) => {
-        const siblingNames = String(st.Siblings || '').split(',')
+        const siblingNames = String(st.Siblings || '').split(/[.,\s]+/)
           .map(id => id.trim()).filter(Boolean)
           .map(id => {
             const sib = TSTUDENTS.find(s => s.IdNumber === id);
@@ -108,16 +109,18 @@ function renderSearch() {
         return `<tr data-id="${esc(st.IdNumber)}" class="hover:bg-slate-50 transition-colors bg-white">
           <td class="p-2 border text-center font-bold text-blue-900">${esc(st.CurrentClass)}</td>
           <td class="p-2 border text-center whitespace-nowrap">${esc(st.IdNumber)}</td>
-          <td class="p-2 border font-medium">${esc(st.FullName)}</td>
+          <td class="p-2 border font-medium">${esc([st.SaintName, st.FullName].filter(Boolean).join(' '))}</td>
           <td class="p-2 border text-center">${esc(st.Gender || '')}</td>
           <td class="p-2 border text-center whitespace-nowrap">${esc(fmtDate(st.DateOfBirth) || '')}</td>
+          <td class="p-2 border text-sm">${esc(st.Father || '')}${st.FatherNumber ? ' (' + esc(st.FatherNumber) + ')' : ''}</td>
+          <td class="p-2 border text-sm">${esc(st.Mother || '')}${st.MotherNumber ? ' (' + esc(st.MotherNumber) + ')' : ''}</td>
           <td class="p-2 border text-center">${esc(st.EnrollYear || '')}</td>
           <td class="p-2 border text-center">${badgeStatus(st.Status)}</td>
           <td class="p-2 border text-center">${siblingNames}</td>
           <td class="p-2 border">${esc(st.Note || '')}</td>
         </tr>`;
       }).join('')
-    : '<tr><td colspan="9" class="p-4 text-center text-slate-400">Không tìm thấy Thiếu nhi nào phù hợp.</td></tr>';
+    : '<tr><td colspan="11" class="p-4 text-center text-slate-400">Không tìm thấy Thiếu nhi nào phù hợp.</td></tr>';
 }
 
 /* ---------- Thư Viện Ảnh (Gallery) ---------- */
@@ -134,9 +137,8 @@ async function renderGallery() {
     return;
   }
 
-  grid.innerHTML = ''; // Clear container
+  grid.innerHTML = '';
 
-  // Render in batches of 6 to prevent hitting 429 Rate Limits
   const BATCH_SIZE = 6;
   for (let i = 0; i < classStudents.length; i += BATCH_SIZE) {
     const batch = classStudents.slice(i, i + BATCH_SIZE);
@@ -165,15 +167,13 @@ async function renderGallery() {
     }).join('');
 
     grid.insertAdjacentHTML('beforeend', batchHtml);
-    
-    // Introduce a 150ms delay between batches
     if (i + BATCH_SIZE < classStudents.length) {
       await new Promise(r => setTimeout(r, 150));
     }
   }
 }
 
-/* ---------- Ảnh Thiếu Nhi (Core Upload Logic) ---------- */
+/* ---------- Ảnh Thiếu Nhi ---------- */
 window.triggerPhotoUpload = function(idNumber) {
   const inp = document.createElement('input');
   inp.type = 'file';
@@ -240,9 +240,9 @@ window.removePhoto = async function(idNumber) {
 async function savePhotoData(st) {
   await api('saveStudent', {
      idNumber: st.IdNumber, saintName: st.SaintName, fullName: st.FullName,
-     dateOfBirth: st.DateOfBirth, gender: st.Gender, father: st.Father, mother: st.Mother,
-     className: st.CurrentClass, enrollYear: st.EnrollYear, status: st.Status,
-     note: st.Note, siblings: st.Siblings, listOrder: st.ListOrder, photo: st.Photo
+     dateOfBirth: st.DateOfBirth, gender: st.Gender, father: st.Father, fatherNumber: st.FatherNumber,
+     mother: st.Mother, motherNumber: st.MotherNumber, className: st.CurrentClass, enrollYear: st.EnrollYear, 
+     status: st.Status, note: st.Note, siblings: st.Siblings, listOrder: st.ListOrder, photo: st.Photo
   });
   if (typeof clearApiCache === 'function') clearApiCache('getStudents');
 }
@@ -252,12 +252,18 @@ function refreshActiveTabs() {
   renderGallery();
 }
 
-/* ---------- Drag & Drop Reordering ---------- */
+/* ---------- Isolated Drag & Drop Reordering ---------- */
 const tbody = $('hs-tbody');
 
 tbody.addEventListener('dragstart', e => {
-  const tr = e.target.closest('tr');
+  const handle = e.target.closest('.drag-handle');
+  if (!handle) {
+    e.preventDefault();
+    return;
+  }
+  const tr = handle.closest('tr');
   if (!tr) return;
+  
   draggingRow = tr;
   e.dataTransfer.effectAllowed = 'move';
   e.dataTransfer.setData('text/plain', tr.dataset.id);
@@ -397,7 +403,9 @@ function openModal(id) {
   $('m-enroll').value = st ? (st.EnrollYear || '') : year();
   $('m-status').value = st ? (st.Status || 'Hoạt động') : 'Hoạt động';
   $('m-father').value = st ? (st.Father || '') : '';
+  if ($('m-fathernumber'))$('m-fathernumber').value = st ? (st.FatherNumber || '') : '';
   $('m-mother').value = st ? (st.Mother || '') : '';
+  if ($('m-mothernumber'))$('m-mothernumber').value = st ? (st.MotherNumber || '') : '';
   $('m-siblings').value = st ? (st.Siblings || '') : ''; 
   $('m-note').value = st ? (st.Note || '') : '';
 
@@ -407,7 +415,7 @@ function openModal(id) {
     if ($('hs-photo-remove'))$('hs-photo-remove').style.display = photoUrl ? 'block' : 'none';
   }
 
-  selectedSiblings = st && st.Siblings ? String(st.Siblings).split(',').map(s => s.trim()).filter(Boolean) : [];
+  selectedSiblings = st && st.Siblings ? String(st.Siblings).split(/[.,\s]+/).map(s => s.trim()).filter(Boolean) : [];
   renderSiblingTags();
   if ($('m-sibling-search'))$('m-sibling-search').value = '';
 
@@ -435,8 +443,10 @@ async function saveModal() {
     enrollYear: $('m-enroll').value.trim(),
     status: $('m-status').value,
     father: $('m-father').value.trim(),
+    fatherNumber: $('m-fathernumber') ?$('m-fathernumber').value.trim() : '',
     mother: $('m-mother').value.trim(),
-    siblings: $('m-siblings').value.trim(),
+    motherNumber: $('m-mothernumber') ?$('m-mothernumber').value.trim() : '',
+    siblings: $('m-siblings').value.split(/[.,\s]+/).filter(Boolean).join(','),
     note: $('m-note').value.trim(),
   };
 
@@ -462,7 +472,6 @@ async function saveModal() {
   closeModal();
   toast('Đã lưu.');
   
-  // If the class was changed in the modal, update both active views
   refreshActiveTabs();
   if ($('hs-search-input') &&$('hs-search-input').value) renderSearch(); 
 }
@@ -472,18 +481,19 @@ function downloadTemplate() {
   const cls = $('hs-lop').value;
   const sortedSts = sortStudents(TSTUDENTS.filter(s => s.CurrentClass === cls));
   
-  const aoa = [['Số CCCD', 'Tên Thánh', 'Họ Và Tên', 'Giới Tính', 'Ngày Sinh', 'Lớp', 'Năm Nhập Học', 'Trạng Thái', 'Cha', 'Mẹ', 'Anh/Chị/Em', 'Ghi Chú']];
+  const aoa = [['Số CCCD', 'Tên Thánh', 'Họ Và Tên', 'Giới Tính', 'Ngày Sinh', 'Lớp', 'Năm Nhập Học', 'Trạng Thái', 'Cha', 'SĐT Cha', 'Mẹ', 'SĐT Mẹ', 'Anh/Chị/Em', 'Ghi Chú']];
   
   if (sortedSts.length) {
     sortedSts.forEach(s => {
       aoa.push([
         s.IdNumber, s.SaintName || '', s.FullName, s.Gender || '', s.DateOfBirth || '', 
         s.CurrentClass || cls, s.EnrollYear || '', s.Status || 'Hoạt động', 
-        s.Father || '', s.Mother || '', s.Siblings || '', s.Note || ''
+        s.Father || '', s.FatherNumber || '', s.Mother || '', s.MotherNumber || '', 
+        s.Siblings || '', s.Note || ''
       ]);
     });
   } else {
-    aoa.push(['', '', '', '', '', cls, year(), 'Hoạt động', '', '', '', '']);
+    aoa.push(['', '', '', '', '', cls, year(), 'Hoạt động', '', '', '', '', '', '']);
   }
   
   const wb = XLSX.utils.book_new();
@@ -524,7 +534,9 @@ async function importStudents() {
       enrollYear: String(r['Năm Nhập Học'] || '').trim(),
       status: String(r['Trạng Thái'] || 'Hoạt động').trim(),
       father: String(r['Cha'] || '').trim(),
+      fatherNumber: String(r['SĐT Cha'] || '').trim(),
       mother: String(r['Mẹ'] || '').trim(),
+      motherNumber: String(r['SĐT Mẹ'] || '').trim(),
       siblings: String(r['Anh/Chị/Em'] || '').trim(),
       note: String(r['Ghi Chú'] || '').trim()
     });

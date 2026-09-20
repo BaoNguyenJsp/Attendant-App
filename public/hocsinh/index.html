@@ -58,6 +58,8 @@
               <th class="p-3">Họ Và Tên</th>
               <th class="p-3">Giới Tính</th>
               <th class="p-3">Ngày Sinh</th>
+              <th class="p-3">Cha (SĐT)</th>
+              <th class="p-3">Mẹ (SĐT)</th>
               <th class="p-3">Năm Nhập Học</th>
               <th class="p-3">Trạng Thái</th>
               <th class="p-3">Anh/Chị/Em</th>
@@ -70,6 +72,7 @@
       </div>
     </div>
 
+    <!-- TAB 2: THƯ VIỆN ẢNH -->
     <div id="t-gallery" class="bg-white rounded-b-xl shadow-sm p-5" data-pane style="display: none;">
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
         <div>
@@ -98,26 +101,26 @@
               <th class="p-3">Họ Và Tên</th>
               <th class="p-3">Giới Tính</th>
               <th class="p-3">Ngày Sinh</th>
+              <th class="p-3">Cha (SĐT)</th>
+              <th class="p-3">Mẹ (SĐT)</th>
               <th class="p-3">Năm Nhập Học</th>
               <th class="p-3">Trạng Thái</th>
               <th class="p-3">Anh/Chị/Em</th>
               <th class="p-3">Ghi Chú</th>
-              <!-- Removed Thao Tác column -->
             </tr>
           </thead>
           <tbody id="hs-search-tbody">
             <tr>
-              <td colspan="9" class="p-4 text-center text-slate-400">Nhập thông tin để tìm kiếm...</td>
+              <td colspan="11" class="p-4 text-center text-slate-400">Nhập thông tin để tìm kiếm...</td>
             </tr>
           </tbody>
         </table>
       </div>
     </div>
 
-
-
   </div>
 
+  <!-- MODAL CẬP NHẬT / THÊM MỚI -->
   <div id="hs-modal" class="modal">
     <div class="modal-content">
       <h3 id="hs-m-title">Thêm Thiếu nhi</h3>
@@ -138,8 +141,10 @@
             <option>Tốt nghiệp</option>
             <option>Ngưng hoạt động</option>
           </select></div>
-        <div class="form-group"><label>Cha</label><input id="m-father" type="text"></div>
-        <div class="form-group"><label>Mẹ</label><input id="m-mother" type="text"></div>
+        <div class="form-group"><label>Họ Tên Cha</label><input id="m-father" type="text"></div>
+        <div class="form-group"><label>SĐT Cha</label><input id="m-fathernumber" type="text"></div>
+        <div class="form-group"><label>Họ Tên Mẹ</label><input id="m-mother" type="text"></div>
+        <div class="form-group"><label>SĐT Mẹ</label><input id="m-mothernumber" type="text"></div>
         <div class="form-group full relative">
           <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Anh/Chị/Em</label>
           <div id="m-sibling-tags" class="flex flex-wrap gap-1 mb-2"></div>
