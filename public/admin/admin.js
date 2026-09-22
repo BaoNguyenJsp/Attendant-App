@@ -487,5 +487,25 @@ if (cfgTbody) {
   });
 }
 
+/* ---------- 7. Làm mới bộ nhớ đệm máy chủ ---------- */
+const btnWarm = $('warm-cache');
+if (btnWarm) {
+  btnWarm.addEventListener('click', async () => {
+    btnWarm.disabled = true;
+    const old = btnWarm.textContent;
+    btnWarm.textContent = '⏳';
+    try {
+      await api('warmCache');
+      localStorage.clear();       // bỏ luôn cache phía trình duyệt để thấy dữ liệu mới
+      toast('Đã làm mới bộ nhớ đệm.');
+      location.reload();
+    } catch (e) {
+      toast(e.message);
+      btnWarm.disabled = false;
+      btnWarm.textContent = old;
+    }
+  });
+}
+
 /* Boot default active tab */
 switchTab('t-us');

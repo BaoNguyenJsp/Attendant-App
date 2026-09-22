@@ -3,7 +3,7 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, setState, SESSIONS, TCLASSES, TSTUDENTS, year, defaultWeek, normSunday, fillClasses, fillSessions, exportExcel, sortStudents } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, setState, SESSIONS, TCLASSES, TSTUDENTS, year, defaultWeek, normSunday, fillClasses, fillSel, fillSessions, exportExcel, sortStudents, fmtDate, toIsoDate } from '../shared/common.js';
 import { rankBadge } from '../shared/ui.js';
 
 await initCommon();
@@ -17,10 +17,13 @@ setState({
   TCLASSES: Array.isArray(cl?.classes) ? cl.classes : [],
   TSTUDENTS: Array.isArray(st?.students) ? st.students : []
 });
-fillClasses('dd-lop', 'tk-lop');
+fillClasses('dd-lop');
+const allClassItems = TCLASSES.map(c => ({ v: c.ClassName || c.className }));
+if ($('tk-lop')) fillSel('tk-lop', allClassItems);
 fillSessions('dd-buoi');
 
 let weekCache = [];
+let CLASS_ATT_CACHE = { cls: '', records: [], holidays: {} };
 let currentSession = '';
 let ddBase = [], ddState = [];
 
@@ -33,7 +36,7 @@ const tabCache = {
 
 function invalidateStatsCache() {
   tabCache['t-tk'] = false;
-  tabCache['t-toandoan'] = false;
+  invalidateToanDoanCache();
 }
 
 async function switchTab(tabId) {
@@ -57,50 +60,62 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
 });
 
+async function loadClassAttendance(cls, force = false) {
+  if (CLASS_ATT_CACHE.cls === cls && !force) return;
+
+  const r = await api('getAttendance', { schoolYear: year(), className: cls });
+  CLASS_ATT_CACHE = {
+    cls: cls,
+    records: r.records || [],
+    holidays: r.holidays || {}
+  };
+}
+
 /* ---------- Điểm Danh ---------- */
 async function renderDD() {
-  if (!$('dd-week').value) $('dd-week').value = defaultWeek();
+  if (!$('dd-week').value) $('dd-week').value = toIsoDate(defaultWeek());
   normSunday($('dd-week'));
 
   const cls = $('dd-lop').value;
   if (!cls) return toast('Chọn lớp.');
-  let r;
+
   try {
-    r = await api('getAttendance', {
-      schoolYear: year(),
-      weekOf: $('dd-week').value,
-      className: cls
-    });
+    await loadClassAttendance(cls);
   } catch (e) { return toast(e.message); }
 
+  const wk = $('dd-week').value;
+  currentSession = $('dd-buoi').value;
+
+  const isHolidayWeek = !!CLASS_ATT_CACHE.holidays[wk + '|' + currentSession] || !!CLASS_ATT_CACHE.holidays[wk + '|'];
+
   const note = $('dd-holiday-note');
-  if (r?.isHolidayWeek) {
+  if (isHolidayWeek) {
     note.style.display = 'block';
     note.textContent = '⚠ Tuần này là ngày nghỉ đã khai báo trong mục Quản trị.';
   } else note.style.display = 'none';
 
-  const rawRecords = Array.isArray(r?.recordsByStudent) ? r.recordsByStudent : (Array.isArray(r?.records) ? r.records : []);
-  const orderedList = sortStudents(rawRecords.map(x => {
-    const baseSt = (Array.isArray(TSTUDENTS) ? TSTUDENTS : []).find(s => s.IdNumber === x.idNumber) || {};
-    return {
-      ...x,
-      CurrentClass: cls,
-      IdNumber: x.idNumber,
-      ListOrder: baseSt.ListOrder,
-      Gender: baseSt.Gender,
-      photo: x.photo || baseSt.Photo || ''
-    };
-  }));
-
-  weekCache = orderedList.map(o => {
-    const rec = rawRecords.find(r => r.idNumber === o.idNumber) || o;
-    return { ...rec, photo: o.photo };
+  const weekRecsMap = new Map();
+  CLASS_ATT_CACHE.records.forEach(r => {
+    if (r.WeekOf === wk) {
+      weekRecsMap.set(String(r.idNumber).trim(), r);
+    }
   });
 
-  currentSession = $('dd-buoi').value;
+  const classStudents = sortStudents(TSTUDENTS.filter(s => s.CurrentClass === cls && String(s.Status).toLowerCase() === 'hoạt động'));
+
+  weekCache = classStudents.map(st => {
+    const existing = weekRecsMap.get(String(st.IdNumber).trim()) || {};
+    return {
+      idNumber: st.IdNumber,
+      saintName: st.SaintName || '',
+      fullName: st.FullName,
+      photo: st.Photo || st.PhotoURL || st.Image || '',
+      sessions: existing.sessions || {}
+    };
+  });
+
   renderSessionFromCache();
 
-  // Face Scan Step: build reference descriptors in the background
   if (typeof buildReferenceDescriptors === 'function') {
     buildReferenceDescriptors(weekCache, updateRefBadge).catch(e => console.warn('[face-scan] build refs error:', e.message));
   }
@@ -108,8 +123,12 @@ async function renderDD() {
 
 function syncStateToCache() {
   if (!currentSession) return;
+
+  const uiMap = new Map();
+  ddState.forEach(s => uiMap.set(String(s.idNumber).trim(), s));
+
   weekCache.forEach(student => {
-    const uiRec = ddState.find(s => s.idNumber === student.idNumber);
+    const uiRec = uiMap.get(String(student.idNumber).trim());
     if (uiRec) {
       if (!student.sessions) student.sessions = {};
       student.sessions[currentSession] = { status: uiRec.status, note: uiRec.note };
@@ -215,44 +234,96 @@ async function saveAttendance() {
   ddBase = ddState.map(x => ({...x}));
   markDirty();
   toast('Đã lưu điểm danh cho cả tuần.');
+  await loadClassAttendance($('dd-lop').value, true);
   invalidateStatsCache();
 }
 
 /* ---------- Trích Lục ---------- */
 async function renderTL() {
-  const id = $('tl-id').value.trim();
+  const q = $('tl-id').value.trim().toLowerCase();
   const out = $('tl-out');
-  if (!id) return out.innerHTML = '<p class="text-amber-600 font-medium">Nhập Mã số Thiếu nhi.</p>';
-  let r;
-  try { r = await api('searchByIdNumber', {idNumber: id}); }
-  catch (e) { return out.innerHTML = '<p class="text-amber-600 font-medium">' + esc(e.message) + '</p>'; }
-  const stList = Array.isArray(r?.students) ? r.students : [];
-  const st = stList[0];
-  if (!st) return out.innerHTML = '<p class="text-amber-600 font-medium">Không tìm thấy Thiếu nhi này.</p>';
-  const absList = Array.isArray(r?.absences) ? r.absences : [];
-  const abs = absList.slice().sort((a, b) => String(a.WeekOf || '').localeCompare(String(b.WeekOf || '')));
-  out.innerHTML =
-    '<div class="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4">' +
-      '<h3 class="text-lg font-extrabold text-blue-900">' + esc((st.SaintName ? st.SaintName + ' ' : '') + st.FullName) + '</h3>' +
-      '<dl class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm mt-2">' +
-        '<div><dt class="text-xs font-bold text-slate-500 uppercase">Mã Số</dt><dd class="font-semibold">' + esc(st.IdNumber) + '</dd></div>' +
-        '<div><dt class="text-xs font-bold text-slate-500 uppercase">Tình trạng</dt><dd class="font-semibold">' + esc(st.Status) + '</dd></div>' +
-        '<div><dt class="text-xs font-bold text-slate-500 uppercase">Lớp</dt><dd class="font-semibold">' + esc(st.CurrentClass) + '</dd></div>' +
-      '</dl></div>' +
-    '<div style="overflow-x:auto"><table class="w-full text-sm border-collapse min-w-[560px]" id="tl-table">' +
-      '<thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">' +
-        '<th class="p-3">Tuần</th><th class="p-3">Buổi</th><th class="p-3">Tình trạng</th><th class="p-3">Ghi chú</th></tr></thead>' +
-      '<tbody>' + (abs.length ? abs.map(a => '<tr>' +
-        '<td class="p-2 border text-center">' + esc(a.WeekOf) + '</td>' +
-        '<td class="p-2 border text-center">' + esc(a.Session) + '</td>' +
-        '<td class="p-2 border text-center">' + esc(a.AttendanceStatus || 'Vắng') + '</td>' +
-        '<td class="p-2 border">' + esc(a.Note) + '</td></tr>').join('')
-        : '<tr><td colspan="4" class="p-4 text-center text-slate-400">Không có buổi vắng trong năm học này.</td></tr>') + '</tbody></table></div>';
+
+  if (!q) return out.innerHTML = '<p class="text-amber-600 font-medium">Vui lòng nhập tên, tên thánh hoặc CCCD Thiếu nhi.</p>';
+
+  const hits = TSTUDENTS.filter(s =>
+    (s.FullName && s.FullName.toLowerCase().includes(q)) ||
+    (s.IdNumber && String(s.IdNumber).toLowerCase().includes(q)) ||
+    (s.SaintName && s.SaintName.toLowerCase().includes(q))
+  ).slice(0, 10);
+
+  if (hits.length === 0) {
+    return out.innerHTML = '<p class="text-amber-600 font-medium">Không tìm thấy Thiếu nhi nào phù hợp.</p>';
+  }
+
+  out.innerHTML = '<div class="p-4 text-center text-blue-600 font-medium animate-pulse">Đang tra cứu dữ liệu...</div>';
+
+  try {
+    const resultsHtml = await Promise.all(hits.map(async (st) => {
+      let r;
+      try {
+        r = await api('searchByIdNumber', { idNumber: st.IdNumber });
+      } catch (e) {
+        return `<div class="p-4 text-red-500">Lỗi tải dữ liệu cho ${esc(st.FullName)}: ${esc(e.message)}</div>`;
+      }
+
+      const fetchedSt = (r.students && r.students[0]) || st;
+      const absList = Array.isArray(r.absences) ? r.absences : [];
+      const abs = absList.slice().sort((a, b) => String(a.WeekOf || '').localeCompare(String(b.WeekOf || '')));
+
+      const safeId = esc(fetchedSt.IdNumber).replace(/[^a-zA-Z0-9]/g, '');
+      const tableId = 'tl-table-' + safeId;
+      const displayFullName = esc((fetchedSt.SaintName ? fetchedSt.SaintName + ' ' : '') + fetchedSt.FullName);
+
+      return `
+        <div class="mb-8">
+          <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4 flex justify-between items-start flex-wrap gap-4">
+            <div>
+              <h3 class="text-lg font-extrabold text-blue-900">${displayFullName}</h3>
+              <dl class="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-2 text-sm mt-2">
+                <div><dt class="text-xs font-bold text-slate-500 uppercase">Mã Số</dt><dd class="font-semibold">${esc(fetchedSt.IdNumber)}</dd></div>
+                <div><dt class="text-xs font-bold text-slate-500 uppercase">Tình trạng</dt><dd class="font-semibold">${esc(fetchedSt.Status)}</dd></div>
+                <div><dt class="text-xs font-bold text-slate-500 uppercase">Lớp</dt><dd class="font-semibold">${esc(fetchedSt.CurrentClass)}</dd></div>
+              </dl>
+            </div>
+            <button type="button" class="export-tl-btn bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg text-sm flex-shrink-0" data-table="${tableId}" data-name="${esc(fetchedSt.FullName)}">
+              ⬇ Excel
+            </button>
+          </div>
+          <div style="overflow-x:auto">
+            <table id="${tableId}" class="w-full text-sm border-collapse min-w-[560px]">
+              <thead>
+                <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+                  <th class="p-3 border">Tuần</th>
+                  <th class="p-3 border">Buổi</th>
+                  <th class="p-3 border">Tình trạng</th>
+                  <th class="p-3 border">Ghi chú</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${abs.length ? abs.map(a => `
+                  <tr>
+                    <td class="p-2 border text-center">${esc(fmtDate(a.WeekOf))}</td>
+                    <td class="p-2 border text-center">${esc(a.Session)}</td>
+                    <td class="p-2 border text-center">${esc(a.AttendanceStatus || 'Vắng')}</td>
+                    <td class="p-2 border">${esc(a.Note)}</td>
+                  </tr>
+                `).join('') : '<tr><td colspan="4" class="p-4 text-center text-slate-400">Không có buổi vắng trong năm học này.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <hr class="my-8 border-slate-300 border-dashed border-t-2" />
+      `;
+    }));
+
+    out.innerHTML = resultsHtml.join('').replace(/(<hr[^>]*>)\s*$/, '');
+
+  } catch (e) {
+    out.innerHTML = `<div class="p-4 text-red-500 font-medium">Đã xảy ra lỗi: ${esc(e.message)}</div>`;
+  }
 }
 
 /* ---------- Thống Kê ---------- */
-
-// Cap percentage at 100% and handle missing/zero values safely
 const pct = (p, m) => {
   const v = Number(p || 0), max = Number(m || 0);
   if (!max || max <= 0 || v <= 0) return '0%';
@@ -282,7 +353,6 @@ async function renderTK() {
     maxObj[sess] = Number(backendMaxObj[sess] || 0);
   });
 
-  // Strict backend maxTotal based on AttendanceStartDate -> Now
   const maxTotal = Number(r?.maxTotal || 0);
 
   const classStudents = (Array.isArray(TSTUDENTS) ? TSTUDENTS : [])
@@ -325,46 +395,205 @@ async function renderTK() {
 }
 
 /* ---------- Thống Kê Toàn Đoàn ---------- */
+
+// Cache dữ liệu điểm danh thô Toàn Đoàn trong bộ nhớ
+let toanDoanRawCache = null;
+
+function invalidateToanDoanCache() {
+  toanDoanRawCache = null;
+  tabCache['t-toandoan'] = false;
+}
+
+/**
+ * Tải toàn bộ dữ liệu điểm danh tất cả các lớp
+ */
+async function fetchToanDoanRawData(force = false) {
+  if (toanDoanRawCache && !force) return toanDoanRawCache;
+
+  const classes = TCLASSES.map(c => c.ClassName || c.className).filter(Boolean);
+  const attendancePromises = classes.map(cls =>
+    api('getAttendance', { schoolYear: year(), className: cls })
+      .then(res => ({ cls, records: res.records || [], holidays: res.holidays || {} }))
+      .catch(err => ({ cls, records: [], holidays: {}, error: err }))
+  );
+
+  toanDoanRawCache = await Promise.all(attendancePromises);
+  return toanDoanRawCache;
+}
+
+/**
+ * Chuẩn hóa các định dạng ngày về Date Object giờ địa phương (00:00:00)
+ */
+function parseLocalDate(dateVal) {
+  if (!dateVal) return null;
+  if (dateVal instanceof Date) {
+    const d = new Date(dateVal);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  const str = String(dateVal).trim();
+
+  // Định dạng DD/MM/YYYY
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(str)) {
+    const parts = str.split('/');
+    return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10), 0, 0, 0, 0);
+  }
+
+  // Định dạng ISO hoặc YYYY-MM-DD
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+  }
+
+  return null;
+}
+
+/**
+ * Lấy mốc thời gian [AttendanceStartDate -> Hôm nay]
+ */
+async function getAttendanceStartDateRange() {
+  let startDateStr = typeof window !== 'undefined' ? window.AttendanceStartDate || window.AttendantStartDate : null;
+
+  if (!startDateStr) {
+    try {
+      const cfg = await api('getConfig');
+      startDateStr = cfg?.AttendanceStartDate || cfg?.AttendantStartDate;
+    } catch (e) {
+      console.warn('[config] Không thể lấy AttendanceStartDate từ server:', e.message);
+    }
+  }
+
+  let schoolYearStart = parseLocalDate(startDateStr);
+
+  // Fallback nếu không có cấu hình AttendanceStartDate
+  if (!schoolYearStart) {
+    const startYr = typeof year === 'function' && String(year()).includes('-')
+      ? parseInt(year().split('-')[0], 10)
+      : new Date().getFullYear();
+    schoolYearStart = new Date(startYr, 8, 1, 0, 0, 0, 0); // Fallback 01/09
+  }
+
+  const today = parseLocalDate(new Date());
+  today.setHours(23, 59, 59, 999);
+
+  return { schoolYearStart, today };
+}
+
+/**
+ * Lấy các tháng (1-12) cần lọc dựa theo bộ lọc Quý hoặc Tháng
+ */
+function getToanDoanFilterConfig() {
+  const type = $('td-filter-type')?.value || 'year';
+
+  if (type === 'quarter') {
+    const q = parseInt($('td-filter-quarter')?.value || '1', 10);
+    const startMonth = (q - 1) * 3 + 1;
+    const endMonth = q * 3;
+    const months = [];
+    for (let m = startMonth; m <= endMonth; m++) months.push(m);
+    return { type, months };
+  }
+
+  if (type === 'month') {
+    const m = parseInt($('td-filter-month')?.value || '1', 10);
+    return { type, months: [m] };
+  }
+
+  return { type, months: [] };
+}
+
 async function renderToanDoan() {
   const tb = $('td-tbody');
-  if (!tb) {
-    toast('Lỗi giao diện: Không tìm thấy bảng Toàn Đoàn (td-tbody).');
+  if (!tb) return toast('Không tìm thấy bảng Toàn Đoàn (td-tbody).');
+
+  const classes = TCLASSES.map(c => c.ClassName || c.className).filter(Boolean);
+  const allActive = TSTUDENTS.filter(s => String(s.Status).toLowerCase() !== 'nghỉ');
+
+  if (classes.length === 0) {
+    tb.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-slate-400">Không có danh sách lớp.</td></tr>';
     return;
   }
 
-  tb.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-slate-500 font-medium animate-pulse">⏳ Đang tổng hợp dữ liệu toàn đoàn...</td></tr>';
+  if (!toanDoanRawCache) {
+    tb.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-slate-500 font-medium animate-pulse">⏳ Đang tổng hợp dữ liệu toàn đoàn...</td></tr>';
+  }
 
-  // Lấy danh sách lớp và toàn bộ học sinh đang hoạt động
-  const classes = TCLASSES.map(c => c.ClassName || c.className).filter(Boolean);
-  const allActive = TSTUDENTS.filter(s => String(s.Status).toLowerCase() !== 'nghỉ');
+  // 1. Tải dữ liệu điểm danh và mốc thời gian
+  const [results, { schoolYearStart, today }] = await Promise.all([
+    fetchToanDoanRawData(),
+    getAttendanceStartDateRange()
+  ]);
+
+  const { type, months } = getToanDoanFilterConfig();
 
   const rows = [];
   let grandTotal = 0;
   let totalCN = 0, maxTotalCN = 0;
   let totalT5 = 0, maxTotalT5 = 0;
 
-  for (const cls of classes) {
+  // 2. Tính toán tỉ lệ chuyên cần trên Frontend
+  results.forEach(({ cls, records }) => {
     const classSts = allActive.filter(s => (s.CurrentClass || s.className) === cls);
     const siso = classSts.length;
-    if (siso === 0) continue;
+    if (siso === 0) return;
 
     grandTotal += siso;
 
-    let statsRes;
-    try {
-      statsRes = await api('getClassAttendanceStats', { schoolYear: year(), className: cls });
-    } catch (e) {
-      continue;
-    }
+    // LỌC CHÍNH XÁC: [AttendanceStartDate -> Hôm nay] + Khớp Tháng/Quý (nếu chọn)
+    const filteredRecords = records.filter(r => {
+      if (!r.WeekOf) return false;
 
-    const statsObj = statsRes?.stats || {};
-    const backendMax = statsRes?.max || {};
-    const maxTotal = Number(statsRes?.maxTotal || 0);
+      const recordDate = parseLocalDate(r.WeekOf);
+      if (!recordDate) return false;
 
-    const maxCn = Number(backendMax['Lễ Chúa Nhật'] || 0);
-    const maxGl = Number(backendMax['Học Giáo Lý'] || 0);
-    const maxCtt = Number(backendMax['Chầu Thánh Thể'] || 0);
-    const maxT5 = Number(backendMax['Lễ Thứ Năm'] || 0);
+      // Giới hạn thời gian nghiêm ngặt
+      if (recordDate.getTime() < schoolYearStart.getTime() || recordDate.getTime() > today.getTime()) {
+        return false;
+      }
+
+      // Lọc theo tháng nếu chọn Quý/Tháng
+      if (type !== 'year') {
+        const recordMonth = recordDate.getMonth() + 1; // 1-12
+        return months.includes(recordMonth);
+      }
+
+      return true;
+    });
+
+    const sessionWeeks = {
+      'Lễ Chúa Nhật': new Set(),
+      'Học Giáo Lý': new Set(),
+      'Chầu Thánh Thể': new Set(),
+      'Lễ Thứ Năm': new Set()
+    };
+
+    const studentStats = {};
+
+    filteredRecords.forEach(r => {
+      const id = String(r.idNumber || r.IdNumber || '').trim();
+      if (!studentStats[id]) {
+        studentStats[id] = { 'Lễ Chúa Nhật': 0, 'Học Giáo Lý': 0, 'Chầu Thánh Thể': 0, 'Lễ Thứ Năm': 0, total: 0 };
+      }
+
+      const sessions = r.sessions || {};
+      Object.keys(sessions).forEach(sess => {
+        const rawSt = sessions[sess]?.status || '';
+        if (rawSt === 'Hiện diện' || rawSt === 'Có mặt') {
+          if (studentStats[id][sess] !== undefined) {
+            studentStats[id][sess]++;
+            studentStats[id].total++;
+          }
+          if (sessionWeeks[sess]) sessionWeeks[sess].add(r.WeekOf);
+        }
+      });
+    });
+
+    const maxCn = sessionWeeks['Lễ Chúa Nhật'].size;
+    const maxGl = sessionWeeks['Học Giáo Lý'].size;
+    const maxCtt = sessionWeeks['Chầu Thánh Thể'].size;
+    const maxT5 = sessionWeeks['Lễ Thứ Năm'].size;
+    const maxTotal = maxCn + maxGl + maxCtt + maxT5;
 
     maxTotalCN += maxCn * siso;
     maxTotalT5 += maxT5 * siso;
@@ -373,7 +602,7 @@ async function renderToanDoan() {
 
     classSts.forEach(s => {
       const id = String(s.IdNumber || s.idNumber || '').trim();
-      const st = statsObj[id] || {};
+      const st = studentStats[id] || {};
 
       c_cn += Number(st['Lễ Chúa Nhật'] || 0);
       c_gl += Number(st['Học Giáo Lý'] || 0);
@@ -385,29 +614,25 @@ async function renderToanDoan() {
       totalT5 += Number(st['Lễ Thứ Năm'] || 0);
     });
 
-    const pctClass = maxTotal > 0 ? Math.round((c_total / (maxTotal * siso)) * 100) : 0;
-    const pctCn = maxCn > 0 ? Math.round((c_cn / (maxCn * siso)) * 100) : 0;
-    const pctGl = maxGl > 0 ? Math.round((c_gl / (maxGl * siso)) * 100) : 0;
-    const pctCtt = maxCtt > 0 ? Math.round((c_ctt / (maxCtt * siso)) * 100) : 0;
-    const pctT5 = maxT5 > 0 ? Math.round((c_t5 / (maxT5 * siso)) * 100) : 0;
+    const pctClass = (maxTotal > 0 && siso > 0) ? Math.round((c_total / (maxTotal * siso)) * 100) : 0;
+    const pctCn = (maxCn > 0 && siso > 0) ? Math.round((c_cn / (maxCn * siso)) * 100) : 0;
+    const pctGl = (maxGl > 0 && siso > 0) ? Math.round((c_gl / (maxGl * siso)) * 100) : 0;
+    const pctCtt = (maxCtt > 0 && siso > 0) ? Math.round((c_ctt / (maxCtt * siso)) * 100) : 0;
+    const pctT5 = (maxT5 > 0 && siso > 0) ? Math.round((c_t5 / (maxT5 * siso)) * 100) : 0;
 
-    let rating = '';
+    let rating = 'Cần cố gắng';
     if (pctClass >= 80) rating = 'Xuất sắc';
     else if (pctClass >= 65) rating = 'Tốt';
     else if (pctClass >= 50) rating = 'Khá';
-    else rating = 'Cần cố gắng';
 
-    rows.push({
-      cls, siso, pctCn, pctGl, pctCtt, pctT5, pctClass, rating
-    });
-  }
+    rows.push({ cls, siso, pctCn, pctGl, pctCtt, pctT5, pctClass, rating });
+  });
 
   if (rows.length === 0) {
-    tb.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-slate-400">Chưa có dữ liệu.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-slate-400">Chưa có dữ liệu trong khoảng thời gian này.</td></tr>';
     return;
   }
 
-  // Cập nhật bảng
   tb.innerHTML = rows.map(r => `
     <tr>
       <td class="p-3 border font-extrabold text-center text-blue-900">${esc(r.cls)}</td>
@@ -421,20 +646,18 @@ async function renderToanDoan() {
     </tr>
   `).join('');
 
-  // Tính toán Tỉ lệ tổng quan
   const pctGrandCn = maxTotalCN > 0 ? Math.round((totalCN / maxTotalCN) * 100) : 0;
   const pctGrandT5 = maxTotalT5 > 0 ? Math.round((totalT5 / maxTotalT5) * 100) : 0;
 
-  // Cập nhật 3 Cards phía trên một cách linh hoạt (tìm các thẻ chứa dấu "—" hoặc phần trăm hiện tại)
   const updateCardVal = (titleFragment, newVal) => {
     document.querySelectorAll('#t-toandoan div').forEach(div => {
       if (div.textContent.toUpperCase().includes(titleFragment)) {
-         const valNodes = Array.from(div.querySelectorAll('*')).filter(el =>
-           el.textContent.trim() === '—' || /^[0-9]+%?$/.test(el.textContent.trim())
-         );
-         if (valNodes.length > 0) {
-           valNodes[valNodes.length - 1].textContent = newVal;
-         }
+        const valNodes = Array.from(div.querySelectorAll('*')).filter(el =>
+          el.textContent.trim() === '—' || /^[0-9]+%?$/.test(el.textContent.trim())
+        );
+        if (valNodes.length > 0) {
+          valNodes[valNodes.length - 1].textContent = newVal;
+        }
       }
     });
   };
@@ -459,13 +682,9 @@ const fsApply = $('fs-apply');
 const fsCanvas = $('fs-canvas');
 const fsCanvasCtx = fsCanvas ? fsCanvas.getContext('2d') : null;
 
-// Hỗ trợ upload tối đa 2 ảnh cùng lúc để tăng số HS được nhận diện (2 góc chụp khác nhau).
-// fsSelectedImages = [{src, source}, ...] tối đa 2 phần tử.
-// fsDetectionsPerImg = [[results ảnh 1], [results ảnh 2]] tương ứng từng ảnh.
-// Khi scan: detect + match trên từng ảnh, gộp match vào table (union - HS match ở bất kỳ ảnh nào đều tick).
-let fsSelectedImages = [];   // tối đa 3 ảnh
-let fsCurrentImgIdx = 0;     // tab đang xem
-let fsDetectionsPerImg = []; // detections cho từng ảnh
+let fsSelectedImages = [];
+let fsCurrentImgIdx = 0;
+let fsDetectionsPerImg = [];
 const MATCH_THRESHOLD = 0.55;
 const MAX_FS_IMAGES = 3;
 
@@ -776,19 +995,13 @@ function fsReset() {
   updateFsTabsUI();
 }
 function fsShowError(msg) { fsError.classList.remove('hidden'); fsError.textContent = '⚠ ' + msg; }
-/**
- * Thêm 1 ảnh vào list (tối đa MAX_FS_IMAGES).
- * Nếu đã đầy → thay thế ảnh hiện tại (đang xem).
- * @param {string} src - URL/dataURL
- * @param {'file'|'url'} source
- */
+
 function fsAddImage(src, source) {
   if (fsSelectedImages.length < MAX_FS_IMAGES) {
     fsSelectedImages.push({ src, source });
     fsDetectionsPerImg.push([]);
     fsCurrentImgIdx = fsSelectedImages.length - 1;
   } else {
-    // Đã đầy → thay thế ảnh hiện tại
     fsSelectedImages[fsCurrentImgIdx] = { src, source };
     fsDetectionsPerImg[fsCurrentImgIdx] = [];
   }
@@ -797,9 +1010,6 @@ function fsAddImage(src, source) {
   loadImgIntoSlot(fsCurrentImgIdx);
 }
 
-/**
- * Load ảnh tại index `idx` vào <img> + sync canvas.
- */
 function loadImgIntoSlot(idx) {
   if (idx < 0 || idx >= fsSelectedImages.length) return;
   fsCurrentImgIdx = idx;
@@ -818,9 +1028,6 @@ function loadImgIntoSlot(idx) {
   fsImg.onerror = () => fsShowError('Không tải được ảnh. Kiểm tra link Drive đã share "Anyone with the link" chưa.');
 }
 
-/**
- * Render tabs động theo số ảnh đã load.
- */
 function updateFsTabsUI() {
   const tabsContainer = $('fs-tabs');
   if (!tabsContainer) return;
@@ -836,7 +1043,7 @@ function updateFsTabsUI() {
     btn.addEventListener('click', () => fsSwitchToImg(i));
     tabsContainer.appendChild(btn);
   });
-  // Ẩn nút "Thêm ảnh" khi đã đủ MAX_FS_IMAGES, hiện khi chưa đủ
+
   const addLabel = $('fs-file-add-label');
   if (addLabel) {
     if (fsSelectedImages.length >= MAX_FS_IMAGES) {
@@ -847,24 +1054,18 @@ function updateFsTabsUI() {
   }
 }
 
-/**
- * Switch sang ảnh khác (khi user click tab).
- */
 function fsSwitchToImg(idx) {
   if (idx < 0 || idx >= fsSelectedImages.length) return;
   loadImgIntoSlot(idx);
 }
 
-/**
- * Xoá ảnh hiện tại khỏi list.
- */
 function fsRemoveCurrentImg() {
   if (fsSelectedImages.length === 0) return;
   fsSelectedImages.splice(fsCurrentImgIdx, 1);
   fsDetectionsPerImg.splice(fsCurrentImgIdx, 1);
-  // Điều chỉnh current index
+
   if (fsCurrentImgIdx >= fsSelectedImages.length) fsCurrentImgIdx = Math.max(0, fsSelectedImages.length - 1);
-  // Nếu không còn ảnh nào → reset về trạng thái empty
+
   if (fsSelectedImages.length === 0) {
     clearFsCanvas();
     fsImg.removeAttribute('src');
@@ -875,7 +1076,7 @@ function fsRemoveCurrentImg() {
     updateFsTabsUI();
     return;
   }
-  // Còn ảnh → load ảnh tại current index
+
   loadImgIntoSlot(fsCurrentImgIdx);
 }
 
@@ -918,6 +1119,7 @@ function drawDetectionsOverlay(detections) {
     const label = d.status === 'matched' ? style.icon + ' ' + (d.studentName || '?') : (d.status === 'review' ? style.icon + ' ' + (d.studentName || '?') + ' (xem lại)' : 'Không rõ');
     drawLabel(fsCanvasCtx, label, x, y, style.labelBg);
   });
+
   fsCanvasCtx.restore();
 }
 
@@ -959,18 +1161,15 @@ $('fs-file')?.addEventListener('change', e => {
   if (!files.length) return;
   const valid = files.filter(f => f.type.startsWith('image/'));
   if (!valid.length) return fsShowError('File không phải ảnh.');
-  // Load từng file: ưu tiên thêm vào slot trống, nếu đầy thì thay thế slot hiện tại.
-  // Giới hạn tổng số ảnh = MAX_FS_IMAGES (không load quá).
+
   const remaining = MAX_FS_IMAGES - fsSelectedImages.length;
   if (remaining <= 0) {
-    // Đã đầy → chỉ thay ảnh đang xem
     toast('⚠ Đã đủ ' + MAX_FS_IMAGES + ' ảnh. File mới sẽ thay thế ảnh đang xem.');
     loadFileIntoSlot(valid[0], fsCurrentImgIdx);
   } else {
     const toLoad = valid.slice(0, remaining);
     if (valid.length > remaining) toast('⚠ Chỉ load ' + remaining + ' ảnh đầu (tối đa ' + MAX_FS_IMAGES + ').');
     toLoad.forEach((f, idx) => {
-      // Tìm slot trống tiếp theo
       const slotIdx = fsSelectedImages.length + idx;
       loadFileIntoSlot(f, slotIdx);
     });
@@ -996,20 +1195,15 @@ $('fs-file-add')?.addEventListener('change', e => {
   }
 });
 
-/**
- * Load 1 file vào slot cụ thể (dùng cả cho initial + thêm ảnh).
- */
 function loadFileIntoSlot(file, slotIdx) {
   if (!file.type.startsWith('image/')) return;
   const reader = new FileReader();
   reader.onload = ev => {
     if (slotIdx < fsSelectedImages.length) {
-      // Slot đã tồn tại → thay thế
       fsSelectedImages[slotIdx] = { src: ev.target.result, source: 'file' };
       fsDetectionsPerImg[slotIdx] = [];
       loadImgIntoSlot(slotIdx);
     } else {
-      // Slot mới → push
       fsAddImage(ev.target.result, 'file');
     }
   };
@@ -1020,7 +1214,6 @@ function loadFileIntoSlot(file, slotIdx) {
 $('fs-load-urls')?.addEventListener('click', () => {
   const raw = $('fs-urls').value.trim();
   if (!raw) return fsShowError('Chưa nhập URL.');
-  // Tách theo dòng, lọc rỗng
   const urls = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
   if (!urls.length) return fsShowError('Chưa nhập URL hợp lệ.');
   const remaining = MAX_FS_IMAGES - fsSelectedImages.length;
@@ -1060,23 +1253,21 @@ $('fs-apply')?.addEventListener('click', async () => {
     const deadline = Date.now() + 30000;
     while (refBuildInProgress && Date.now() < deadline) await new Promise(r => setTimeout(r, 200));
 
-    // ✅ Scan từng ảnh (tối đa MAX_FS_IMAGES=3), gộp kết quả match (union).
     const totalImgs = fsSelectedImages.length;
     let totalDetections = 0;
-    let allResults = []; // gộp tất cả results từ mọi ảnh
+    let allResults = [];
     for (let i = 0; i < totalImgs; i++) {
       fsApply.textContent = '🔍 Phát hiện ảnh ' + (i + 1) + '/' + totalImgs + '...';
-      // Switch sang ảnh i để fsImg load
       fsCurrentImgIdx = i;
       clearFsCanvas();
       fsImg.src = fsSelectedImages[i].src;
-      // Đợi ảnh load xong (có thể đã cache nên dùng promise wrap)
+
       await new Promise((resolve) => {
         if (fsImg.complete && fsImg.naturalWidth) return resolve();
         fsImg.onload = resolve;
-        fsImg.onerror = resolve; // fail cũng continue
+        fsImg.onerror = resolve;
       });
-      // Đợi 1 frame để canvas size sync đúng
+
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
       const result = await matchFaces(fsImg, refDescriptors);
@@ -1092,21 +1283,15 @@ $('fs-apply')?.addEventListener('click', async () => {
 
     if (totalDetections === 0) {
       toast('⚠ Không phát hiện khuôn mặt nào trong cả ' + totalImgs + ' ảnh. Thử ảnh khác rõ hơn.');
-      // Vẫn show overlay cho ảnh hiện tại (rỗng)
       fsSwitchToImg(0);
       return;
     }
 
-    // Gộp tất cả results → apply vào table (union: HS match ở bất kỳ ảnh nào đều tick).
-    // Lưu ý: applyResultsToTable đã skip HS đã tick "Hiện diện"/"Có phép" → không trùng.
     const mergedResult = { results: allResults, detections: totalDetections };
     const { ticked, review, reviewList, skipped } = applyResultsToTable(mergedResult);
 
-    // Vẽ overlay của ảnh hiện tại (ảnh 1 hoặc ảnh user đang xem)
-    const prevIdx = fsCurrentImgIdx;
     fsCurrentImgIdx = 0;
     fsSwitchToImg(0);
-    // Sau khi switch sang ảnh 1 xong → cũng giữ currentImg ở đầu để user thấy ảnh 1 trước
 
     fsApply.disabled = false;
     fsApply.textContent = '✓ Đã xong & Đóng';
@@ -1140,28 +1325,54 @@ $('dd-buoi').addEventListener('change', () => {
   renderSessionFromCache();
 });
 
-$('dd-markall').addEventListener('click', markAllPresent);
-$('dd-refresh').addEventListener('click', async () => { tabCache['t-dd'] = false; await renderDD(); tabCache['t-dd'] = true; });
+$('dd-markall').addEventListener('click', markAllPresent);$('dd-refresh').addEventListener('click', async () => {
+  tabCache['t-dd'] = false;
+  if ($('dd-lop').value) await loadClassAttendance($('dd-lop').value, true);
+  await renderDD();
+  tabCache['t-dd'] = true;
+  toast('Đã làm mới dữ liệu từ máy chủ.');
+});
 $('dd-save').addEventListener('click', saveAttendance);
 
-$('dd-tbody').addEventListener('change', e => {
-  const cb = e.target.closest('.attendance-checkbox');
-  if (cb) handleCheck(+cb.dataset.i, cb.dataset.which);
-});
-$('dd-tbody').addEventListener('input', e => {
+$('dd-tbody').addEventListener('change', e => {   const cb = e.target.closest('.attendance-checkbox');   if (cb) handleCheck(+cb.dataset.i, cb.dataset.which); });$('dd-tbody').addEventListener('input', e => {
   const inp = e.target.closest('input[data-i]');
   if (inp) noteInput(+inp.dataset.i);
 });
 
-$('tl-search').addEventListener('click', renderTL);
-// $('tl-excel').addEventListener('click', () => exportExcel('tl-table', 'Trích lục CCCD'));
+$('tl-search').addEventListener('click', renderTL);$('tl-out').addEventListener('click', e => {
+  const btn = e.target.closest('.export-tl-btn');
+  if (btn) {
+    const tableId = btn.getAttribute('data-table');
+    const studentName = btn.getAttribute('data-name');
+    exportExcel(tableId, `Trich_luc_${studentName}`);
+  }
+});
 
-$('tk-lop').addEventListener('change', async () => { tabCache['t-tk'] = false; await renderTK(); tabCache['t-tk'] = true; });
-$('tk-excel').addEventListener('click', () => exportExcel('tk-table', 'Thống kê chuyên cần lớp'));
-$('tk-print').addEventListener('click', () => window.print());
+$('tk-lop').addEventListener('change', async () => { tabCache['t-tk'] = false; await renderTK(); tabCache['t-tk'] = true; });$('tk-excel').addEventListener('click', () => exportExcel('tk-table', 'Thống kê chuyên cần lớp'));
+$('tk-print').addEventListener('click', () => printAttendanceStats(false));
 
 $('td-excel').addEventListener('click', () => exportExcel('td-table', 'Thống kê toàn đoàn'));
-$('td-print').addEventListener('click', () => window.print());
+$('td-print').addEventListener('click', () => printAttendanceStats(true));
+
+/* ---------- Sự kiện Bộ Lọc Thời Gian (Toàn Đoàn) ---------- */
+$('td-filter-type')?.addEventListener('change', () => {
+  const type = $('td-filter-type').value;
+
+  const wrapQ = $('td-wrap-quarter');
+  const wrapM = $('td-wrap-month');
+  if (wrapQ) wrapQ.style.display = (type === 'quarter') ? 'block' : 'none';
+  if (wrapM) wrapM.style.display = (type === 'month') ? 'block' : 'none';
+
+  renderToanDoan();
+});
+
+$('td-filter-quarter')?.addEventListener('change', () => {
+  renderToanDoan();
+});
+
+$('td-filter-month')?.addEventListener('change', () => {
+  renderToanDoan();
+});
 
 /* Boot */
 switchTab('t-dd');

@@ -529,7 +529,7 @@ function getClassAttendanceStats(year, className, startDate) {
   return { status: 'ok', max, maxTotal, stats };
 }
 
-function getHocBaData(year, className) {
+function getClassAcademicData(year, className) {
   const cfg = config();
   const holList = (cachedRead('Holidays') || []).filter(h => String(h.SchoolYear) === String(year));
   const startIso = cfg.AttendanceStartDate;
@@ -749,7 +749,7 @@ const ACTIONS = {
   },
 
   getClassAttendanceStats: b => getClassAttendanceStats(b.year || b.schoolYear || currentYear(), b.className, b.startDate),
-  getHocBaData: b => getHocBaData(b.year || currentYear(), b.className),
+  getClassAcademicData: b => getClassAcademicData(b.year || currentYear(), b.className),
   summaryRows: b => ({ status: 'ok', data: summaryRows(b.year || currentYear(), b.list) }),
 
   saveClass: b => {
@@ -1023,7 +1023,7 @@ const ACTIONS = {
   },
 
   // OPTIMIZATION 2: O(1) User Map Lookup
-  getTeacherTrichLuc: b => {
+  getTeacherAbsences: b => {
     const year = b.schoolYear || currentYear();
     const email = String(b.teacherEmail || '').toLowerCase();
     
@@ -1219,7 +1219,7 @@ const ACTIONS = {
   },
 
   // OPTIMIZATION 2: O(1) Student Map Lookup
-  getHocBa: b => {
+  getAcademicRecord: b => {
     const id = normId(b.idNumber);
     const studentMap = {};
     cachedRead('Students').forEach(s => studentMap[normId(s.IdNumber)] = s);

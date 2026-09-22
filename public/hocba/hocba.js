@@ -235,7 +235,7 @@ async function renderHBT() {
     const resultsHtml = await Promise.all(hits.map(async (st) => {
       let r;
       try {
-        r = await api('getHocBa', { idNumber: st.IdNumber });
+        r = await api('getAcademicRecord', { idNumber: st.IdNumber });
       } catch (e) {
         return `<div class="p-4 text-red-500">Lỗi tải dữ liệu cho ${esc(st.FullName)}: ${esc(e.message)}</div>`;
       }
@@ -265,7 +265,7 @@ async function renderHBT() {
               </div>
             </div>
             <button type="button" class="export-hbt-btn bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg text-sm flex-shrink-0" data-table="${tableId}" data-name="${esc(fetchedSt.FullName)}">
-              ⬇ Xuất Excel
+              ⬇ Excel
             </button>
           </div>
           

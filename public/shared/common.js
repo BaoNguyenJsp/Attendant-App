@@ -4,7 +4,7 @@
    ===================================================================== */
 'use strict';
 
-const APP_VERSION = 'v1.0.1'; 
+const APP_VERSION = 'v1.0.2'; 
 
 // 2. Check if the user's browser has this exact version
 if (localStorage.getItem('app_version') !== APP_VERSION) {
@@ -301,9 +301,13 @@ export async function api(action, body, retries = 3, delayMs = 1500) {
 
         return j;
 
-      } catch (e) { 
+      } catch (e) {
         lastError = e;
-        
+
+        // 401 = hết phiên / bị buộc đăng xuất: thử lại vô nghĩa, thoát ngay để
+        // initCommon chuyển hướng về trang đăng nhập.
+        if (e.status === 401) throw e;
+
         if (attempt < retries) {
           console.warn(`[API] '${action}' failed (Attempt ${attempt}/${retries}). Retrying in ${delayMs}ms... Error: ${e.message}`);
           await new Promise(resolve => setTimeout(resolve, delayMs));

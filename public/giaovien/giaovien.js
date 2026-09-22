@@ -274,7 +274,7 @@ async function showTrich(u) {
   const out = $('gvtrich-out');
   out.innerHTML = '<p class="text-slate-500 text-sm">Đang tra cứu…</p>';
   let r;
-  try { r = await api('getTeacherTrichLuc', {teacherEmail: u.Email}); }
+  try { r = await api('getTeacherAbsences', {teacherEmail: u.Email}); }
   catch (e) { return out.innerHTML = '<p class="text-amber-600 font-medium">' + esc(e.message) + '</p>'; }
   if (!r.teacher) return out.innerHTML = '<p class="text-amber-600 font-medium">Không tìm thấy tài khoản Huynh trưởng này.</p>';
   const t = r.teacher, abs = (r.absences || []).sort((a, b) => String(a.WeekOf).localeCompare(String(b.WeekOf)));

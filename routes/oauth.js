@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const cfg = require('../config');
 const { expandScope, computeTier, computeSectors } = require('../lib/authz');
+const signal = require('../lib/auth-signal');
 
 const oauth = {
   authorize: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -60,6 +61,7 @@ module.exports = function registerOAuth(app, ctx) {
       req.session.scope = expandScope(s.groups, s.catalog, classes);
       req.session.tier = computeTier(s.groups);
       req.session.sectors = computeSectors(s.groups);
+      signal.clear(s.email);          // phiên mới đã tính lại quyền
       res.redirect('/');
     } catch (e) {
       console.error('login callback failed:', e.message || e);

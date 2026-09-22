@@ -4,7 +4,7 @@ const path = require('path');
 const express = require('express');
 const cookieSession = require('cookie-session');
 const cfg = require('./config');
-const { callAppsScript, makeProxy, HttpError } = require('./lib/apps-script');
+const { callAppsScript, makeProxy, warmCache, HttpError } = require('./lib/apps-script');
 const { makeAuthz } = require('./lib/authz');
 const registerOAuth = require('./routes/oauth');
 const registerApi = require('./routes/api');
@@ -48,5 +48,8 @@ function createApp() {
 if (process.argv.includes('--selfcheck')) {
   require('./selfcheck').run(createApp());
 } else {
-  createApp().listen(cfg.port, () => console.log(`Sổ Thiếu Nhi chạy tại http://localhost:${cfg.port}`));
+  createApp().listen(cfg.port, () => {
+    console.log(`Sổ Thiếu Nhi chạy tại http://localhost:${cfg.port}`);
+    warmCache();
+  });
 }

@@ -7,6 +7,10 @@ module.exports = {
     const { call, proxy, authz } = ctx;
     const { send } = authz;
 
+    app.get('/wakeup', (req, res) => {
+      res.send('Wakeup call received');
+    });
+
     // Đọc mở cho user hợp lệ (FR-AUTH-11)
     for (const a of ['getStudents', 'getClasses', 'getHolidays', 'getTeachers', 'getAcademicYear', 'getConfig', 'getYearOptions']) {
       app.post('/api/' + a, proxy(a));

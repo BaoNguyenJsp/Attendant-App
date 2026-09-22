@@ -11,6 +11,6 @@ module.exports = {
       app.post('/api/' + a, authz.requireTier(BQT), authz.requireTeacherScope, proxy(a));
     }
     // Trích lục tra theo email (không có sector trong body) → không requireTeacherScope.
-    app.post('/api/getTeacherTrichLuc', authz.requireTier(BQT), proxy('getTeacherTrichLuc'));
+    app.post('/api/getTeacherAbsences', authz.requireTier(BQT), proxy('getTeacherAbsences'));
   },
 };

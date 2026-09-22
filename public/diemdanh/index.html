@@ -1,184 +1,291 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chuyên Cần — Sổ Thiếu Nhi</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
-<link rel="stylesheet" href="/shared/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chuyên Cần — Sổ Thiếu Nhi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <link rel="stylesheet" href="/shared/style.css">
 </head>
-<body class="bg-slate-100 min-h-screen"
-      data-title="✅ Quản Lý Chuyên Cần"
-      data-sub="Điểm danh · Trích lục · Thống kê lớp · Toàn đoàn"
-      data-back="1"
-      data-role="any">
 
-<div id="shell"></div>
+<body class="bg-slate-100 min-h-screen" data-title="✅ Quản Lý Chuyên Cần"
+  data-sub="Điểm danh · Trích lục · Thống kê lớp · Toàn đoàn" data-back="1" data-role="any">
 
-<div class="max-w-7xl mx-auto px-4 pb-6">
-  <div class="bg-white rounded-t-xl border-b border-slate-300 shadow-sm px-4 pt-2 flex flex-wrap">
-    <button class="tab-btn active" data-tab="t-dd">📝 Điểm Danh</button>
-    <button class="tab-btn" data-tab="t-tl">🔎 Trích Lục CCCD</button>
-    <button class="tab-btn" data-tab="t-tk">📈 Thống Kê Lớp</button>
-    <button class="tab-btn" data-tab="t-toandoan">🌐 Toàn Đoàn</button>
-  </div>
+  <div id="shell"></div>
 
-  <!-- t-dd -->
-  <div id="t-dd" class="bg-white rounded-b-xl shadow-sm p-5" data-pane>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
-      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
-        <select id="dd-lop" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></select></div>
-      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Tuần (Chủ Nhật)</label>
-        <input type="date" id="dd-week" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></div>
-      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Buổi Sinh Hoạt</label>
-        <select id="dd-buoi" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></select></div>
-      <div class="flex items-end">
-        <button id="dd-markall" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-lg whitespace-nowrap">✅ Chọn hiện diện tất cả</button>
-      </div>
-      <div class="flex items-end">
-        <button id="dd-facescan" title="Upload ảnh lớp để AI gợi ý điểm danh" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2.5 rounded-lg whitespace-nowrap">📷 Upload ảnh lớp</button>
-        <span id="fs-status" class="ml-2 text-xs font-bold"></span>
-      </div>
+  <div class="max-w-7xl mx-auto px-4 pb-6">
+    <div class="bg-white rounded-t-xl border-b border-slate-300 shadow-sm px-4 pt-2 flex flex-wrap">
+      <button class="tab-btn active" data-tab="t-dd">📝 Điểm Danh</button>
+      <button class="tab-btn" data-tab="t-tl">🔎 Trích Lục CCCD</button>
+      <button class="tab-btn" data-tab="t-tk">📈 Thống Kê Lớp</button>
+      <button class="tab-btn" data-tab="t-toandoan">🌐 Toàn Đoàn</button>
     </div>
 
-    <div id="dd-holiday-note"></div>
-
-    <div class="tbl-scroll sticky">
-      <table class="w-full text-sm border-collapse min-w-[820px]">
-        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
-          <th class="p-3">STT</th><th class="p-3">Số CCCD</th><th class="p-3">Tên thánh</th><th class="p-3">Họ Và Tên</th>
-          <th class="p-3">Hiện Diện</th><th class="p-3">Có Phép</th><th class="p-3">Ghi Chú</th>
-        </tr></thead>
-        <tbody id="dd-tbody"></tbody>
-      </table>
-    </div>
-
-    <div class="mt-5 flex justify-between items-center flex-wrap gap-3">
-      <div class="flex gap-3 flex-wrap items-center">
-        <span class="font-bold text-slate-700" id="dd-summary"></span>
-        <span id="dd-dirty" class="bg-amber-100 border border-amber-400 text-amber-800 font-bold px-3 py-1.5 rounded-lg" style="display:none">⚠ Đã sửa chưa lưu</span>
-      </div>
-      <div class="flex gap-3 flex-wrap">
-        <button id="dd-refresh" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-5 py-3 rounded-lg">↻ Làm mới</button>
-        <button id="dd-save" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3 rounded-lg">💾 Lưu Điểm Danh</button>
-      </div>
-    </div>
-
-    <!-- Face Scan Modal -->
-    <div id="fs-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" style="display:none">
-      <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
-        <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-          <h3 class="text-lg font-bold text-slate-800">📷 Quét khuôn mặt — Upload ảnh lớp</h3>
-          <button id="fs-close" class="text-slate-500 hover:text-slate-800 text-2xl leading-none px-2">✕</button>
+    <!-- t-dd -->
+    <div id="t-dd" class="bg-white rounded-b-xl shadow-sm p-5" data-pane>
+      <div
+        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+        <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
+          <select id="dd-lop"
+            class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></select>
         </div>
-        <div class="px-6 py-4 overflow-y-auto flex-1">
-          <div id="fs-empty" class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center bg-slate-50">
-            <div class="text-5xl mb-3">📷</div>
-            <p class="font-bold text-slate-700 mb-2">Upload ảnh lớp để AI gợi ý điểm danh</p>
-            <p class="text-sm text-slate-500 mb-4">Có thể upload <b>tối đa 3 ảnh</b> (nhiều góc chụp khác nhau) để AI nhận diện được nhiều học sinh hơn</p>
-            <label class="inline-block bg-rose-600 hover:bg-rose-700 text-white font-bold px-6 py-3 rounded-lg cursor-pointer transition">
-              📁 Chọn nhiều ảnh (tối đa 3)
-              <input type="file" id="fs-file" accept="image/*" multiple class="hidden">
-            </label>
-            <p class="text-xs text-slate-400 mt-3">Hoặc dán URL ảnh Drive (mỗi URL 1 dòng, tối đa 3 ảnh)</p>
-            <textarea id="fs-urls" placeholder="https://drive.google.com/file/d/...&#10;https://drive.google.com/file/d/..." class="mt-3 w-full max-w-md border p-2 rounded-lg text-sm font-mono" rows="3"></textarea>
-            <button id="fs-load-urls" class="mt-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg text-sm">Tải từ URL</button>
+        <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Tuần (Chủ Nhật)</label>
+          <input type="date" id="dd-week"
+            class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold">
+        </div>
+        <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Buổi Sinh Hoạt</label>
+          <select id="dd-buoi"
+            class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></select>
+        </div>
+        <div class="flex items-end">
+          <button id="dd-markall"
+            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-lg whitespace-nowrap">✅
+            Chọn hiện diện tất cả</button>
+        </div>
+        <div class="flex items-end">
+          <button id="dd-facescan" title="Upload ảnh lớp để AI gợi ý điểm danh"
+            class="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2.5 rounded-lg whitespace-nowrap">📷
+            Upload ảnh lớp</button>
+          <span id="fs-status" class="ml-2 text-xs font-bold"></span>
+        </div>
+      </div>
+
+      <div id="dd-holiday-note"></div>
+
+      <div class="tbl-scroll sticky">
+        <table class="w-full text-sm border-collapse min-w-[820px]">
+          <thead>
+            <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+              <th class="p-3">STT</th>
+              <th class="p-3">Số CCCD</th>
+              <th class="p-3">Tên thánh</th>
+              <th class="p-3">Họ Và Tên</th>
+              <th class="p-3">Hiện Diện</th>
+              <th class="p-3">Có Phép</th>
+              <th class="p-3">Ghi Chú</th>
+            </tr>
+          </thead>
+          <tbody id="dd-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="mt-5 flex justify-between items-center flex-wrap gap-3">
+        <div class="flex gap-3 flex-wrap items-center">
+          <span class="font-bold text-slate-700" id="dd-summary"></span>
+          <span id="dd-dirty"
+            class="bg-amber-100 border border-amber-400 text-amber-800 font-bold px-3 py-1.5 rounded-lg"
+            style="display:none">⚠ Đã sửa chưa lưu</span>
+        </div>
+        <div class="flex gap-3 flex-wrap">
+          <button id="dd-refresh"
+            class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-5 py-3 rounded-lg">↻ Làm mới</button>
+          <button id="dd-save" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3 rounded-lg">💾
+            Lưu Điểm Danh</button>
+        </div>
+      </div>
+
+      <!-- Face Scan Modal -->
+      <div id="fs-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+        style="display:none">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+            <h3 class="text-lg font-bold text-slate-800">📷 Quét khuôn mặt — Upload ảnh lớp</h3>
+            <button id="fs-close" class="text-slate-500 hover:text-slate-800 text-2xl leading-none px-2">✕</button>
           </div>
-          <div id="fs-preview-wrap" style="display:none">
-            <!-- Tabs sẽ được render động bằng JS theo số ảnh đã load -->
-            <div id="fs-tabs" class="flex gap-2 mb-3 border-b border-slate-200 overflow-x-auto"></div>
-            <!-- Action row: thêm ảnh + xoá ảnh hiện tại -->
-            <div id="fs-actions" class="flex gap-2 mb-3 flex-wrap">
-              <label id="fs-file-add-label" class="inline-block bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-3 py-1.5 rounded-lg cursor-pointer text-sm">
-                ➕ Thêm ảnh
-                <input type="file" id="fs-file-add" accept="image/*" multiple class="hidden">
+          <div class="px-6 py-4 overflow-y-auto flex-1">
+            <div id="fs-empty" class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center bg-slate-50">
+              <div class="text-5xl mb-3">📷</div>
+              <p class="font-bold text-slate-700 mb-2">Upload ảnh lớp để AI gợi ý điểm danh</p>
+              <p class="text-sm text-slate-500 mb-4">Có thể upload <b>tối đa 3 ảnh</b> (nhiều góc chụp khác nhau) để AI
+                nhận diện được nhiều học sinh hơn</p>
+              <label
+                class="inline-block bg-rose-600 hover:bg-rose-700 text-white font-bold px-6 py-3 rounded-lg cursor-pointer transition">
+                📁 Chọn nhiều ảnh (tối đa 3)
+                <input type="file" id="fs-file" accept="image/*" multiple class="hidden">
               </label>
-              <button id="fs-remove-img" type="button" class="bg-red-100 hover:bg-red-200 text-red-700 font-bold px-3 py-1.5 rounded-lg text-sm">🗑 Xoá ảnh này</button>
+              <p class="text-xs text-slate-400 mt-3">Hoặc dán URL ảnh Drive (mỗi URL 1 dòng, tối đa 3 ảnh)</p>
+              <textarea id="fs-urls"
+                placeholder="https://drive.google.com/file/d/...&#10;https://drive.google.com/file/d/..."
+                class="mt-3 w-full max-w-md border p-2 rounded-lg text-sm font-mono" rows="3"></textarea>
+              <button id="fs-load-urls"
+                class="mt-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg text-sm">Tải từ
+                URL</button>
             </div>
-            <div class="relative inline-block max-w-full">
-              <img id="fs-img" class="max-w-full max-h-[60vh] rounded-lg border border-slate-300" alt="Preview">
-              <!-- Step 1: canvas overlay (absolute trên ảnh) -->
-              <canvas id="fs-canvas" class="absolute top-0 left-0 pointer-events-none"></canvas>
+            <div id="fs-preview-wrap" style="display:none">
+              <!-- Tabs sẽ được render động bằng JS theo số ảnh đã load -->
+              <div id="fs-tabs" class="flex gap-2 mb-3 border-b border-slate-200 overflow-x-auto"></div>
+              <!-- Action row: thêm ảnh + xoá ảnh hiện tại -->
+              <div id="fs-actions" class="flex gap-2 mb-3 flex-wrap">
+                <label id="fs-file-add-label"
+                  class="inline-block bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-3 py-1.5 rounded-lg cursor-pointer text-sm">
+                  ➕ Thêm ảnh
+                  <input type="file" id="fs-file-add" accept="image/*" multiple class="hidden">
+                </label>
+                <button id="fs-remove-img" type="button"
+                  class="bg-red-100 hover:bg-red-200 text-red-700 font-bold px-3 py-1.5 rounded-lg text-sm">🗑 Xoá ảnh
+                  này</button>
+              </div>
+              <div class="relative inline-block max-w-full">
+                <img id="fs-img" class="max-w-full max-h-[60vh] rounded-lg border border-slate-300" alt="Preview">
+                <!-- Step 1: canvas overlay (absolute trên ảnh) -->
+                <canvas id="fs-canvas" class="absolute top-0 left-0 pointer-events-none"></canvas>
+              </div>
+              <div id="fs-stats" class="mt-3 text-sm text-slate-600"></div>
+              <!-- Step 1: results panel (sẽ render cards ở Step 5) -->
+              <div id="fs-results" class="mt-4 space-y-2"></div>
             </div>
-            <div id="fs-stats" class="mt-3 text-sm text-slate-600"></div>
-            <!-- Step 1: results panel (sẽ render cards ở Step 5) -->
-            <div id="fs-results" class="mt-4 space-y-2"></div>
+            <div id="fs-error" class="hidden mt-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+            </div>
           </div>
-          <div id="fs-error" class="hidden mt-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm"></div>
+          <div class="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
+            <button id="fs-cancel"
+              class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-5 py-2.5 rounded-lg">Huỷ</button>
+            <button id="fs-apply"
+              class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-lg" disabled>🤖 Quét &
+              Gợi ý</button>
+          </div>
         </div>
-        <div class="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
-          <button id="fs-cancel" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-5 py-2.5 rounded-lg">Huỷ</button>
-          <button id="fs-apply" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-lg" disabled>🤖 Quét & Gợi ý</button>
+      </div>
+    </div>
+
+    <!-- t-tl -->
+    <div id="t-tl" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+      <div
+        class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
+        <div class="md:col-span-2"><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Số CCCD / Định
+            danh hoặc Họ Tên</label>
+          <input type="text" id="tl-id"
+            class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"
+            placeholder="vd: 079212300101">
+        </div>
+        <div class="flex gap-3">
+          <button id="tl-search"
+            class="bg-blue-900 hover:bg-blue-800 text-white font-bold px-6 py-2.5 rounded-lg flex-1">🔎 Tra cứu</button>
         </div>
       </div>
+      <div id="tl-out"></div>
+    </div>
+
+    <!-- t-tk -->
+    <div id="t-tk" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+      <div
+        class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
+        <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
+          <select id="tk-lop"
+            class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></select>
+        </div>
+        <div class="md:col-span-2 flex items-end gap-3">
+          <button id="tk-excel"
+            class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-6 py-2.5 rounded-lg">⬇ Excel</button>
+          <button id="tk-print" class="bg-slate-700 hover:bg-slate-800 text-white font-bold px-6 py-2.5 rounded-lg">🖨 PDF</button>
+        </div>
+      </div>
+      <div class="tbl-scroll sticky">
+        <table class="w-full text-sm border-collapse min-w-[700px]" id="tk-table">
+          <thead>
+            <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+              <th class="p-3">STT</th>
+              <th class="p-3">Họ Tên</th>
+              <th class="p-3">Lễ Chúa Nhật</th>
+              <th class="p-3">Học Giáo Lý</th>
+              <th class="p-3">Chầu Thánh Thể</th>
+              <th class="p-3">Lễ Thứ Năm</th>
+              <th class="p-3">Tỉ lệ hiện diện</th>
+            </tr>
+          </thead>
+          <tbody id="tk-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <!-- t-toandoan -->
+    <div id="t-toandoan" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+      <div
+        class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Thời gian</label>
+          <select id="td-filter-type"
+            class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold">
+            <option value="year">Cả năm</option>
+            <option value="quarter">Theo Quý</option>
+            <option value="month">Theo Tháng</option>
+          </select>
+        </div>
+
+        <!-- Dropdown Chọn Quý (Ẩn mặc định) -->
+        <div id="td-wrap-quarter" style="display: none;">
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Chọn Quý</label>
+          <select id="td-filter-quarter"
+            class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold">
+            <option value="1">Quý 1 (Tháng 1 - 3)</option>
+            <option value="2">Quý 2 (Tháng 4 - 6)</option>
+            <option value="3">Quý 3 (Tháng 7 - 9)</option>
+            <option value="4">Quý 4 (Tháng 10 - 12)</option>
+          </select>
+        </div>
+
+        <!-- Dropdown Chọn Tháng (Ẩn mặc định) -->
+        <div id="td-wrap-month" style="display: none;">
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Chọn Tháng</label>
+          <select id="td-filter-month"
+            class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold">
+            <option value="1">Tháng 1</option>
+            <option value="2">Tháng 2</option>
+            <option value="3">Tháng 3</option>
+            <option value="4">Tháng 4</option>
+            <option value="5">Tháng 5</option>
+            <option value="6">Tháng 6</option>
+            <option value="7">Tháng 7</option>
+            <option value="8">Tháng 8</option>
+            <option value="9">Tháng 9</option>
+            <option value="10">Tháng 10</option>
+            <option value="11">Tháng 11</option>
+            <option value="12">Tháng 12</option>
+          </select>
+        </div>
+
+        <div class="mt-4 flex gap-3 flex-wrap justify-end">
+          <button id="td-excel" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-6 py-3 rounded-lg">⬇ Excel</button>
+          <button id="td-print" class="bg-slate-700 hover:bg-slate-800 text-white font-bold px-6 py-3 rounded-lg">🖨 PDF</button>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+        <div class="bg-blue-50 border border-blue-200 p-4 rounded-xl text-center">
+          <div class="text-xs font-bold text-blue-900 uppercase">Tổng Thiếu Nhi</div>
+          <div id="td-siso" class="text-2xl font-extrabold text-blue-900 mt-1">—</div>
+        </div>
+        <div class="bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-center">
+          <div class="text-xs font-bold text-emerald-900 uppercase">Hiện Diện Chúa Nhật TB</div>
+          <div id="td-cn" class="text-2xl font-extrabold text-emerald-900 mt-1">—</div>
+        </div>
+        <div class="bg-amber-50 border border-amber-200 p-4 rounded-xl text-center">
+          <div class="text-xs font-bold text-amber-900 uppercase">Hiện Diện Thứ Năm TB</div>
+          <div id="td-t5" class="text-2xl font-extrabold text-amber-900 mt-1">—</div>
+        </div>
+      </div>
+      <div class="tbl-scroll sticky">
+        <table class="w-full text-sm border-collapse min-w-[760px]" id="td-table">
+          <thead>
+            <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+              <th class="p-3">Lớp</th>
+              <th class="p-3">Sĩ Số</th>
+              <th class="p-3">Lễ CN</th>
+              <th class="p-3">Giáo Lý</th>
+              <th class="p-3">Chầu TT</th>
+              <th class="p-3">Lễ T5</th>
+              <th class="p-3">Tỉ lệ</th>
+              <th class="p-3">Xếp Loại</th>
+            </tr>
+          </thead>
+          <tbody id="td-tbody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
-  <!-- t-tl -->
-  <div id="t-tl" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
-      <div class="md:col-span-2"><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Số CCCD / Định danh hoặc Họ Tên</label>
-        <input type="text" id="tl-id" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold" placeholder="vd: 079212300101"></div>
-      <div class="flex gap-3">
-        <button id="tl-search" class="bg-blue-900 hover:bg-blue-800 text-white font-bold px-6 py-2.5 rounded-lg flex-1">🔎 Tra cứu</button>
-      </div>
-    </div>
-    <div id="tl-out"></div>
-  </div>
-
-  <!-- t-tk -->
-  <div id="t-tk" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
-      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
-        <select id="tk-lop" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></select></div>
-      <div class="md:col-span-2 flex items-end gap-3">
-        <button id="tk-excel" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-6 py-2.5 rounded-lg">⬇ Xuất Excel</button>
-        <button id="tk-print" class="bg-slate-700 hover:bg-slate-800 text-white font-bold px-6 py-2.5 rounded-lg">🖨 In</button>
-      </div>
-    </div>
-    <div class="tbl-scroll sticky">
-      <table class="w-full text-sm border-collapse min-w-[700px]" id="tk-table">
-        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
-          <th class="p-3">STT</th><th class="p-3">Họ Tên</th><th class="p-3">Lễ Chúa Nhật</th><th class="p-3">Học Giáo Lý</th><th class="p-3">Chầu Thánh Thể</th><th class="p-3">Lễ Thứ Năm</th><th class="p-3">Tỉ lệ hiện diện</th>
-        </tr></thead>
-        <tbody id="tk-tbody"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- t-toandoan -->
-  <div id="t-toandoan" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
-      <div class="bg-blue-50 border border-blue-200 p-4 rounded-xl text-center">
-        <div class="text-xs font-bold text-blue-900 uppercase">Tổng Thiếu Nhi</div>
-        <div id="td-siso" class="text-2xl font-extrabold text-blue-900 mt-1">—</div>
-      </div>
-      <div class="bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-center">
-        <div class="text-xs font-bold text-emerald-900 uppercase">Hiện Diện Chúa Nhật TB</div>
-        <div id="td-cn" class="text-2xl font-extrabold text-emerald-900 mt-1">—</div>
-      </div>
-      <div class="bg-amber-50 border border-amber-200 p-4 rounded-xl text-center">
-        <div class="text-xs font-bold text-amber-900 uppercase">Hiện Diện Thứ Năm TB</div>
-        <div id="td-t5" class="text-2xl font-extrabold text-amber-900 mt-1">—</div>
-      </div>
-    </div>
-    <div class="tbl-scroll sticky">
-      <table class="w-full text-sm border-collapse min-w-[760px]" id="td-table">
-        <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
-          <th class="p-3">Lớp</th><th class="p-3">Sĩ Số</th><th class="p-3">Lễ CN</th><th class="p-3">Giáo Lý</th><th class="p-3">Chầu TT</th><th class="p-3">Lễ T5</th><th class="p-3">Tỉ lệ</th><th class="p-3">Xếp Loại</th>
-        </tr></thead>
-        <tbody id="td-tbody"></tbody>
-      </table>
-    </div>
-    <div class="mt-4 flex gap-3 flex-wrap">
-      <button id="td-excel" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-6 py-3 rounded-lg">⬇ Xuất Excel</button>
-      <button id="td-print" class="bg-slate-700 hover:bg-slate-800 text-white font-bold px-6 py-3 rounded-lg">🖨 In</button>
-    </div>
-  </div>
-</div>
-
-<script type="module" src="diemdanh.js"></script>
+  <script type="module" src="diemdanh.js"></script>
 </body>
+
 </html>
