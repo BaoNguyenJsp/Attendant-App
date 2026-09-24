@@ -4,7 +4,7 @@
    ===================================================================== */
 'use strict';
 
-const APP_VERSION = 'v1.0.2'; 
+const APP_VERSION = 'v1.0.0'; 
 
 // 2. Check if the user's browser has this exact version
 if (localStorage.getItem('app_version') !== APP_VERSION) {
