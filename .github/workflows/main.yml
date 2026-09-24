@@ -1,9 +1,10 @@
-name: Thursday Wake Up Service
+name: Wake Up Service
 
 on:
   schedule:
-    # Runs every Thursday at 09:15 UTC (which is 4:15 PM in HCMC / Vietnam time)
-    - cron: '15 9 * * 4'
+    - cron: '30 11 * * 4'   # 6:30 PM Vietnam time = 11:30 UTC
+    - cron: '30 11 * * 0'   # 6:30 PM Vietnam time = 11:30 UTC
+    - cron: '30 23 * * 0'   # 6:30 AM Vietnam time = 23:30 UTC previous day
   workflow_dispatch:
 
 jobs:
