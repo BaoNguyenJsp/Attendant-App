@@ -135,35 +135,52 @@ export function defaultWeek() {
   return `${y}-${m}-${date}`; 
 }
 
+/** Nhãn khoảng tuần từ ngày Chúa Nhật (ISO): 'Tuần 20/09/2026 - 26/09/2026'. */
+export function weekLabel(iso) {
+  const d = parseLocal(iso);
+  if (!d) return '';
+  const e = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 6);
+  const p = n => String(n).padStart(2, '0');
+  const f = x => `${p(x.getDate())}/${p(x.getMonth() + 1)}/${x.getFullYear()}`;
+  return `Tuần ${f(d)} - ${f(e)}`;
+}
+
+function refreshWeekLabel(inputEl) {
+  const lid = inputEl.dataset && inputEl.dataset.weekLabel;
+  const lb = lid && document.getElementById(lid);
+  if (lb) lb.textContent = weekLabel(inputEl.value);
+}
+
 export function normSunday(inputEl) {
-  if (!inputEl || !inputEl.value) {
+  if (!inputEl) return;
+
+  if (!inputEl.value) {
     inputEl.value = defaultWeek();
-    return;
-  }
-  
-  const parts = inputEl.value.split('-');
-  let d;
-  if (parts.length === 3) {
-    d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
   } else {
-    d = new Date(inputEl.value);
+    const parts = inputEl.value.split('-');
+    let d;
+    if (parts.length === 3) {
+      d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    } else {
+      d = new Date(inputEl.value);
+    }
+
+    if (isNaN(d.getTime())) {
+      inputEl.value = defaultWeek();
+    } else {
+      const day = d.getDay();
+      if (day !== 0) {
+        d.setDate(d.getDate() + (7 - day));
+      }
+
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const date = String(d.getDate()).padStart(2, '0');
+      inputEl.value = `${y}-${m}-${date}`;
+    }
   }
 
-  if (isNaN(d.getTime())) {
-    inputEl.value = defaultWeek();
-    return;
-  }
-
-  const day = d.getDay();
-  if (day !== 0) {
-    d.setDate(d.getDate() + (7 - day));
-  }
-
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const date = String(d.getDate()).padStart(2, '0');
-  
-  inputEl.value = `${y}-${m}-${date}`;
+  refreshWeekLabel(inputEl);
 }
 
 export const fmt1 = v => v == null || v === '' ? '—' : (Math.round(+v*100)/100).toLocaleString('vi-VN');

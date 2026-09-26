@@ -28,8 +28,8 @@
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
       <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Ngành</label>
         <select id="gvdd-nganh" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
-      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Tuần (Chủ Nhật)</label>
-        <input type="date" id="gvdd-week" class="w-full border p-2.5 rounded-lg font-semibold"></div>
+      <div><label id="gvdd-week-label" for="gvdd-week" class="block text-xs font-bold text-slate-600 uppercase mb-1">Tuần (Chủ Nhật)</label>
+        <input type="date" id="gvdd-week" data-week-label="gvdd-week-label" class="w-full border p-2.5 rounded-lg font-semibold"></div>
       <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Buổi Sinh Hoạt</label>
         <select id="gvdd-session" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
     </div>

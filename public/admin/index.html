@@ -69,8 +69,8 @@
   <!-- t-hol -->
   <div id="t-hol" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
-      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Tuần (Chủ Nhật)</label>
-        <input type="date" id="hol-week" class="w-full border p-2.5 rounded-lg font-semibold"></div>
+      <div><label id="hol-week-label" for="hol-week" class="block text-xs font-bold text-slate-600 uppercase mb-1">Tuần (Chủ Nhật)</label>
+        <input type="date" id="hol-week" data-week-label="hol-week-label" class="w-full border p-2.5 rounded-lg font-semibold"></div>
       <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Buổi</label>
         <select id="hol-session" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
       <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lý do</label>

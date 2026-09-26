@@ -253,7 +253,8 @@ async function renderHolidays() {
   const holWeekInput = $('hol-week');
   if (holWeekInput) {
     if (!holWeekInput.value) holWeekInput.value = toIsoDate(defaultWeek());
-    
+    normSunday(holWeekInput);
+
     // Đảm bảo không cho phép chọn ngày trước AttendanceStartDate
     if (CONFIG.AttendanceStartDate) {
       holWeekInput.setAttribute('min', CONFIG.AttendanceStartDate);
