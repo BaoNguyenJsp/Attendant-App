@@ -1248,9 +1248,12 @@ const ACTIONS = {
   },
 
   getYearOptions: () => {
-    const set = new Set([currentYear()]);
-    ['AcademicYear', 'Scores'].forEach(t => cachedRead(t).forEach(r => { if (r.SchoolYear) set.add(String(r.SchoolYear).trim()); }));
-    return { status: 'ok', years: [...set].sort() };
+    const curStart = parseInt(String(currentYear()).slice(0, 4), 10);
+    const rows = cachedRead('AcademicYear');
+    const start = rows.length ? (parseInt(String(rows[0].SchoolYear).slice(0, 4), 10) || curStart) : curStart;
+    const years = [];
+    for (let b = start; b <= curStart; b++) years.push(b + '-' + (b + 1));
+    return { status: 'ok', years };
   },
 
   getHolidays: b => {

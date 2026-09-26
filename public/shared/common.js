@@ -17,8 +17,6 @@ if (localStorage.getItem('app_version') !== APP_VERSION) {
   console.log('Busted local cache for new version: ' + APP_VERSION);
 }
 
-import { highestType } from './ui.js';
-
 /* ---------- Hằng số ---------- */
 export const SESSIONS = ['Lễ Chúa Nhật', 'Học Giáo Lý', 'Chầu Thánh Thể', 'Lễ Thứ Năm'];
 export const TYPES = {'Lớp':'b-class', 'Ngành':'b-sector', 'Quản trị ngành':'b-exec', 'Quản trị':'b-admin'};
@@ -361,13 +359,6 @@ export function fillSel(selId, items, value) {
   if (value !== undefined) s.value = value;
 }
 
-export function fillYears(selId, curY) {
-  const base = parseInt(String(curY).slice(0, 4), 10) || 2026;
-  const years = [base-1, base, base+1].map(b => b + '-' + (b+1));
-  fillSel(selId, years.map(y => ({v:y})));
-  $(selId).value = curY;
-}
-
 export function exportExcel(tableId, filename) {
   const t = $(tableId); if (!t) return;
   const wb = XLSX.utils.table_to_book(t, {sheet:'Sheet1'});
@@ -391,15 +382,6 @@ export function scopeSectors() { return isAdmin() ? GROUPS_LIST.filter(g => g.Ty
 export function fillClasses(...ids) { const cs = scopeClasses(); ids.forEach(id => fillSel(id, cs.map(c => ({v:c})))); }
 export function fillSessions(...ids) { ids.forEach(id => fillSel(id, SESSIONS.map(s => ({v:s})))); }
 export function fillSectors(...ids) { const ss = scopeSectors(); ids.forEach(id => fillSel(id, ss.map(s => ({v:s})))); }
-export function fillYearSelects(...ids) { ids.forEach(id => fillYears(id, YEAR)); }
-
-function scopeText() {
-  const hi = highestType(cur.groups);
-  if (!cur.scope || !cur.scope.length) return '';
-  if (hi === ADMIN) return 'Toàn đoàn · Xứ đoàn';
-  const cls = cur.scope.join(', ');
-  return hi === BQT ? 'Toàn đoàn ngành: ' + cls : 'Phạm vi: ' + cls;
-}
 
 const NAV = [
   ['/giangday/', '📕 Giảng dạy', ''],
@@ -432,22 +414,8 @@ function shell() {
     '<header class="banner text-white p-6 rounded-xl shadow-lg mb-4">' +
     '<h1 class="text-2xl font-extrabold">' + esc(b.dataset.title || '') + '</h1>' +
     (b.dataset.sub ? '<p class="text-blue-200 text-sm mt-1">' + esc(b.dataset.sub) + '</p>' : '') + '</header>';
-  if (b.dataset.yearbar) {
-    html += '<div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mt-4 flex flex-wrap items-center gap-4">' +
-      '<b class="text-sm">Năm học:</b>' +
-      '<select id="year-sel" style="width:auto" class="border p-2 rounded-lg font-semibold"></select>' +
-      '<span class="text-sm text-slate-600" id="scope-line"></span></div>';
-  }
   html += '<div id="toastbox" style="position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:.6rem 1.1rem;border-radius:8px;font-size:.85rem;display:none;max-width:80%;z-index:200"></div></div>';
   $('shell').innerHTML = html;
-}
-
-export async function setYearSel(v) {
-  const ysel = $('year-sel');
-  if (!isAdmin()) { if (ysel) ysel.value = YEAR; return toast('Chỉ Quản trị được đổi năm học.'); }
-  try { await api('saveConfig', {key: 'CurrentSchoolYear', value: v}); YEAR = v; }
-  catch (e) { if (ysel) ysel.value = YEAR; return toast(e.message); }
-  toast('Đã đổi năm học.');
 }
 
 export async function initCommon() {
@@ -465,10 +433,6 @@ export async function initCommon() {
   if (role === 'exec' && !isExec()) return location.replace('/');
 
   shell();
-  const ysel = $('year-sel');
-  if (ysel) { fillYears('year-sel', YEAR); ysel.addEventListener('change', () => setYearSel(ysel.value)); }
-  const sl = $('scope-line');
-  if (sl) sl.textContent = scopeText();
   document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => tab(b)));
   setVis('.exec-only', isExec());
   setVis('.admin-only', isAdmin());

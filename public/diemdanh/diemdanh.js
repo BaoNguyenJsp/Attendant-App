@@ -358,9 +358,11 @@ async function renderTK() {
   const classStudents = (Array.isArray(TSTUDENTS) ? TSTUDENTS : [])
     .filter(s => s.CurrentClass === cls && s.Status !== 'Nghỉ');
 
+  const keyOf = id => String(id ?? '').replace(/^['0]+/, '').trim();
+
   const mapped = classStudents.map(s => {
     const id = String(s.IdNumber || s.idNumber || '');
-    const sStat = statsObj[id] || {};
+    const sStat = statsObj[keyOf(id)] || {};
 
     return {
       ...s,
