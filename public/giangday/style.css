@@ -104,5 +104,27 @@
 .btn-remove-file { width: 20px; height: 20px; border-radius: 50%; background: #f1f5f9; border: none; color: #64748b; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; line-height: 1; transition: all .15s ease; }
 .btn-remove-file:hover { background: #fee2e2; color: #ef4444; }
 
+/* ===== EXTERNAL LINK ADD ROW ===== */
+.link-or { display: flex; align-items: center; gap: .5rem; color: #94a3b8; font-size: .7rem; font-weight: 700; text-transform: uppercase; margin: .6rem 0 .4rem; }
+.link-or::before, .link-or::after { content: ''; flex: 1; height: 1px; background: #e2e8f0; }
+.link-add-row { display: flex; gap: .4rem; flex-wrap: wrap; }
+.link-add-row input { border: 1px solid #cbd5e1; border-radius: 8px; padding: .4rem .55rem; font-size: .78rem; outline: none; flex: 1; min-width: 200px; }
+.link-add-row input:focus { border-color: #2563eb; }
+.btn-link-add { border: none; border-radius: 8px; padding: .4rem .8rem; font-size: .78rem; font-weight: 700; color: #fff; background: #1e3c72; cursor: pointer; }
+.btn-link-add:hover { background: #122548; }
+
+/* ===== CLICK-TO-EDIT LINK CARD ===== */
+.file-icon-link { text-decoration: none; flex-shrink: 0; }
+.file-icon-link:hover { opacity: .85; }
+.file-name-edit { background: none; border: none; padding: 0; width: 100%; text-align: left; font: inherit; color: #1e293b; cursor: text; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-name-edit:hover { color: #2563eb; text-decoration: underline; }
+.file-card.editing { border-color: #2563eb; }
+.file-card.editing .file-info { display: flex; flex-direction: column; gap: .3rem; }
+.edit-name, .edit-type { border: 1px solid #cbd5e1; border-radius: 6px; padding: .25rem .4rem; font-size: .75rem; outline: none; width: 100%; }
+.edit-name:focus, .edit-type:focus { border-color: #2563eb; }
+.btn-edit-save, .btn-edit-cancel { border: none; border-radius: 6px; width: 22px; height: 22px; cursor: pointer; font-size: .8rem; flex-shrink: 0; }
+.btn-edit-save { background: #16a34a; color: #fff; }
+.btn-edit-cancel { background: #f1f5f9; color: #64748b; }
+
 /* ===== MEDIA QUERIES ===== */
 @media(max-width:960px){ .dashboard-grid { grid-template-columns: 1fr; } }

@@ -15,8 +15,8 @@ const HIST_PAGE = 8; let histPage = 1;
 let isSaving = false;
 
 // Validation Constants
-const MAX_FILE_COUNT = 5;
-const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30MB Limit
+const MAX_FILE_COUNT = 3;
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB Limit
 
 // Global memory cache for current school year teaching records
 let ALL_TEACHING_RECORDS = [];
@@ -26,8 +26,8 @@ const badgeLinks = (url, names, rev) => {
   return String(url || '').split(',').map(x => x.trim()).filter(f => /^https?:\/\//i.test(f))
     .map((f, i) => {
       const name = (ns[i] || '').trim();
-      const ext = String(name).split('.').pop() || '';
-      const label = /^[a-z0-9]{1,6}$/i.test(ext) ? ext.toUpperCase() : (rev ? '✏️' : '📄');
+      const m = name.match(/\.([a-z0-9]{1,6})$/i);
+      const label = m ? m[1].toUpperCase() : 'Url';
       return '<a class="file-badge' + (rev ? ' reviewed' : '') + '" href="' + esc(f) + '" target="_blank" rel="noopener" title="' +
         esc(name || (rev ? 'Bản sửa' : 'Giáo án')) + '">' + label + '</a>';
     }).join(' ');
@@ -168,6 +168,7 @@ const linkList = (urls, names) => {
 function openModal(cls) {
   editingClass = cls;
   editingRec = TEACHING_BY_CLASS[cls] || null;
+  editingLink = null;
   $('gd-modal-title').textContent = 'Giáo án — ' + cls;
   $('gd-teacher').value = editingRec && editingRec.TeacherEmail ? glvLabel(editingRec.TeacherEmail) : glvLabel(cur.email);
   $('gd-lesson').value = editingRec ? (editingRec.LessonContent || '') : '';
@@ -189,10 +190,19 @@ function renderFileCard(name, url, isUploading, size, listKind, groupKind, index
   else if (['ppt', 'pptx'].includes(ext)) { iconClass = 'icon-pptx'; iconLabel = 'P'; }
   else if (ext === 'pdf') { iconClass = 'icon-pdf'; iconLabel = 'P'; }
   else if (ext === 'mp4') { iconClass = 'icon-mp4'; iconLabel = '▶'; }
+  else if (!/\.[a-z0-9]{1,6}$/i.test(name || '')) { iconLabel = '🔗'; }
 
-  const nameHtml = url 
-    ? `<a href="${esc(url)}" target="_blank" rel="noopener" class="file-name hover:underline" title="${esc(name)}">${esc(name)}</a>` 
-    : `<div class="file-name" title="${esc(name)}">${esc(name)}</div>`;
+  const editable = groupKind === 'keep';
+  const nameHtml = editable
+    ? `<button type="button" class="file-name file-name-edit" data-list="${listKind}" data-i="${index}" title="Bấm để đổi tên / chọn loại">${esc(name)}</button>`
+    : url
+      ? `<a href="${esc(url)}" target="_blank" rel="noopener" class="file-name hover:underline" title="${esc(name)}">${esc(name)}</a>`
+      : `<div class="file-name" title="${esc(name)}">${esc(name)}</div>`;
+
+  const iconInner = `<div class="file-icon ${iconClass}">${iconLabel}</div>`;
+  const iconHtml = editable && url
+    ? `<a class="file-icon-link" href="${esc(url)}" target="_blank" rel="noopener" title="Mở link">${iconInner}</a>`
+    : iconInner;
 
   // Status indicator logic:
   // 1. Actively uploading -> Spinner + "Đang upload"
@@ -212,7 +222,7 @@ function renderFileCard(name, url, isUploading, size, listKind, groupKind, index
 
   return `
     <div class="file-card">
-      <div class="file-icon ${iconClass}">${iconLabel}</div>
+      ${iconHtml}
       <div class="file-info">
         ${nameHtml}
         <div class="file-meta">${metaHtml}</div>
@@ -223,18 +233,19 @@ function renderFileCard(name, url, isUploading, size, listKind, groupKind, index
 }
 
 function renderLists() {
-  const planHtml = [
-    ...planKeep.map((k, i) => renderFileCard(k.name, k.url, false, k.size, FPLAN, 'keep', i, false)),
+  const keepCard = (k, i, listKind, rev) => (editingLink && editingLink.list === listKind && editingLink.i === i)
+    ? renderEditCard(k, i, listKind)
+    : renderFileCard(k.name, k.url, false, k.size, listKind, 'keep', i, rev);
+
+  $('plan-list').innerHTML = [
+    ...planKeep.map((k, i) => keepCard(k, i, FPLAN, false)),
     ...planAdd.map((f, i) => renderFileCard(f.name, null, f.isUploading, f.size, FPLAN, 'add', i, false))
   ].join('');
 
-  const revHtml = [
-    ...revKeep.map((k, i) => renderFileCard(k.name, k.url, false, k.size, FTBM, 'keep', i, true)),
+  $('rev-list').innerHTML = [
+    ...revKeep.map((k, i) => keepCard(k, i, FTBM, true)),
     ...revAdd.map((f, i) => renderFileCard(f.name, null, f.isUploading, f.size, FTBM, 'add', i, true))
   ].join('');
-
-  $('plan-list').innerHTML = planHtml;
-  $('rev-list').innerHTML = revHtml;
 }
 
 function processIncomingFiles(files, kind) {
@@ -249,7 +260,7 @@ function processIncomingFiles(files, kind) {
     }
 
     if (f.size > MAX_FILE_SIZE) {
-      toast(`File "${f.name}" vượt quá kích thước tối đa 30MB.`);
+      toast(`File "${f.name}" vượt quá kích thước tối đa ${MAX_FILE_SIZE / 1024 / 1024}MB.`);
       continue;
     }
 
@@ -288,6 +299,93 @@ function attachFileHandlers(input, dropzone, kind) {
       processIncomingFiles([...dt.files], kind);
     }
   });
+}
+
+const LINK_TYPES = ['pdf', 'docx', 'pptx', 'mp4'];
+const extOf = s => { const m = String(s || '').match(/\.([a-z0-9]{1,6})$/i); return m ? m[1].toLowerCase() : ''; };
+const stripExt = s => s.replace(/\.[a-z0-9]{1,6}$/i, '');
+
+const YT_URL = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/i;
+
+// Host/path nhận diện được ngay là file (không xem được header vì CORS chặn).
+const KNOWN_FILES = [
+  [/^https?:\/\/docs\.google\.com\/document\/d\//i, 'Google Tài liệu.docx'],
+  [/^https?:\/\/docs\.google\.com\/spreadsheets\/d\//i, 'Google Trang tính.xlsx'],
+  [/^https?:\/\/docs\.google\.com\/presentation\/d\//i, 'Google Trình chiếu.pptx'],
+  [/^https?:\/\/drive\.google\.com\/drive\/folders\//i, 'Thư mục Drive'],
+  [/^https?:\/\/drive\.google\.com\/file\/d\//i, 'Tài liệu Drive'],
+];
+
+// Tên suy ra từ chính URL — hiện ngay, không gọi mạng. Không đọc được Content-Type
+// / Content-Disposition của link ngoài (CORS), nên đây chỉ là nhận dạng theo mẫu.
+function inferLink(url) {
+  if (YT_URL.test(url)) return { name: 'Video YouTube.mp4' };
+  for (const [re, name] of KNOWN_FILES) if (re.test(url)) return { name };
+  let base = '';
+  try { base = decodeURIComponent(new URL(url).pathname.split('/').filter(Boolean).pop() || ''); } catch { base = ''; }
+  return { name: /\.[a-z0-9]{1,6}$/i.test(base) ? base : 'Tài liệu' };
+}
+
+// YouTube: lấy tiêu đề thật qua oEmbed (cho phép CORS). Link khác giữ tên suy từ
+// URL — người dùng bấm vào tên để tự sửa.
+async function enrichLink(item) {
+  if (!YT_URL.test(item.url)) return;
+  try {
+    const r = await fetch('https://www.youtube.com/oembed?format=json&url=' + encodeURIComponent(item.url));
+    if (!r.ok) return;
+    const j = await r.json();
+    const title = String(j && j.title || '').replace(/[\r\n,]+/g, ' ').trim().slice(0, 120);
+    if (title) { item.name = title + '.mp4'; renderLists(); }
+  } catch { /* giữ tên mặc định */ }
+}
+
+// Chỉnh sửa inline 1 link đã thêm: { list, i }
+let editingLink = null;
+const listId = kind => kind === FPLAN ? 'plan-list' : 'rev-list';
+
+function renderEditCard(item, i, listKind) {
+  const ext = extOf(item.name);
+  const t = LINK_TYPES.includes(ext) ? ext : '';
+  const base = t ? item.name.slice(0, -(t.length + 1)) : item.name;
+  const opt = (v, label) => `<option value="${v}"${t === v ? ' selected' : ''}>${label}</option>`;
+  return `
+    <div class="file-card editing">
+      <div class="file-info">
+        <input class="edit-name" data-list="${listKind}" data-i="${i}" value="${esc(base)}" placeholder="Tên hiển thị">
+        <select class="edit-type" data-list="${listKind}" data-i="${i}">
+          <option value=""${t ? '' : ' selected'}>Khác</option>
+          ${opt('pdf', 'PDF')}${opt('docx', 'Word')}${opt('pptx', 'PowerPoint')}${opt('mp4', 'Video')}
+        </select>
+      </div>
+      <button type="button" class="btn-edit-save" data-list="${listKind}" data-i="${i}" title="Lưu">✓</button>
+      <button type="button" class="btn-edit-cancel" title="Hủy">✕</button>
+    </div>`;
+}
+
+function attachLinkAdder(section, kind) {
+  const row = section && section.querySelector('.link-add-row');
+  if (!row) return;
+  const urlI = row.querySelector('[data-f="url"]');
+
+  const add = () => {
+    const url = urlI.value.trim();
+    if (!/^https?:\/\//i.test(url)) return toast('URL không hợp lệ (phải bắt đầu bằng http).');
+    if (url.includes(',')) return toast('URL không được chứa dấu phẩy.');
+
+    const isPlan = kind === FPLAN;
+    const keep = isPlan ? planKeep : revKeep;
+    const pending = isPlan ? planAdd : revAdd;
+    if (keep.length + pending.length >= MAX_FILE_COUNT) return toast(`Chỉ được phép tối đa ${MAX_FILE_COUNT} file cho phần này.`);
+
+    const item = { url, ...inferLink(url) };
+    keep.push(item);
+    urlI.value = '';
+    renderLists();
+    enrichLink(item);
+  };
+
+  row.querySelector('.btn-link-add').addEventListener('click', add);
+  row.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
 }
 
 async function uploadFileDirect(f, wk, cls, kind) {
@@ -394,13 +492,49 @@ const gdModal = $('gd-modal');
 gdModal.addEventListener('click', e => {
   if (isSaving) return;
   if (e.target === gdModal) return gdModal.classList.remove('open');
+
   const rm = e.target.closest('.chip-rm');
   if (rm) {
     const arr = rm.dataset.grp === 'keep'
       ? (rm.dataset.list === FPLAN ? planKeep : revKeep)
       : (rm.dataset.list === FPLAN ? planAdd : revAdd);
     arr.splice(+rm.dataset.i, 1);
+    if (editingLink && editingLink.list === rm.dataset.list && editingLink.i === +rm.dataset.i) editingLink = null;
+    return renderLists();
+  }
+
+  const nameBtn = e.target.closest('.file-name-edit');
+  if (nameBtn) {
+    editingLink = { list: nameBtn.dataset.list, i: +nameBtn.dataset.i };
     renderLists();
+    const inp = $('plan-list').querySelector('.edit-name') || $('rev-list').querySelector('.edit-name');
+    if (inp) { inp.focus(); inp.select(); }
+    return;
+  }
+
+  const save = e.target.closest('.btn-edit-save');
+  if (save) {
+    const card = save.closest('.file-card');
+    const name = card.querySelector('.edit-name').value.trim();
+    const type = card.querySelector('.edit-type').value;
+    const arr = save.dataset.list === FPLAN ? planKeep : revKeep;
+    const item = arr[+save.dataset.i];
+    const base = name || stripExt(item.name);
+    item.name = type ? stripExt(base) + '.' + type : base;
+    editingLink = null;
+    return renderLists();
+  }
+
+  if (e.target.closest('.btn-edit-cancel')) {
+    editingLink = null;
+    renderLists();
+  }
+});
+
+gdModal.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.classList.contains('edit-name')) {
+    e.preventDefault();
+    e.target.closest('.file-card').querySelector('.btn-edit-save')?.click();
   }
 });
 
@@ -409,6 +543,8 @@ gdModal.querySelector('.btn-save').addEventListener('click', () => saveTeaching(
 
 attachFileHandlers($('f-plan'),$('f-plan')?.closest('.dropzone'), FPLAN);
 attachFileHandlers($('f-rev'),$('f-rev')?.closest('.dropzone'), FTBM);
+attachLinkAdder($('f-plan')?.closest('.upload-section'), FPLAN);
+attachLinkAdder($('f-rev')?.closest('.upload-section'), FTBM);
 
 $('gd-week').addEventListener('change', () => { normSunday($('gd-week')); renderCards(); });$('cards').addEventListener('click', e => { const b = e.target.closest('.btn-update'); if (b) openModal(b.dataset.cls); });
 

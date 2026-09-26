@@ -138,7 +138,7 @@
             placeholder="Đạo đức mới sinh - Chủ đề 1: Không khí"></textarea>
         </div>
 
-        <div class="section-sub">Mỗi file dưới 30MB.</div>
+        <div class="section-sub">Tối đa 3 file, mỗi file dưới 10MB.</div>
 
         <!-- Section: Giáo án / Tài liệu (GLV) -->
         <div class="upload-section bg-blue-50/50 border-blue-100">
@@ -160,6 +160,13 @@
             <span class="text-xs text-slate-500 mr-2">Kéo thả file vào đây hoặc</span>
             <label for="f-plan" class="btn-select-file bg-blue-600 hover:bg-blue-700">Chọn file</label>
             <input type="file" id="f-plan" multiple hidden>
+          </div>
+
+          <!-- Hoặc dán link ngoài thay vì upload file -->
+          <div class="link-or">hoặc dán link ngoài</div>
+          <div class="link-add-row">
+            <input type="url" data-f="url" placeholder="Dán link (Google Drive, YouTube…)">
+            <button type="button" class="btn-link-add">＋ Thêm link</button>
           </div>
 
           <!-- File List Rendering Container -->
@@ -189,6 +196,13 @@
             <span class="text-xs text-slate-500 mr-2">Kéo thả file vào đây hoặc</span>
             <label for="f-rev" class="btn-select-file bg-purple-600 hover:bg-purple-700">Chọn file</label>
             <input type="file" id="f-rev" multiple hidden>
+          </div>
+
+          <!-- Hoặc dán link ngoài thay vì upload file -->
+          <div class="link-or">hoặc dán link ngoài</div>
+          <div class="link-add-row">
+            <input type="url" data-f="url" placeholder="Dán link (Google Drive, YouTube…)">
+            <button type="button" class="btn-link-add">＋ Thêm link</button>
           </div>
 
           <div class="file-cards-grid" id="rev-list"></div>
