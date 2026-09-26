@@ -2,9 +2,8 @@ name: Wake Up Service
 
 on:
   schedule:
-    - cron: '30 11 * * 4'   # 6:30 PM Vietnam time = 11:30 UTC
-    - cron: '30 11 * * 0'   # 6:30 PM Vietnam time = 11:30 UTC
-    - cron: '30 23 * * 0'   # 6:30 AM Vietnam time = 23:30 UTC previous day
+    - cron: '0 5 * * 4'    # 12:00 PM Vietnam time (Thursday) = 05:00 UTC
+    - cron: '0 17 * * 6'   # 12:00 AM Vietnam time (Sunday) = 17:00 UTC (Saturday UTC)
   workflow_dispatch:
 
 jobs:
