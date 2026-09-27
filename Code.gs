@@ -100,6 +100,7 @@ const fmtDate = d => {
 const normId = s => String(s ?? '').replace(/^['0]+/, '').trim();
 const numId = v => { const n = +v; return Number.isFinite(n) ? n : 0; };
 const normText = s => String(s ?? '').normalize('NFC').trim();
+const parseIdList = s => String(s ?? '').split(/[.,\s]+/).map(normId).filter(Boolean);
 
 function parseIso(dateStr) {
   if (!dateStr) return new Date();
@@ -758,18 +759,59 @@ const ACTIONS = {
   },
 
   saveStudent: b => {
-    const old = cachedRead('Students').find(s => normId(s.IdNumber) === normId(b.idNumber));
+    const students = cachedRead('Students');
+    const me = normId(b.idNumber);
+    const byId = id => students.find(s => normId(s.IdNumber) === id);
+    const old = byId(me);
     const row = {
       IdNumber: b.idNumber, SaintName: b.saintName || '', FullName: b.fullName,
-      DateOfBirth: b.dateOfBirth || '', Gender: b.gender || '', 
+      DateOfBirth: b.dateOfBirth || '', Gender: b.gender || '',
       Father: b.father || '', FatherNumber: b.fatherNumber || '',
       Mother: b.mother || '', MotherNumber: b.motherNumber || '',
-      CurrentClass: b.className, EnrollYear: b.enrollYear || currentYear(), Status: b.status || 'Hoạt động', 
+      CurrentClass: b.className, EnrollYear: b.enrollYear || currentYear(), Status: b.status || 'Hoạt động',
       Photo: b.photo !== undefined ? b.photo : (old ? (old.Photo || '') : ''), Note: b.note || '',
-      Siblings: b.siblings || '',
+      Siblings: '',
       ListOrder: b.listOrder !== undefined ? b.listOrder : (old ? (old.ListOrder || '') : '')
     };
-    upsertRows('Students', o => normId(o.IdNumber) === normId(b.idNumber), [row]);
+    const newIds = parseIdList(b.siblings);
+    const dirty = new Set();
+
+    // Make the graph match this edit: drop every existing link to `me`, then add the new ones.
+    students.forEach(s => {
+      const id = normId(s.IdNumber);
+      if (id === me) return;
+      const list = parseIdList(s.Siblings);
+      const had = list.includes(me), want = newIds.includes(id);
+      if (had === want) return;
+      s.Siblings = (want ? list.concat(me) : list.filter(x => x !== me)).join(',');
+      dirty.add(id);
+    });
+
+    // Siblings are one family group, so expand `me` to its whole connected component:
+    // linking to a single sibling links to their siblings too, without naming them all.
+    const comp = new Set([me]);
+    const queue = [me];
+    while (queue.length) {
+      const cur = queue.shift();
+      const list = cur === me ? newIds : (byId(cur) ? parseIdList(byId(cur).Siblings) : []);
+      list.forEach(id => { if ((id === me || byId(id)) && !comp.has(id)) { comp.add(id); queue.push(id); } });
+    }
+
+    // Rewrite every member to list the rest of the group, keeping any unresolvable ids.
+    const members = Array.from(comp).sort();
+    members.forEach(id => {
+      const src = id === me ? (old ? old.Siblings : b.siblings) : (byId(id) || {}).Siblings;
+      const list = members.filter(x => x !== id)
+        .concat(parseIdList(src).filter(x => x !== me && !byId(x)))
+        .join(',');
+      if (id === me) { row.Siblings = list; return; }
+      const s = byId(id);
+      if (s.Siblings !== list) { s.Siblings = list; dirty.add(id); }
+    });
+
+    upsertRows('Students', o => normId(o.IdNumber) === me, [row]);
+    dirty.forEach(id => { const s = byId(id); if (s) upsertRows('Students', o => normId(o.IdNumber) === id, [s]); });
+
     return { status: 'ok', student: row, idNumber: b.idNumber };
   },
 

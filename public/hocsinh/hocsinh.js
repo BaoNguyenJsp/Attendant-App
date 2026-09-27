@@ -455,18 +455,13 @@ async function saveModal() {
   }
 
   try {
-    const r = await api('saveStudent', body);
-    const idx = TSTUDENTS.findIndex(s => s.IdNumber === body.idNumber);
-    if (idx >= 0) {
-      r.student.ListOrder = TSTUDENTS[idx].ListOrder;
-      TSTUDENTS[idx] = r.student;
-    } else {
-      TSTUDENTS.push(r.student);
-    }
-    
-    clearApiCache('getStudents'); 
-  } catch (e) { 
-    return toast(e.message); 
+    await api('saveStudent', body);
+    // Sibling links are two-way, so a save can change other students too — refetch.
+    clearApiCache('getStudents');
+    const fresh = await api('getStudents');
+    setState({ TSTUDENTS: fresh.students || [] });
+  } catch (e) {
+    return toast(e.message);
   }
 
   closeModal();
