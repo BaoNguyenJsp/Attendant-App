@@ -773,41 +773,54 @@ const ACTIONS = {
       Siblings: '',
       ListOrder: b.listOrder !== undefined ? b.listOrder : (old ? (old.ListOrder || '') : '')
     };
-    const newIds = parseIdList(b.siblings);
+    const newIds = parseIdList(b.siblings).filter(id => id !== me);
+    const oldIds = old ? parseIdList(old.Siblings) : [];
+    const added = newIds.filter(id => !oldIds.includes(id));
+    const removed = oldIds.filter(id => id !== me && !newIds.includes(id));
     const dirty = new Set();
 
-    // Make the graph match this edit: drop every existing link to `me`, then add the new ones.
-    students.forEach(s => {
-      const id = normId(s.IdNumber);
-      if (id === me) return;
+    // Kept siblings: make sure they point back at `me`.
+    newIds.forEach(id => {
+      const s = byId(id); if (!s) return;
       const list = parseIdList(s.Siblings);
-      const had = list.includes(me), want = newIds.includes(id);
-      if (had === want) return;
-      s.Siblings = (want ? list.concat(me) : list.filter(x => x !== me)).join(',');
+      if (list.includes(me)) return;
+      s.Siblings = list.concat(me).join(',');
       dirty.add(id);
     });
 
-    // Siblings are one family group, so expand `me` to its whole connected component:
-    // linking to a single sibling links to their siblings too, without naming them all.
-    const comp = new Set([me]);
-    const queue = [me];
-    while (queue.length) {
-      const cur = queue.shift();
-      const list = cur === me ? newIds : (byId(cur) ? parseIdList(byId(cur).Siblings) : []);
-      list.forEach(id => { if ((id === me || byId(id)) && !comp.has(id)) { comp.add(id); queue.push(id); } });
-    }
-
-    // Rewrite every member to list the rest of the group, keeping any unresolvable ids.
-    const members = Array.from(comp).sort();
-    members.forEach(id => {
-      const src = id === me ? (old ? old.Siblings : b.siblings) : (byId(id) || {}).Siblings;
-      const list = members.filter(x => x !== id)
-        .concat(parseIdList(src).filter(x => x !== me && !byId(x)))
-        .join(',');
-      if (id === me) { row.Siblings = list; return; }
-      const s = byId(id);
-      if (s.Siblings !== list) { s.Siblings = list; dirty.add(id); }
+    // Removed siblings: drop only this one link. Never re-derive the group here, otherwise
+    // another shared sibling would just stitch the pair back together.
+    removed.forEach(id => {
+      const s = byId(id); if (!s) return;
+      const list = parseIdList(s.Siblings);
+      if (!list.includes(me)) return;
+      s.Siblings = list.filter(x => x !== me).join(',');
+      dirty.add(id);
     });
+
+    if (added.length) {
+      // Adding a sibling pulls `me` into their whole family: expand to the connected group
+      // and rewrite every member to list the rest, so you never name them all by hand.
+      const comp = new Set([me]);
+      const queue = [me];
+      while (queue.length) {
+        const cur = queue.shift();
+        const list = cur === me ? newIds : (byId(cur) ? parseIdList(byId(cur).Siblings) : []);
+        list.forEach(id => { if ((id === me || byId(id)) && !comp.has(id)) { comp.add(id); queue.push(id); } });
+      }
+      const members = Array.from(comp).sort();
+      members.forEach(id => {
+        const src = id === me ? (old ? old.Siblings : b.siblings) : (byId(id) || {}).Siblings;
+        const list = members.filter(x => x !== id)
+          .concat(parseIdList(src).filter(x => x !== me && !byId(x)))
+          .join(',');
+        if (id === me) { row.Siblings = list; return; }
+        const s = byId(id);
+        if (s.Siblings !== list) { s.Siblings = list; dirty.add(id); }
+      });
+    } else {
+      row.Siblings = newIds.join(',');
+    }
 
     upsertRows('Students', o => normId(o.IdNumber) === me, [row]);
     dirty.forEach(id => { const s = byId(id); if (s) upsertRows('Students', o => normId(o.IdNumber) === id, [s]); });
