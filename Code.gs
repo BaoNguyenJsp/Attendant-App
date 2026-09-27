@@ -8,6 +8,7 @@ const TAB_HEADERS = {
   Users:             ['Email', 'SaintName', 'FullName', 'Status', 'Id', 'SDT'],
   Groups:            ['GroupName', 'Type', 'Scope', 'Description'],
   GroupMembers:      ['GroupName', 'Email'],
+  SiblingGroups:     ['GroupID', 'Siblings'],
   Classes:           ['ClassName', 'Grade'],
   Students:          ['IdNumber', 'SaintName', 'FullName', 'DateOfBirth', 'Gender', 'Father', 'FatherNumber', 'Mother', 'MotherNumber', 'CurrentClass', 'EnrollYear', 'Status', 'Photo', 'Siblings', 'Note', 'ListOrder'],  
   Teaching:          ['SchoolYear', 'WeekOf', 'ClassName', 'TeacherEmail', 'LessonContent', 'LessonPlanUrl', 'LessonPlanNames', 'RevisedPlanUrl', 'RevisedPlanNames', 'UpdatedBy'],
@@ -298,6 +299,49 @@ function upsertRows(name, predicate, newRows) {
     writeCache(name, finalValues.map(r => rowObj(head, r)));
 
   } finally { lock.releaseLock(); }
+}
+
+/* ---------- Sibling groups ----------
+ * SiblingGroups is the source of truth: one row per family, GroupID + comma-separated IdNumbers.
+ * GroupID is a GUID so a removed group's id is never reused.
+ * Students.Siblings stores that GroupID (empty = no siblings). */
+const newGroupId = () => Utilities.getUuid();
+
+function setStudentGroup(ids, groupId) {
+  const students = cachedRead('Students');
+  ids.forEach(id => {
+    const s = students.find(x => normId(x.IdNumber) === id);
+    if (!s || normId(s.Siblings) === normId(groupId)) return;
+    upsertRows('Students', o => normId(o.IdNumber) === id, [Object.assign({}, s, { Siblings: groupId })]);
+  });
+}
+
+// Rebuilds the family group for `me` and returns the GroupID to store on the row ('' = none).
+function syncSiblingGroup(me, newIds) {
+  if (!me) return '';
+  let groups = cachedRead('SiblingGroups');
+  const membersOf = g => parseIdList(g.Siblings);
+  const isGroup = (g, id) => normId(g.GroupID) === normId(id);
+
+  // Removing a sibling drops the whole family group.
+  const mine = groups.find(g => membersOf(g).includes(me));
+  if (mine && membersOf(mine).filter(x => x !== me).some(x => !newIds.includes(x))) {
+    upsertRows('SiblingGroups', o => isGroup(o, mine.GroupID), []);
+    setStudentGroup(membersOf(mine).filter(x => x !== me), '');
+    groups = cachedRead('SiblingGroups');
+  }
+
+  if (!newIds.length) return '';
+
+  // Adding siblings joins the family group that already holds them, or starts a new one.
+  const involved = groups.filter(g => membersOf(g).some(x => newIds.includes(x)));
+  const members = new Set([me, ...newIds]);
+  involved.forEach(g => membersOf(g).forEach(x => members.add(x)));
+  const keep = involved.length ? String(involved[0].GroupID) : newGroupId();
+  involved.slice(1).forEach(g => upsertRows('SiblingGroups', o => isGroup(o, g.GroupID), []));
+  upsertRows('SiblingGroups', o => isGroup(o, keep), [{ GroupID: keep, Siblings: [...members].sort().join(',') }]);
+  setStudentGroup([...members].filter(x => x !== me), keep);
+  return keep;
 }
 
 function saveScoresOptimized(b) {
@@ -723,7 +767,18 @@ const ACTIONS = {
     return { status: 'ok', session: { email: u.email, fullName: u.fullName, groups, classes: cachedRead('Classes').map(c => c.ClassName), catalog: Object.values(byName), year: currentYear() } };
   },
 
-  getStudents: () => ({ status: 'ok', students: cachedRead('Students') }),
+  getStudents: () => {
+    // Students.Siblings holds the GroupID; siblings are the other members of that group.
+    // Anything that is not a known GroupID (e.g. an old comma list) yields no siblings.
+    const groupById = {};
+    cachedRead('SiblingGroups').forEach(g => { groupById[normId(g.GroupID)] = parseIdList(g.Siblings); });
+    const students = cachedRead('Students').map(s => {
+      const id = normId(s.IdNumber);
+      const members = groupById[normId(s.Siblings)];
+      return Object.assign({}, s, { Siblings: members ? members.filter(x => x !== id).join(',') : '' });
+    });
+    return { status: 'ok', students };
+  },
   getClasses:  () => ({ status: 'ok', classes: cachedRead('Classes') }),
   getTeachers: () => {
     if (ensureHeader('Users')) bustCache(['Users']);
@@ -759,10 +814,8 @@ const ACTIONS = {
   },
 
   saveStudent: b => {
-    const students = cachedRead('Students');
     const me = normId(b.idNumber);
-    const byId = id => students.find(s => normId(s.IdNumber) === id);
-    const old = byId(me);
+    const old = cachedRead('Students').find(s => normId(s.IdNumber) === me);
     const row = {
       IdNumber: b.idNumber, SaintName: b.saintName || '', FullName: b.fullName,
       DateOfBirth: b.dateOfBirth || '', Gender: b.gender || '',
@@ -773,58 +826,8 @@ const ACTIONS = {
       Siblings: '',
       ListOrder: b.listOrder !== undefined ? b.listOrder : (old ? (old.ListOrder || '') : '')
     };
-    const newIds = parseIdList(b.siblings).filter(id => id !== me);
-    const oldIds = old ? parseIdList(old.Siblings) : [];
-    const added = newIds.filter(id => !oldIds.includes(id));
-    const removed = oldIds.filter(id => id !== me && !newIds.includes(id));
-    const dirty = new Set();
-
-    // Kept siblings: make sure they point back at `me`.
-    newIds.forEach(id => {
-      const s = byId(id); if (!s) return;
-      const list = parseIdList(s.Siblings);
-      if (list.includes(me)) return;
-      s.Siblings = list.concat(me).join(',');
-      dirty.add(id);
-    });
-
-    // Removed siblings: drop only this one link. Never re-derive the group here, otherwise
-    // another shared sibling would just stitch the pair back together.
-    removed.forEach(id => {
-      const s = byId(id); if (!s) return;
-      const list = parseIdList(s.Siblings);
-      if (!list.includes(me)) return;
-      s.Siblings = list.filter(x => x !== me).join(',');
-      dirty.add(id);
-    });
-
-    if (added.length) {
-      // Adding a sibling pulls `me` into their whole family: expand to the connected group
-      // and rewrite every member to list the rest, so you never name them all by hand.
-      const comp = new Set([me]);
-      const queue = [me];
-      while (queue.length) {
-        const cur = queue.shift();
-        const list = cur === me ? newIds : (byId(cur) ? parseIdList(byId(cur).Siblings) : []);
-        list.forEach(id => { if ((id === me || byId(id)) && !comp.has(id)) { comp.add(id); queue.push(id); } });
-      }
-      const members = Array.from(comp).sort();
-      members.forEach(id => {
-        const src = id === me ? (old ? old.Siblings : b.siblings) : (byId(id) || {}).Siblings;
-        const list = members.filter(x => x !== id)
-          .concat(parseIdList(src).filter(x => x !== me && !byId(x)))
-          .join(',');
-        if (id === me) { row.Siblings = list; return; }
-        const s = byId(id);
-        if (s.Siblings !== list) { s.Siblings = list; dirty.add(id); }
-      });
-    } else {
-      row.Siblings = newIds.join(',');
-    }
-
+    row.Siblings = syncSiblingGroup(me, parseIdList(b.siblings));
     upsertRows('Students', o => normId(o.IdNumber) === me, [row]);
-    dirty.forEach(id => { const s = byId(id); if (s) upsertRows('Students', o => normId(o.IdNumber) === id, [s]); });
-
     return { status: 'ok', student: row, idNumber: b.idNumber };
   },
 
@@ -1470,7 +1473,7 @@ const ACTIONS = {
           Status: s.status || 'Hoạt động',
           Photo: s.photo !== undefined ? s.photo : (oldData ? (oldData.Photo || '') : ''),
           Note: s.note || '',
-          Siblings: s.siblings || '',
+          Siblings: '',
           ListOrder: s.listOrder !== undefined ? s.listOrder : (oldData ? (oldData.ListOrder || '') : '')
         };
         
@@ -1489,7 +1492,14 @@ const ACTIONS = {
         sh.getRange(1, 1, data.length, head.length).setValues(data);
         writeCache('Students', data.slice(1).map(r => rowObj(head, r)));
       }
-      return { status: 'ok', count: rows.length };
     } finally { lock.releaseLock(); }
+
+    // Group siblings after the bulk write — the sync takes its own lock.
+    rows.forEach(s => {
+      const id = normId(s.idNumber);
+      const ids = parseIdList(s.siblings).filter(x => x !== id);
+      if (id && ids.length) setStudentGroup([id], syncSiblingGroup(id, ids));
+    });
+    return { status: 'ok', count: rows.length };
   },
 };
