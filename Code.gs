@@ -102,6 +102,7 @@ const normId = s => String(s ?? '').replace(/^['0]+/, '').trim();
 const numId = v => { const n = +v; return Number.isFinite(n) ? n : 0; };
 const normText = s => String(s ?? '').normalize('NFC').trim();
 const parseIdList = s => String(s ?? '').split(/[.,\s]+/).map(normId).filter(Boolean);
+const rawIdList = s => String(s ?? '').split(/[.,\s]+/).map(t => t.trim()).filter(Boolean);
 
 function parseIso(dateStr) {
   if (!dateStr) return new Date();
@@ -320,8 +321,13 @@ function setStudentGroup(ids, groupId) {
 function syncSiblingGroup(me, newIds) {
   if (!me) return '';
   let groups = cachedRead('SiblingGroups');
-  const membersOf = g => parseIdList(g.Siblings);
+  const membersOf = g => parseIdList(g.Siblings);       // normalized, for matching
   const isGroup = (g, id) => normId(g.GroupID) === normId(id);
+
+  // Store the students' real IdNumber so leading zeros survive; fall back to the normalized id.
+  const rawIds = {};
+  cachedRead('Students').forEach(s => { rawIds[normId(s.IdNumber)] = String(s.IdNumber).trim(); });
+  const writeIds = ids => ids.slice().sort().map(id => rawIds[id] || id).join(',');
 
   // Removing a sibling drops the whole family group.
   const mine = groups.find(g => membersOf(g).includes(me));
@@ -339,7 +345,7 @@ function syncSiblingGroup(me, newIds) {
   involved.forEach(g => membersOf(g).forEach(x => members.add(x)));
   const keep = involved.length ? String(involved[0].GroupID) : newGroupId();
   involved.slice(1).forEach(g => upsertRows('SiblingGroups', o => isGroup(o, g.GroupID), []));
-  upsertRows('SiblingGroups', o => isGroup(o, keep), [{ GroupID: keep, Siblings: [...members].sort().join(',') }]);
+  upsertRows('SiblingGroups', o => isGroup(o, keep), [{ GroupID: keep, Siblings: writeIds([...members]) }]);
   setStudentGroup([...members].filter(x => x !== me), keep);
   return keep;
 }
@@ -771,11 +777,11 @@ const ACTIONS = {
     // Students.Siblings holds the GroupID; siblings are the other members of that group.
     // Anything that is not a known GroupID (e.g. an old comma list) yields no siblings.
     const groupById = {};
-    cachedRead('SiblingGroups').forEach(g => { groupById[normId(g.GroupID)] = parseIdList(g.Siblings); });
+    cachedRead('SiblingGroups').forEach(g => { groupById[normId(g.GroupID)] = rawIdList(g.Siblings); });
     const students = cachedRead('Students').map(s => {
       const id = normId(s.IdNumber);
       const members = groupById[normId(s.Siblings)];
-      return Object.assign({}, s, { Siblings: members ? members.filter(x => x !== id).join(',') : '' });
+      return Object.assign({}, s, { Siblings: members ? members.filter(x => normId(x) !== id).join(',') : '' });
     });
     return { status: 'ok', students };
   },
@@ -826,9 +832,11 @@ const ACTIONS = {
       Siblings: '',
       ListOrder: b.listOrder !== undefined ? b.listOrder : (old ? (old.ListOrder || '') : '')
     };
-    row.Siblings = syncSiblingGroup(me, parseIdList(b.siblings));
+    // Write the row first so the group sync can read this student's real IdNumber.
     upsertRows('Students', o => normId(o.IdNumber) === me, [row]);
-    return { status: 'ok', student: row, idNumber: b.idNumber };
+    const groupId = syncSiblingGroup(me, parseIdList(b.siblings));
+    setStudentGroup([me], groupId);
+    return { status: 'ok', student: Object.assign({}, row, { Siblings: groupId }), idNumber: b.idNumber };
   },
 
   getAttendance: b => {

@@ -16,7 +16,7 @@ upsertRows = (name, pred, newRows) => {
 cachedRead = name => (T[name] || []).map(r => ({ ...r }));
 
 const seed = ids => { T.SiblingGroups = []; T.Students = ids.map(i => ({ IdNumber: i, Siblings: '' })); };
-const save = (id, ids) => setStudentGroup([id], syncSiblingGroup(id, ids));   // mirrors saveStudent
+const save = (id, ids) => { const me = normId(id); setStudentGroup([me], syncSiblingGroup(me, parseIdList(ids.join(',')))); };   // mirrors saveStudent
 const rowSibs = id => (T.Students.find(s => s.IdNumber === id) || {}).Siblings;
 const sibs = id => ACTIONS.getStudents().students.find(s => s.IdNumber === id).Siblings;
 
@@ -48,6 +48,13 @@ assert.equal(T.SiblingGroups.length, 1, 'merged into one group');
 seed(['A', 'B', 'C']); save('C', ['A', 'B']); save('C', []);
 assert.equal(T.SiblingGroups.length, 0);
 assert.equal(sibs('A'), '');
+
+// The group keeps the students' real IdNumbers (leading zeros) while matching stays normalized
+seed(['079219049705', '079317008014']);
+save('079219049705', ['079317008014']);
+assert.equal(T.SiblingGroups[0].Siblings, '079219049705,079317008014', 'leading zeros preserved');
+assert.equal(sibs('079219049705'), '079317008014');
+assert.equal(sibs('079317008014'), '079219049705');
 
 // Old comma-list format is not a valid GroupID -> no siblings
 seed(['A']); T.Students[0].Siblings = '111,222';
