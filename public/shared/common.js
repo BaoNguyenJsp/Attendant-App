@@ -246,8 +246,9 @@ export async function api(action, body, retries = 3, delayMs = 1500) {
         if (attempt < retries) {
           const lt = overlay && overlay.querySelector('.loading-text');
           if (lt) lt.textContent = 'Máy chủ đang bận, vui lòng chờ thêm giây lát';
-          console.warn(`[API] '${action}' failed (Attempt ${attempt}/${retries}). Retrying in ${delayMs}ms... Error: ${e.message}`);
-          await new Promise(resolve => setTimeout(resolve, delayMs));
+          const wait = e.status === 503 ? 3000 * attempt : delayMs;
+          console.warn(`[API] '${action}' failed (Attempt ${attempt}/${retries}). Retrying in ${wait}ms... Error: ${e.message}`);
+          await new Promise(resolve => setTimeout(resolve, wait));
           if (lt) lt.textContent = 'Chúng tôi đang cố gắng kết nối tới máy chủ';
         }
       }
