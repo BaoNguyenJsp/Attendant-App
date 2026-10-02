@@ -53,17 +53,15 @@
         <table class="w-full text-sm border-collapse">
           <thead>
             <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
-              <th class="p-3 w-8"></th>
               <th class="p-3">Số CCCD</th>
               <th class="p-3">Họ Và Tên</th>
               <th class="p-3">Giới Tính</th>
               <th class="p-3">Ngày Sinh</th>
-              <th class="p-3">Cha (SĐT)</th>
-              <th class="p-3">Mẹ (SĐT)</th>
+              <th class="p-3">Cha</th>
+              <th class="p-3">Mẹ</th>
+              <th class="p-3">SĐT</th>
               <th class="p-3">Năm Nhập Học</th>
-              <th class="p-3">Trạng Thái</th>
               <th class="p-3">Anh/Chị/Em</th>
-              <th class="p-3">Ghi Chú</th>
               <th class="p-3 sticky-col">Thao Tác</th>
             </tr>
           </thead>
@@ -101,17 +99,16 @@
               <th class="p-3">Họ Và Tên</th>
               <th class="p-3">Giới Tính</th>
               <th class="p-3">Ngày Sinh</th>
-              <th class="p-3">Cha (SĐT)</th>
-              <th class="p-3">Mẹ (SĐT)</th>
+              <th class="p-3">Cha</th>
+              <th class="p-3">Mẹ</th>
+              <th class="p-3">SĐT</th>
               <th class="p-3">Năm Nhập Học</th>
-              <th class="p-3">Trạng Thái</th>
               <th class="p-3">Anh/Chị/Em</th>
-              <th class="p-3">Ghi Chú</th>
             </tr>
           </thead>
           <tbody id="hs-search-tbody">
             <tr>
-              <td colspan="11" class="p-4 text-center text-slate-400">Nhập thông tin để tìm kiếm...</td>
+              <td colspan="10" class="p-4 text-center text-slate-400">Nhập thông tin để tìm kiếm...</td>
             </tr>
           </tbody>
         </table>
@@ -136,15 +133,9 @@
           </select></div>
         <div class="form-group"><label>Lớp *</label><select id="m-class"></select></div>
         <div class="form-group"><label>Năm Nhập Học</label><input id="m-enroll" type="text"></div>
-        <div class="form-group"><label>Trạng Thái</label><select id="m-status">
-            <option>Hoạt động</option>
-            <option>Tốt nghiệp</option>
-            <option>Ngưng hoạt động</option>
-          </select></div>
         <div class="form-group"><label>Họ Tên Cha</label><input id="m-father" type="text"></div>
-        <div class="form-group"><label>SĐT Cha</label><input id="m-fathernumber" type="text"></div>
         <div class="form-group"><label>Họ Tên Mẹ</label><input id="m-mother" type="text"></div>
-        <div class="form-group"><label>SĐT Mẹ</label><input id="m-mothernumber" type="text"></div>
+        <div class="form-group"><label>Số Điện Thoại</label><input id="m-phonenumber" type="text"></div>
         <div class="form-group full relative">
           <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Anh/Chị/Em</label>
           <div id="m-sibling-tags" class="flex flex-wrap gap-1 mb-2"></div>
@@ -155,7 +146,6 @@
           </div>
           <input type="hidden" id="m-siblings">
         </div>
-        <div class="form-group full"><label>Ghi Chú</label><textarea id="m-note" rows="2"></textarea></div>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn-cancel">Hủy</button>

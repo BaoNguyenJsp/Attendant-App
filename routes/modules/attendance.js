@@ -4,7 +4,7 @@
 module.exports = {
   register(app, ctx) {
     const { proxy, authz } = ctx;
-    app.post('/api/getAttendance', proxy('getAttendance'));
-    app.post('/api/saveAttendance', authz.requireScopeWrite, proxy('saveAttendance'));
+    app.post('/api/getStudentAttendance', proxy('getStudentAttendance'));
+    app.post('/api/saveStudentAttendance', authz.requireScopeWrite, proxy('saveStudentAttendance'));
   },
 };

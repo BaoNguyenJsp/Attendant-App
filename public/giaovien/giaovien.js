@@ -95,7 +95,7 @@ async function renderGVDD() {
 
   const isHolidayWeek = !!cacheData.holidays[wk + '|' + currentSession] || !!cacheData.holidays[wk + '|'];
   const note = $('gvdd-holiday-note');
-  if (isHolidayWeek) { note.style.display = 'block'; note.textContent = '⚠ Tuần này là ngày nghỉ đã khai báo trong mục Quản trị.'; }
+  if (isHolidayWeek) { note.style.display = 'block'; note.textContent = '⚠ Buổi này được nghỉ phép.'; }
   else note.style.display = 'none';
 
   // Instant local filtering
@@ -133,17 +133,22 @@ async function renderGVDD() {
 
     if (sector === XUDOAN) {
       if (adminGroups.has(m.GroupName)) {
-        localRoster[email] = { id: u.Id, email: u.Email, fullName: u.FullName, saintName: u.SaintName, className: '' };
+        localRoster[email] = { email: u.Email, fullName: u.FullName, saintName: u.SaintName, className: '' };
       }
     } else {
       const cls = clsOfGroup[m.GroupName];
       if (cls && sectorClasses.has(cls)) {
-        localRoster[email] = { id: u.Id, email: u.Email, fullName: u.FullName, saintName: u.SaintName, className: cls };
+        localRoster[email] = { email: u.Email, fullName: u.FullName, saintName: u.SaintName, className: cls };
       }
     }
   });
 
-  const rosterArr = Object.values(localRoster).sort((a, b) => (Number(a.id) - Number(b.id)) || a.fullName.localeCompare(b.fullName, 'vi'));
+  const firstName = n => (n || '').trim().split(/\s+/).pop() || '';
+  const rosterArr = Object.values(localRoster).sort((a, b) =>
+    (a.className || '').localeCompare(b.className || '', 'vi') ||
+    firstName(a.fullName).localeCompare(firstName(b.fullName), 'vi') ||
+    (a.fullName || '').localeCompare(b.fullName || '', 'vi')
+  );
 
   weekCache = rosterArr.map(u => {
     const existing = weekRecsMap[u.email.toLowerCase()] || {};
@@ -159,7 +164,7 @@ function syncStateToCache() {
     const uiRec = gvddState.find(s => s.email === u.email);
     if (uiRec) {
       if (!u.sessions) u.sessions = {};
-      u.sessions[currentSession] = { status: uiRec.status, note: uiRec.note };
+      u.sessions[currentSession] = { status: uiRec.status };
     }
   });
 }
@@ -171,13 +176,11 @@ function renderSessionFromCache() {
     let st = (rawSt === 'Hiện diện' || rawSt === 'Có phép' || rawSt === 'Có mặt' || rawSt === 'Vắng có phép') ? (rawSt === 'Có mặt' ? 'Hiện diện' : rawSt === 'Vắng có phép' ? 'Có phép' : rawSt) : '';
     
     return {
-      id: x.id, 
-      email: x.email, 
-      fullName: x.fullName, 
-      saintName: x.saintName || '', 
-      className: x.className || '', 
-      status: st, 
-      note: sData.note || ''
+      email: x.email,
+      fullName: x.fullName,
+      saintName: x.saintName || '',
+      className: x.className || '',
+      status: st
     };
   });
 
@@ -193,22 +196,18 @@ function renderGVDDTable() {
         const present = s.status === 'Hiện diện';
         const permission = s.status === 'Có phép';
         return '<tr data-i="' + i + '">' +
-          '<td class="p-2 border text-center">' + esc(s.id) + '</td>' +
           '<td class="p-2 border text-xs">' + esc(s.email) + '</td>' +
           '<td class="p-2 border font-medium">' + esc([s.saintName, s.fullName].filter(Boolean).join(' ')) + '</td>' +
           '<td class="p-2 border text-center">' + esc(s.className) + '</td>' +
           '<td class="p-2 border text-center"><input type="checkbox" class="attendance-checkbox" data-i="' + i + '" data-which="present" ' + (present ? 'checked' : '') + '></td>' +
           '<td class="p-2 border text-center"><input type="checkbox" class="attendance-checkbox" data-i="' + i + '" data-which="permission" ' + (permission ? 'checked' : '') + '></td>' +
-          '<td class="p-2 border"><input type="text" data-i="' + i + '" class="w-full border p-1.5 rounded text-sm" value="' + esc(s.note) + '" placeholder="Ghi chú…"></td>' +
           '</tr>';
       }).join('')
-    : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có Huynh trưởng trong phạm vi này.</td></tr>';
+    : '<tr><td colspan="5" class="p-4 text-center text-slate-400">Chưa có Huynh trưởng trong phạm vi này.</td></tr>';
   calcGVDD();
 }
 
 function handleTCheck(i, which) {
-  const row = $('gvdd-tbody').querySelector('tr[data-i="' + i + '"]');
-  if (row) gvddState[i].note = row.querySelector('input[type="text"]').value || '';
   const s = gvddState[i];
   
   if (which === 'present') {
@@ -221,11 +220,6 @@ function handleTCheck(i, which) {
   markDirtyGVDD();
 }
 
-function noteTInput(i) {
-  const row = $('gvdd-tbody').querySelector('tr[data-i="' + i + '"]');
-  if (row) gvddState[i].note = row.querySelector('input[type="text"]').value || '';
-  markDirtyGVDD();
-}
 
 function markAllGVDD() {
   gvddState.forEach(s => s.status = 'Hiện diện');
@@ -246,27 +240,34 @@ function calcGVDD() {
 }
 
 async function saveGVDD() {
-  normSunday($('gvdd-week'));
-  syncStateToCache(); 
+  const btn = $('gvdd-save');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    normSunday($('gvdd-week'));
+    syncStateToCache();
 
-  const sector = $('gvdd-nganh').value;
-  const body = {
-    sector: sector, 
-    weekOf: $('gvdd-week').value, 
-    records: weekCache 
-  };
+    const sector = $('gvdd-nganh').value;
+    const body = {
+      sector: sector,
+      weekOf: $('gvdd-week').value,
+      records: weekCache
+    };
 
-  try { await api('saveTeacherAttendance', body); }
-  catch (e) { return toast(e.message); }
+    try { await api('saveTeacherAttendance', body); }
+    catch (e) { return toast(e.message); }
 
-  gvddBase = gvddState.map(x => ({...x}));
-  markDirtyGVDD();
-  toast('Đã lưu điểm danh Huynh trưởng cho cả tuần.');
-  
-  // Reload the cache instantly for THIS sector
-  await loadTeacherAttendance(sector, true);
-  
-  invalidateStatsCache();
+    gvddBase = gvddState.map(x => ({...x}));
+    markDirtyGVDD();
+    toast('Đã lưu điểm danh Huynh trưởng cho cả tuần.');
+
+    // Reload the cache instantly for THIS sector
+    await loadTeacherAttendance(sector, true);
+
+    invalidateStatsCache();
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 /* ---------- Trích lục ---------- */
@@ -287,13 +288,12 @@ async function showTrich(u) {
       '</dl></div>' +
     '<div style="overflow-x:auto"><table class="w-full text-sm border-collapse min-w-[560px]" id="gvtrich-table">' +
       '<thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">' +
-        '<th class="p-3">Tuần</th><th class="p-3">Buổi</th><th class="p-3">Tình trạng</th><th class="p-3">Ghi chú</th></tr></thead>' +
+        '<th class="p-3">Tuần</th><th class="p-3">Buổi</th><th class="p-3">Tình trạng</th></tr></thead>' +
       '<tbody>' + (abs.length ? abs.map(a => '<tr>' +
         '<td class="p-2 border text-center">' + esc(a.WeekOf) + '</td>' +
         '<td class="p-2 border text-center">' + esc(a.Session) + '</td>' +
-        '<td class="p-2 border text-center">' + esc(a.Status || 'Vắng') + '</td>' +
-        '<td class="p-2 border">' + esc(a.Note) + '</td></tr>').join('')
-        : '<tr><td colspan="4" class="p-4 text-center text-slate-400">Không có buổi vắng trong năm học này.</td></tr>') + '</tbody></table></div>';
+        '<td class="p-2 border text-center">' + esc(a.Status || 'Vắng') + '</td></tr>').join('')
+        : '<tr><td colspan="3" class="p-4 text-center text-slate-400">Không có buổi vắng trong năm học này.</td></tr>') + '</tbody></table></div>';
 }
 
 async function renderTrich() {
@@ -321,15 +321,14 @@ async function renderGVTK() {
   $('gvtk-tbody').innerHTML = rows.length
     ? rows.map((x, i) => {
         const sum = TSESS.reduce((a, s) => a + (x.present[s] || 0), 0);
-        return '<tr><td class="p-2 border text-center">' + esc(x.id) + '</td>' +
-          '<td class="p-2 border font-medium">' + esc(x.fullName) + '</td>' +
+        return '<tr><td class="p-2 border font-medium">' + esc(x.fullName) + '</td>' +
           '<td class="p-2 border text-xs">' + esc(x.email) + '</td>' +
           '<td class="p-2 border text-center">' + esc(x.className) + '</td>' +
           '<td class="p-2 border text-center">' + (x.taught || 0) + '</td>' +
           TSESS.map(s => '<td class="p-2 border text-center">' + pct(x.present[s] || 0, max[s] || 0) + '</td>').join('') +
           '<td class="p-2 border text-center font-bold">' + pct(sum, maxTotal) + '</td></tr>';
       }).join('')
-    : '<tr><td colspan="11" class="p-4 text-center text-slate-400">Chưa có Huynh trưởng trong phạm vi này.</td></tr>';
+    : '<tr><td colspan="10" class="p-4 text-center text-slate-400">Chưa có Huynh trưởng trong phạm vi này.</td></tr>';
 }
 
 /* ---------- In Bảng Thống Kê Huynh Trưởng ---------- */
@@ -390,7 +389,6 @@ async function printTeacherStats() {
         <thead>
           <tr>
             <th style="width: 4%">STT</th>
-            <th style="width: 8%">Mã Số</th>
             <th style="width: 18%">Họ và Tên</th>
             <th style="width: 15%">Email</th>
             <th style="width: 8%">Lớp</th>
@@ -408,7 +406,6 @@ async function printTeacherStats() {
     html += `
       <tr>
         <td>${i + 1}</td>
-        <td>${esc(x.id)}</td>
         <td class="left font-medium">${esc(x.fullName)}</td>
         <td class="left">${esc(x.email)}</td>
         <td>${esc(x.className)}</td>
@@ -471,10 +468,6 @@ $('gvdd-save').addEventListener('click', saveGVDD);
 $('gvdd-tbody').addEventListener('change', e => {
   const cb = e.target.closest('.attendance-checkbox');
   if (cb) handleTCheck(+cb.dataset.i, cb.dataset.which);
-});
-$('gvdd-tbody').addEventListener('input', e => {
-  const inp = e.target.closest('input[data-i]');
-  if (inp) noteTInput(+inp.dataset.i);
 });
 
 $('gvtrich-q').addEventListener('keydown', e => { if (e.key === 'Enter') renderTrich(); });

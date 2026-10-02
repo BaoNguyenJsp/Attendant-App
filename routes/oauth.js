@@ -52,7 +52,7 @@ module.exports = function registerOAuth(app, ctx) {
       if (!info.email || info.email_verified === false) return send(res, 401, 'Tài khoản Google không hợp lệ.');
 
       // Đối chiếu Users + nhóm → session (FR-AUTH-02, FR-AUTH-05)
-      const data = await call('getUser', { email: info.email });
+      const data = await call('getSessionUser', { email: info.email });
       const s = data.session;
       const classes = s.classes || [];
       req.session.email = s.email;

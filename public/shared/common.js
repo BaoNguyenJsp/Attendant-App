@@ -4,19 +4,6 @@
    ===================================================================== */
 'use strict';
 
-const APP_VERSION = 'v1.0.1'; 
-
-// 2. Check if the user's browser has this exact version
-if (localStorage.getItem('app_version') !== APP_VERSION) {
-  // If it doesn't match, wipe their localStorage completely
-  localStorage.clear();
-  
-  // Save the new version so it doesn't wipe again on their next refresh
-  localStorage.setItem('app_version', APP_VERSION);
-  
-  console.log('Busted local cache for new version: ' + APP_VERSION);
-}
-
 /* ---------- Hằng số ---------- */
 export const SESSIONS = ['Lễ Chúa Nhật', 'Học Giáo Lý', 'Chầu Thánh Thể', 'Lễ Thứ Năm'];
 export const TYPES = {'Lớp':'b-class', 'Ngành':'b-sector', 'Quản trị ngành':'b-exec', 'Quản trị':'b-admin'};
@@ -217,71 +204,8 @@ if (document.body && document.body.dataset.role) {
   overlay.classList.add('active'); 
 }
 
-/* ---------- Advanced Persistent TTL Cache Engine ---------- */
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 mins
-const CACHEABLE_ACTIONS = new Set(['getConfig', 'getClasses', 'getStudents', 'getTeachers', 'getHolidays']);
-
-const CACHE_INVALIDATIONS = {
-  'saveConfig': ['getConfig'],
-  'startSchoolYear': ['getConfig', 'getClasses', 'getStudents'],
-  'saveClass': ['getClasses'],
-  'saveStudent': ['getStudents'],
-  'saveUser': ['getTeachers'],
-  'saveGroupMembers': ['getTeachers']
-};
-
-export function clearApiCache(action) {
-  if (action) {
-    localStorage.removeItem('api_cache_' + action);
-  } else {
-    CACHEABLE_ACTIONS.forEach(act => localStorage.removeItem('api_cache_' + act));
-  }
-}
-
-function getStoredCache(action) {
-  const cacheKey = 'api_cache_' + action;
-  const itemStr = localStorage.getItem(cacheKey);
-  if (!itemStr) return null;
-
-  try {
-    const item = JSON.parse(itemStr);
-    const now = Date.now();
-    if (item.timestamp && (now - item.timestamp < CACHE_TTL_MS)) {
-      return item.data;
-    }
-  } catch (e) {
-    localStorage.removeItem(cacheKey);
-  }
-  return null;
-}
-
-function setStoredCache(action, data) {
-  const cacheKey = 'api_cache_' + action;
-  try {
-    localStorage.setItem(cacheKey, JSON.stringify({
-      timestamp: Date.now(),
-      data: data
-    }));
-  } catch (e) {
-    console.warn('localStorage quota exceeded');
-  }
-}
-
-/* ---------- Enhanced API Dispatcher with Auto-Retry Interceptor ---------- */
+/* ---------- API Dispatcher with Auto-Retry Interceptor ---------- */
 export async function api(action, body, retries = 3, delayMs = 1500) {
-  const isCacheable = CACHEABLE_ACTIONS.has(action) && (!body || Object.keys(body).length === 0);
-
-  if (isCacheable) {
-    const cachedData = getStoredCache(action);
-    if (cachedData) {
-      return JSON.parse(JSON.stringify(cachedData));
-    }
-  }
-
-  if (CACHE_INVALIDATIONS[action]) {
-    CACHE_INVALIDATIONS[action].forEach(act => clearApiCache(act));
-  }
-
   pendingApi++;
   showLoading();
   
@@ -310,10 +234,6 @@ export async function api(action, body, retries = 3, delayMs = 1500) {
           throw e; 
         }
         
-        if (isCacheable) {
-          setStoredCache(action, j);
-        }
-
         return j;
 
       } catch (e) {
@@ -324,16 +244,23 @@ export async function api(action, body, retries = 3, delayMs = 1500) {
         if (e.status === 401) throw e;
 
         if (attempt < retries) {
+          const lt = overlay && overlay.querySelector('.loading-text');
+          if (lt) lt.textContent = 'Máy chủ đang bận, vui lòng chờ thêm giây lát';
           console.warn(`[API] '${action}' failed (Attempt ${attempt}/${retries}). Retrying in ${delayMs}ms... Error: ${e.message}`);
           await new Promise(resolve => setTimeout(resolve, delayMs));
+          if (lt) lt.textContent = 'Chúng tôi đang cố gắng kết nối tới máy chủ';
         }
       }
     }
 
-    throw lastError || new Error('Mất kết nối máy chủ.'); 
-    
+    throw lastError || new Error('Mất kết nối máy chủ.');
+
   } finally {
     pendingApi--;
+    if (overlay) {
+      const lt = overlay.querySelector('.loading-text');
+      if (lt) lt.textContent = 'Đang tải…';
+    }
     hideLoading();
   }
 }
@@ -345,27 +272,11 @@ const gRank = v => {
 };
 
 export function sortStudents(rows) {
-  const cm = {};
-  TCLASSES.forEach((c, i) => cm[c.ClassName] = i);
-  
   return rows.slice().sort((a, b) => {
-    const clsA = a.CurrentClass || a.className || '';
-    const clsB = b.CurrentClass || b.className || '';
-    const ca = cm[clsA] != null ? cm[clsA] : 1e9;
-    const cb = cm[clsB] != null ? cm[clsB] : 1e9;
-    if (ca !== cb) return ca - cb;
-    
-    const valA = a.ListOrder ?? a.listOrder ?? a.listorder;
-    const valB = b.ListOrder ?? b.listOrder ?? b.listorder;
-    const oa = (valA !== null && valA !== '' && !isNaN(+valA)) ? +valA : 1e9;
-    const ob = (valB !== null && valB !== '' && !isNaN(+valB)) ? +valB : 1e9;
-
-    if (oa !== ob) return oa - ob;
-
     const ga = gRank(a.Gender || a.gender), gb = gRank(b.Gender || b.gender);
     if (ga !== gb) return ga - gb;
-    const nameA = String(a.FullName || a.fullName || '');
-    const nameB = String(b.FullName || b.fullName || '');
+    const nameA = String(a.FirstName || a.firstName || a.FullName || a.fullName || '');
+    const nameB = String(b.FirstName || b.firstName || b.FullName || b.fullName || '');
     return nameA.localeCompare(nameB, 'vi');
   });
 }
@@ -440,7 +351,7 @@ export async function initCommon() {
   if (q.get('login') === 'denied') return location.replace('/login/?login=denied');
   if (q.get('login') === 'error') return location.replace('/login/?login=error&msg=' + encodeURIComponent(q.get('msg') || ''));
   const deny = e => e.status === 401 ? '/login/' : '/login/?login=error&msg=' + encodeURIComponent(e.message);
-  try { cur = (await api('getUser')).session; }
+  try { cur = (await api('getSessionUser')).session; }
   catch (e) { return location.replace(deny(e)); }
   try { YEAR = ((await api('getConfig')).config || {}).CurrentSchoolYear || YEAR; }
   catch (e) { return location.replace(deny(e)); }

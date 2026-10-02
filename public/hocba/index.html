@@ -26,11 +26,9 @@
 
   <!-- t-nhap -->
   <div id="t-nhap" class="bg-white rounded-b-xl shadow-sm p-5" data-pane>
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
       <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
         <select id="nh-lop" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
-      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Năm Học</label>
-        <div id="nh-year" class="w-full border p-2.5 rounded-lg font-semibold bg-slate-200 text-slate-700"></div></div>
       <div class="flex items-end"><label for="nh-file" class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg text-center cursor-pointer">📥 Nhập Bằng File</label>
         <input type="file" id="nh-file" accept=".xlsx,.xls" class="hidden"></div>
       <div class="flex items-end"><button id="save-scores" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-lg">💾 Lưu Điểm</button></div>
@@ -84,9 +82,7 @@
 
   <!-- t-kt -->
   <div id="t-kt" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
-      <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Năm Học</label>
-        <select id="kt-nam" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
       <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
         <select id="kt-lop" class="w-full border p-2.5 rounded-lg font-semibold"></select></div>
       <div class="flex gap-3">

@@ -63,13 +63,7 @@ export const teachersOf = grp => {
 
 export function activeStudents(className) {
   const targetClass = String(className || '').normalize('NFC').trim();
-  const filtered = TSTUDENTS.filter(s => 
-    String(s.CurrentClass || '').normalize('NFC').trim() === targetClass && 
-    String(s.Status || '').toLowerCase().trim() === 'hoạt động'
-  );
-  
-  // Force all pages to use the custom ListOrder sequence
-  return sortStudents(filtered);
+  return sortStudents(TSTUDENTS.filter(s => String(s.CurrentClass || '').normalize('NFC').trim() === targetClass));
 }
 
 const STATUS_MAP = {
@@ -140,7 +134,7 @@ export async function searchCard(id, outId) {
   const out = $(outId);
   if (!id) { out.innerHTML = ''; return; }
   let r;
-  try { r = await api('searchByIdNumber', {idNumber: id}); }
+  try { r = await api('searchStudentById', {idNumber: id}); }
   catch (e) { out.innerHTML = '<div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">' + esc(e.message) + '</div>'; return; }
   const st = (r.students || [])[0];
   if (!st) { out.innerHTML = '<div class="p-4 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-sm">Không tìm thấy thiếu nhi có Số CCCD này.</div>'; return; }

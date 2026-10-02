@@ -3,8 +3,7 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, setState, sortStudents, fillClasses, TSTUDENTS, TCLASSES, year, clearApiCache, fmtDate , toIsoDate } from '../shared/common.js';
-import { badgeStatus } from '../shared/ui.js';
+import { initCommon, $, api, esc, toast, setState, sortStudents, fillClasses, TSTUDENTS, TCLASSES, year, fmtDate, toIsoDate } from '../shared/common.js';
 
 await initCommon();
 
@@ -19,7 +18,6 @@ fillClasses('hs-lop');
 if ($('gallery-lop')) fillClasses('gallery-lop');
 
 let editingId = null;
-let draggingRow = null;
 
 /* ---------- Tab Management ---------- */
 const tabCache = {
@@ -55,7 +53,7 @@ function renderHS() {
   
   $('hs-tbody').innerHTML = sts.length
     ? sts.map((st, i) => {
-        const siblingNames = String(st.Siblings || '').split(/[.,\s]+/)
+        const siblingNames = String(st.SiblingGroup || '').split(/[.,\s]+/)
           .map(id => id.trim())
           .filter(Boolean)
           .map(id => {
@@ -64,21 +62,19 @@ function renderHS() {
           }).join(' ');
 
         return '<tr data-id="' + esc(st.IdNumber) + '" class="hover:bg-slate-50 transition-colors bg-white">' +
-          '<td class="p-2 border text-center text-slate-400 cursor-grab active:cursor-grabbing drag-handle select-none" draggable="true" title="Kéo thả để sắp xếp">☰</td>' +
           '<td class="p-2 border text-center whitespace-nowrap">' + esc(st.IdNumber) + '</td>' +
           '<td class="p-2 border font-medium">' + esc([st.SaintName, st.FullName].filter(Boolean).join(' ')) + '</td>' +
           '<td class="p-2 border text-center">' + esc(st.Gender || '') + '</td>' +
           '<td class="p-2 border text-center whitespace-nowrap">' + esc(fmtDate(st.DateOfBirth) || '') + '</td>' +
-          '<td class="p-2 border text-sm">' + esc(st.Father || '') + (st.FatherNumber ? ' (' + esc(st.FatherNumber) + ')' : '') + '</td>' +
-          '<td class="p-2 border text-sm">' + esc(st.Mother || '') + (st.MotherNumber ? ' (' + esc(st.MotherNumber) + ')' : '') + '</td>' +
+          '<td class="p-2 border text-sm">' + esc(st.Father || '') + '</td>' +
+          '<td class="p-2 border text-sm">' + esc(st.Mother || '') + '</td>' +
+          '<td class="p-2 border text-center">' + esc(st.PhoneNumber || '') + '</td>' +
           '<td class="p-2 border text-center">' + esc(st.EnrollYear || '') + '</td>' +
-          '<td class="p-2 border text-center">' + badgeStatus(st.Status) + '</td>' +
           '<td class="p-2 border text-center">' + siblingNames + '</td>' +
-          '<td class="p-2 border">' + esc(st.Note || '') + '</td>' +
           '<td class="p-2 border text-center sticky-col"><button data-id="' + esc(st.IdNumber) + '" class="edit-student bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs px-4 py-2 rounded-lg whitespace-nowrap">Cập nhật</button></td>' +
           '</tr>';
       }).join('')
-    : '<tr><td colspan="12" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi trong lớp ' + esc(cls) + '.</td></tr>';
+    : '<tr><td colspan="10" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi trong lớp ' + esc(cls) + '.</td></tr>';
 }
 
 /* ---------- Render Search Results ---------- */
@@ -87,7 +83,7 @@ function renderSearch() {
   const tbody = $('hs-search-tbody');
   
   if (!q) {
-    tbody.innerHTML = '<tr><td colspan="11" class="p-4 text-center text-slate-400">Nhập tên, tên thánh hoặc CCCD để tìm kiếm...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="p-4 text-center text-slate-400">Nhập tên, tên thánh hoặc CCCD để tìm kiếm...</td></tr>';
     return;
   }
 
@@ -99,7 +95,7 @@ function renderSearch() {
 
   tbody.innerHTML = hits.length
     ? hits.map((st) => {
-        const siblingNames = String(st.Siblings || '').split(/[.,\s]+/)
+        const siblingNames = String(st.SiblingGroup || '').split(/[.,\s]+/)
           .map(id => id.trim()).filter(Boolean)
           .map(id => {
             const sib = TSTUDENTS.find(s => s.IdNumber === id);
@@ -112,15 +108,14 @@ function renderSearch() {
           <td class="p-2 border font-medium">${esc([st.SaintName, st.FullName].filter(Boolean).join(' '))}</td>
           <td class="p-2 border text-center">${esc(st.Gender || '')}</td>
           <td class="p-2 border text-center whitespace-nowrap">${esc(fmtDate(st.DateOfBirth) || '')}</td>
-          <td class="p-2 border text-sm">${esc(st.Father || '')}${st.FatherNumber ? ' (' + esc(st.FatherNumber) + ')' : ''}</td>
-          <td class="p-2 border text-sm">${esc(st.Mother || '')}${st.MotherNumber ? ' (' + esc(st.MotherNumber) + ')' : ''}</td>
+          <td class="p-2 border text-sm">${esc(st.Father || '')}</td>
+          <td class="p-2 border text-sm">${esc(st.Mother || '')}</td>
+          <td class="p-2 border text-center">${esc(st.PhoneNumber || '')}</td>
           <td class="p-2 border text-center">${esc(st.EnrollYear || '')}</td>
-          <td class="p-2 border text-center">${badgeStatus(st.Status)}</td>
           <td class="p-2 border text-center">${siblingNames}</td>
-          <td class="p-2 border">${esc(st.Note || '')}</td>
         </tr>`;
       }).join('')
-    : '<tr><td colspan="11" class="p-4 text-center text-slate-400">Không tìm thấy Thiếu nhi nào phù hợp.</td></tr>';
+    : '<tr><td colspan="10" class="p-4 text-center text-slate-400">Không tìm thấy Thiếu nhi nào phù hợp.</td></tr>';
 }
 
 /* ---------- Thư Viện Ảnh (Gallery) ---------- */
@@ -128,7 +123,7 @@ async function renderGallery() {
   const cls = $('gallery-lop') ? $('gallery-lop').value :$('hs-lop').value;
   if (!cls) return;
 
-  const classStudents = sortStudents(TSTUDENTS.filter(s => s.CurrentClass === cls && String(s.Status).toLowerCase() !== 'nghỉ'));
+  const classStudents = sortStudents(TSTUDENTS.filter(s => s.CurrentClass === cls));
   const grid = $('gallery-grid');
   if (!grid) return;
 
@@ -182,41 +177,52 @@ window.triggerPhotoUpload = function(idNumber) {
   inp.click();
 };
 
+// Center-crop to square → scale to 200×200 → JPEG 85% for face-scan storage (~15-30KB).
+function resizePhoto(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const side = Math.min(img.width, img.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = 200; canvas.height = 200;
+      canvas.getContext('2d').drawImage(
+        img,
+        (img.width - side) / 2, (img.height - side) / 2, side, side,
+        0, 0, 200, 200
+      );
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
 async function handlePhotoUpload(idNumber, file) {
   if (!file) return;
   const st = TSTUDENTS.find(s => s.IdNumber === idNumber);
   if (!st) return;
 
   toast('⏳ Đang tải ảnh lên (có thể mất vài giây)...');
-  
-  const saint = (st.SaintName || '').trim();
-  const full = (st.FullName || '').trim();
-  const ext = file.name.split('.').pop();
-  const filename = `${idNumber}_${saint ? saint + ' ' : ''}${full}.${ext}`.trim();
 
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    const base64 = e.target.result.split(',')[1];
-    try {
-      const res = await api('uploadFile', {
-        isPhoto: true,
-        filename: filename,
-        mimeType: file.type,
-        base64: base64
-      });
-      
-      if (res.status === 'error') return toast(res.message);
-      
-      st.Photo = res.url;
-      await savePhotoData(st);
-      toast('✅ Đã tải ảnh lên thành công.');
-      
-      refreshActiveTabs();
-      if ($('hs-photo-preview'))$('hs-photo-preview').src = res.url;
-      if ($('hs-photo-remove'))$('hs-photo-remove').style.display = 'block';
-    } catch (err) { toast('Lỗi: ' + err.message); }
-  };
-  reader.readAsDataURL(file);
+  try {
+    const dataUrl = await resizePhoto(file);
+    const base64 = dataUrl.split(',')[1];
+    const saint = (st.SaintName || '').trim();
+    const full = (st.FullName || '').trim();
+    const filename = `${idNumber}_${saint ? saint + ' ' : ''}${full}.jpg`.trim();
+
+    const res = await api('uploadFile', { isPhoto: true, filename, mimeType: 'image/jpeg', base64 });
+    if (res.status === 'error') return toast(res.message);
+
+    st.Photo = res.url;
+    await savePhotoData(st);
+    toast('✅ Đã tải ảnh lên thành công.');
+    refreshActiveTabs();
+    if ($('hs-photo-preview')) $('hs-photo-preview').src = res.url;
+    if ($('hs-photo-remove')) $('hs-photo-remove').style.display = 'block';
+  } catch (err) { toast('Lỗi: ' + err.message); }
 }
 
 window.removePhoto = async function(idNumber) {
@@ -238,13 +244,8 @@ window.removePhoto = async function(idNumber) {
 };
 
 async function savePhotoData(st) {
-  await api('saveStudent', {
-     idNumber: st.IdNumber, saintName: st.SaintName, fullName: st.FullName,
-     dateOfBirth: st.DateOfBirth, gender: st.Gender, father: st.Father, fatherNumber: st.FatherNumber,
-     mother: st.Mother, motherNumber: st.MotherNumber, className: st.CurrentClass, enrollYear: st.EnrollYear, 
-     status: st.Status, note: st.Note, siblings: st.Siblings, listOrder: st.ListOrder, photo: st.Photo
-  });
-  if (typeof clearApiCache === 'function') clearApiCache('getStudents');
+  await api('saveStudentPhoto', { idNumber: st.IdNumber, photo: st.Photo });
+  setState({ TSTUDENTS: TSTUDENTS.map(s => s.IdNumber === st.IdNumber ? { ...s, Photo: st.Photo } : s) });
 }
 
 function refreshActiveTabs() {
@@ -252,66 +253,6 @@ function refreshActiveTabs() {
   renderGallery();
 }
 
-/* ---------- Isolated Drag & Drop Reordering ---------- */
-const tbody = $('hs-tbody');
-
-tbody.addEventListener('dragstart', e => {
-  const handle = e.target.closest('.drag-handle');
-  if (!handle) {
-    e.preventDefault();
-    return;
-  }
-  const tr = handle.closest('tr');
-  if (!tr) return;
-  
-  draggingRow = tr;
-  e.dataTransfer.effectAllowed = 'move';
-  e.dataTransfer.setData('text/plain', tr.dataset.id);
-  setTimeout(() => tr.classList.add('opacity-50', 'bg-blue-50'), 0);
-});
-
-tbody.addEventListener('dragover', e => {
-  e.preventDefault(); 
-  const tr = e.target.closest('tr');
-  if (!tr || tr === draggingRow) return;
-  
-  const bounding = tr.getBoundingClientRect();
-  const offset = bounding.y + (bounding.height / 2);
-  if (e.clientY - offset > 0) {
-    tr.after(draggingRow);
-  } else {
-    tr.before(draggingRow);
-  }
-});
-
-tbody.addEventListener('dragend', async () => {
-  if (draggingRow) {
-    draggingRow.classList.remove('opacity-50', 'bg-blue-50');
-    draggingRow = null;
-    await saveNewOrder();
-  }
-});
-
-async function saveNewOrder() {
-  const rows = Array.from(tbody.querySelectorAll('tr[data-id]'));
-  if (!rows.length) return;
-  
-  const orderedIds = rows.map(tr => tr.dataset.id);
-  
-  orderedIds.forEach((id, idx) => {
-    const s = TSTUDENTS.find(x => x.IdNumber === id);
-    if (s) s.ListOrder = idx + 1;
-  });
-  
-  toast('Đang lưu thứ tự...');
-  try {
-    await api('saveStudentOrder', { orderedIds });
-    clearApiCache('getStudents'); 
-    toast('Đã cập nhật thứ tự lớp.');
-  } catch (e) {
-    toast('Lỗi khi lưu thứ tự: ' + e.message);
-  }
-}
 
 /* ---------- Sibling Search UI ---------- */
 let selectedSiblings = [];
@@ -401,13 +342,10 @@ function openModal(id) {
   $('m-dob').value = st ? toIsoDate(st.DateOfBirth) : '';
   $('m-gender').value = st ? (st.Gender || '') : '';
   $('m-enroll').value = st ? (st.EnrollYear || '') : year();
-  $('m-status').value = st ? (st.Status || 'Hoạt động') : 'Hoạt động';
   $('m-father').value = st ? (st.Father || '') : '';
-  if ($('m-fathernumber'))$('m-fathernumber').value = st ? (st.FatherNumber || '') : '';
   $('m-mother').value = st ? (st.Mother || '') : '';
-  if ($('m-mothernumber'))$('m-mothernumber').value = st ? (st.MotherNumber || '') : '';
-  $('m-siblings').value = st ? (st.Siblings || '') : ''; 
-  $('m-note').value = st ? (st.Note || '') : '';
+  if ($('m-phonenumber')) $('m-phonenumber').value = st ? (st.PhoneNumber || '') : '';
+  $('m-siblings').value = st ? (st.SiblingGroup || '') : '';
 
   if ($('hs-photo-preview')) {
     const photoUrl = st ? (st.Photo || '') : '';
@@ -415,7 +353,7 @@ function openModal(id) {
     if ($('hs-photo-remove'))$('hs-photo-remove').style.display = photoUrl ? 'block' : 'none';
   }
 
-  selectedSiblings = st && st.Siblings ? String(st.Siblings).split(/[.,\s]+/).map(s => s.trim()).filter(Boolean) : [];
+  selectedSiblings = st && st.SiblingGroup ? String(st.SiblingGroup).split(/[.,\s]+/).map(s => s.trim()).filter(Boolean) : [];
   renderSiblingTags();
   if ($('m-sibling-search'))$('m-sibling-search').value = '';
 
@@ -433,6 +371,7 @@ function closeModal() {
 }
 
 async function saveModal() {
+  const siblings = $('m-siblings').value.split(/[.,\s]+/).filter(Boolean).sort().join(',');
   const body = {
     idNumber: $('m-cccd').value.trim(),
     fullName: $('m-fullname').value.trim(),
@@ -441,13 +380,9 @@ async function saveModal() {
     gender: $('m-gender').value,
     className: $('m-class').value,
     enrollYear: $('m-enroll').value.trim(),
-    status: $('m-status').value,
     father: $('m-father').value.trim(),
-    fatherNumber: $('m-fathernumber') ?$('m-fathernumber').value.trim() : '',
     mother: $('m-mother').value.trim(),
-    motherNumber: $('m-mothernumber') ?$('m-mothernumber').value.trim() : '',
-    siblings: $('m-siblings').value.split(/[.,\s]+/).filter(Boolean).join(','),
-    note: $('m-note').value.trim(),
+    phoneNumber: $('m-phonenumber') ? $('m-phonenumber').value.trim() : '',
   };
 
   if (!body.idNumber || !body.fullName || !body.className) {
@@ -455,20 +390,26 @@ async function saveModal() {
   }
 
   try {
-    await api('saveStudent', body);
-    // Sibling links are two-way, so a save can change other students too — refetch.
-    clearApiCache('getStudents');
-    const fresh = await api('getStudents');
-    setState({ TSTUDENTS: fresh.students || [] });
+    const prevSt = TSTUDENTS.find(s => s.IdNumber === body.idNumber);
+    const prevSiblings = (prevSt?.SiblingGroup || '').split(',').filter(Boolean).sort().join(',');
+    body.photo = prevSt?.Photo || '';
+    if (siblings !== prevSiblings) body.siblings = siblings;
+
+    const r = await api('saveStudentFull', body);
+    const student = r.student;
+    let list = TSTUDENTS.map(s => s.IdNumber === student.IdNumber ? student : s);
+    if (!list.find(s => s.IdNumber === student.IdNumber)) list.push(student);
+    if (r.affected) list = list.map(s => r.affected.find(a => a.IdNumber === s.IdNumber) || s);
+    setState({ TSTUDENTS: list });
   } catch (e) {
     return toast(e.message);
   }
 
   closeModal();
   toast('Đã lưu.');
-  
+
   refreshActiveTabs();
-  if ($('hs-search-input') &&$('hs-search-input').value) renderSearch(); 
+  if ($('hs-search-input') && $('hs-search-input').value) renderSearch();
 }
 
 /* ---------- Excel Import & Template ---------- */
@@ -476,19 +417,18 @@ function downloadTemplate() {
   const cls = $('hs-lop').value;
   const sortedSts = sortStudents(TSTUDENTS.filter(s => s.CurrentClass === cls));
   
-  const aoa = [['Số CCCD', 'Tên Thánh', 'Họ Và Tên', 'Giới Tính', 'Ngày Sinh', 'Lớp', 'Năm Nhập Học', 'Trạng Thái', 'Cha', 'SĐT Cha', 'Mẹ', 'SĐT Mẹ', 'Anh/Chị/Em', 'Ghi Chú']];
-  
+  const aoa = [['Số CCCD', 'Tên Thánh', 'Họ Và Tên', 'Giới Tính', 'Ngày Sinh', 'Lớp', 'Năm Nhập Học', 'Cha', 'Mẹ', 'Số Điện Thoại']];
+
   if (sortedSts.length) {
     sortedSts.forEach(s => {
       aoa.push([
-        s.IdNumber, s.SaintName || '', s.FullName, s.Gender || '', s.DateOfBirth || '', 
-        s.CurrentClass || cls, s.EnrollYear || '', s.Status || 'Hoạt động', 
-        s.Father || '', s.FatherNumber || '', s.Mother || '', s.MotherNumber || '', 
-        s.Siblings || '', s.Note || ''
+        s.IdNumber, s.SaintName || '', s.FullName, s.Gender || '', s.DateOfBirth || '',
+        s.CurrentClass || cls, s.EnrollYear || '',
+        s.Father || '', s.Mother || '', s.PhoneNumber || ''
       ]);
     });
   } else {
-    aoa.push(['', '', '', '', '', cls, year(), 'Hoạt động', '', '', '', '', '', '']);
+    aoa.push(['', '', '', '', '', cls, year(), '', '', '']);
   }
   
   const wb = XLSX.utils.book_new();
@@ -527,13 +467,9 @@ async function importStudents() {
       dateOfBirth: String(r['Ngày Sinh'] || '').trim(),
       className: String(r['Lớp'] || $('hs-lop').value).trim(),
       enrollYear: String(r['Năm Nhập Học'] || '').trim(),
-      status: String(r['Trạng Thái'] || 'Hoạt động').trim(),
       father: String(r['Cha'] || '').trim(),
-      fatherNumber: String(r['SĐT Cha'] || '').trim(),
       mother: String(r['Mẹ'] || '').trim(),
-      motherNumber: String(r['SĐT Mẹ'] || '').trim(),
-      siblings: String(r['Anh/Chị/Em'] || '').trim(),
-      note: String(r['Ghi Chú'] || '').trim()
+      phoneNumber: String(r['Số Điện Thoại'] || r['SĐT'] || '').trim(),
     });
   });
   
@@ -545,7 +481,6 @@ async function importStudents() {
     const res = await api('importStudents', { students });
     toast('Đã lưu ' + res.count + ' Thiếu nhi.');
     
-    clearApiCache('getStudents');
     const st = await api('getStudents');
     setState({TSTUDENTS: st.students || []});
     
@@ -570,7 +505,7 @@ if ($('gallery-lop')) {$('gallery-lop').addEventListener('change', () => {
 
 $('add-student').addEventListener('click', () => openModal());
 
-tbody.addEventListener('click', e => {
+$('hs-tbody').addEventListener('click', e => {
   const btn = e.target.closest('.edit-student');
   if (btn) openModal(btn.dataset.id);
 });

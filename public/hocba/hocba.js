@@ -48,7 +48,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 const [st, cl, sc] = await Promise.all([
   api('getStudents'), 
   api('getClasses'),
-  api('getScores', {schoolYear: year()})
+  api('getStudentScores', {})
 ]);
 
 setState({TSTUDENTS: st.students || [], TCLASSES: cl.classes || [], TSCORES: sc.scores || []});
@@ -56,17 +56,15 @@ fillClasses('nh-lop');
 const allClassItems = TCLASSES.map(c => ({ v: c.ClassName || c.className }));
 if ($('th-lop')) fillSel('th-lop', allClassItems);
 if ($('kt-lop')) fillSel('kt-lop', allClassItems);
-if ($('nh-year'))$('nh-year').textContent = year();
 
 let years = [year()];
-try { 
-  const r = await api('getYearOptions'); 
-  if (r.years && r.years.length) years = r.years; 
+try {
+  const r = await api('getYearOptions');
+  if (r.years && r.years.length) years = r.years;
 } catch (e) {}
 
 if (!years.includes(year())) years = [year(), ...years];
 fillSel('th-nam', years.map(y => ({v:y})), year());
-fillSel('kt-nam', years.map(y => ({v:y})), year());
 
 /* ---------- Student Sorting Helper ---------- */
 function sortSummaryRecords(records) {
@@ -81,7 +79,7 @@ function sortSummaryRecords(records) {
       saintName: x.saintName || x.SaintName || baseSt.SaintName,
       CurrentClass: x.className || x.ClassName || baseSt.CurrentClass || '',
       IdNumber: id,
-      ListOrder: x.ListOrder ?? x.listOrder ?? baseSt.ListOrder,
+      FirstName: baseSt.FirstName || baseSt.firstName,
       Gender: baseSt.Gender || baseSt.gender,
       FullName: x.fullName || x.FullName || baseSt.FullName,
       SaintName: x.saintName || x.SaintName || baseSt.SaintName
@@ -98,7 +96,7 @@ async function renderNhap() {
   if (!cls) return;
   const sts = sortStudents(activeStudents(cls));
   const scoreMap = {};
-  TSCORES.filter(s => s.SchoolYear === year() && s.ClassName === cls).forEach(s => scoreMap[s.IdNumber] = s);
+  TSCORES.filter(s => s.ClassName === cls).forEach(s => scoreMap[s.IdNumber] = s);
   const tb = $('nh-tbody');
   if (!tb) return;
   
@@ -108,44 +106,50 @@ async function renderNhap() {
         return '<tr><td class="p-2 border text-center">' + (i + 1) + '</td>' +
           '<td class="p-2 border text-center">' + esc(st.IdNumber) + '</td>' +
           '<td class="p-2 border">' + esc([st.SaintName, st.FullName].filter(Boolean).join(' ')) + '</td>' +
-          SCORE_FIELDS.map(f => '<td class="p-2 border text-center"><input type="number" step="0.1" min="0" max="10" data-f="' + f + '" class="score-input w-16 text-center border p-1.5 rounded" value="' + (sc[f] == null ? '' : esc(sc[f])) + '"></td>').join('') +
+          SCORE_FIELDS.map(f => '<td class="p-2 border text-center"><input type="number" step="0.5" min="0" max="10" data-f="' + f + '" class="score-input w-16 text-center border p-1.5 rounded" value="' + (sc[f] == null ? '' : esc(sc[f])) + '"></td>').join('') +
           '</tr>';
       }).join('')
     : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi trong lớp ' + esc(cls) + '.</td></tr>';
 }
 
 async function saveScores() {
-  const cls = $('nh-lop').value;
-  const students = [];
-  $('nh-tbody').querySelectorAll('tr').forEach(tr => {
-    const id = tr.children[1].textContent.trim();
-    if (!id) return;
-    const o = {idNumber: id};
-    tr.querySelectorAll('[data-f]').forEach(inp => { o[FMAP[inp.dataset.f]] = inp.value === '' ? '' : +inp.value; });
-    students.push(o);
-  });
-  
-  if (!students.length) return;
-  
+  const btn = $('save-scores');
+  if (btn.disabled) return;
+  btn.disabled = true;
   try {
-    const r = await api('saveScores', {schoolYear: year(), className: cls, students});
-    
-    const updatedScores = (r.students || []).map(s => ({
-      SchoolYear: year(),
-      ClassName: cls,
-      IdNumber: s.idNumber,
-      Quiz15_S1: s.quiz15s1,
-      Exam_S1: s.exams1,
-      Quiz15_S2: s.quiz15s2,
-      Exam_S2: s.exams2
-    }));
-    
-    setState({TSCORES: TSCORES.filter(s => !(s.SchoolYear === year() && s.ClassName === cls)).concat(updatedScores)});
-  } catch (e) { return toast(e.message); }
-  
-  toast('Đã lưu điểm.');
-  invalidateSummaryCache();
-  await renderNhap();
+    const cls = $('nh-lop').value;
+    const students = [];
+    $('nh-tbody').querySelectorAll('tr').forEach(tr => {
+      const id = tr.children[1].textContent.trim();
+      if (!id) return;
+      const o = {idNumber: id};
+      tr.querySelectorAll('[data-f]').forEach(inp => { o[FMAP[inp.dataset.f]] = inp.value === '' ? '' : +inp.value; });
+      students.push(o);
+    });
+
+    if (!students.length) return;
+
+    try {
+      const r = await api('saveStudentScores', {className: cls, students});
+
+      const updatedScores = (r.students || []).map(s => ({
+        ClassName: cls,
+        IdNumber: s.idNumber,
+        Quiz15_S1: s.quiz15s1,
+        Exam_S1: s.exams1,
+        Quiz15_S2: s.quiz15s2,
+        Exam_S2: s.exams2
+      }));
+
+      setState({TSCORES: TSCORES.filter(s => s.ClassName !== cls).concat(updatedScores)});
+    } catch (e) { return toast(e.message); }
+
+    toast('Đã lưu điểm.');
+    invalidateSummaryCache();
+    await renderNhap();
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 /* ---------- Excel Import ---------- */
@@ -154,7 +158,7 @@ function downloadTemplate() {
   const sortedSts = sortStudents(activeStudents(cls));
   const scoreMap = {};
   
-  TSCORES.filter(s => s.SchoolYear === year() && s.ClassName === cls).forEach(s => scoreMap[s.IdNumber] = s);
+  TSCORES.filter(s => s.ClassName === cls).forEach(s => scoreMap[s.IdNumber] = s);
   
   const aoa = [['Số CCCD', 'Tên thánh', 'Họ và tên', "Điểm 15' HK1", 'Kiểm tra HK1', "Điểm 15' HK2", 'Kiểm tra HK2']];
   sortedSts.forEach(s => {
@@ -235,7 +239,7 @@ async function renderHBT() {
     const resultsHtml = await Promise.all(hits.map(async (st) => {
       let r;
       try {
-        r = await api('getAcademicRecord', { idNumber: st.IdNumber });
+        r = await api('getStudentRecord', { idNumber: st.IdNumber });
       } catch (e) {
         return `<div class="p-4 text-red-500">Lỗi tải dữ liệu cho ${esc(st.FullName)}: ${esc(e.message)}</div>`;
       }
@@ -257,10 +261,9 @@ async function renderHBT() {
           <div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm mb-4 flex justify-between items-start flex-wrap gap-4">
             <div>
               <h3 class="text-lg font-bold text-blue-900 mb-2">${displayFullName}</h3>
-              <div class="text-sm text-slate-700 grid grid-cols-2 md:grid-cols-4 gap-2">
+              <div class="text-sm text-slate-700 grid grid-cols-2 md:grid-cols-3 gap-2">
                 <p><b>CCCD:</b> ${esc(fetchedSt.IdNumber)}</p>
                 <p><b>Lớp hiện tại:</b> ${esc(fetchedSt.CurrentClass)}</p>
-                <p><b>Trạng thái:</b> ${esc(fetchedSt.Status)}</p>
                 <p><b>Năm nhập học:</b> ${esc(fetchedSt.EnrollYear || '—')}</p>
               </div>
             </div>
@@ -316,7 +319,7 @@ async function renderTongHop() {
   const heads = ['STT', 'Số CCCD', 'Họ Tên', 'Lớp', 'ĐTB HK1', 'ĐTB HK2', 'ĐTB Năm', '% Chuyên Cần'].concat(showRating ? ['Xếp Loại'] : []);
   $('th-head').innerHTML = '<tr class="bg-slate-100">' + heads.map(h => '<th class="p-2 border text-left">' + h + '</th>').join('') + '</tr>';
   let r;
-  try { r = await api('getSummary', {schoolYear: yr, className: cls}); }
+  try { r = await api('getClassReport', {schoolYear: yr, className: cls}); }
   catch (e) { return toast(e.message); }
   
   const rows = sortSummaryRecords(r.summary || []);
@@ -344,34 +347,29 @@ async function renderTongHop() {
 }
 
 async function renderKT() {
-  const yr = $('kt-nam').value, cls =$('kt-lop').value;
+  const cls = $('kt-lop').value;
   let r;
-  try { r = await api('getSummary', {schoolYear: yr, className: cls}); }
+  try { r = await api('getClassReport', {schoolYear: year(), className: cls}); }
   catch (e) { return toast(e.message); }
-  
-  const rawRows = (r.summary || []).filter(x => {
-      const avg = x.YearScore ?? x.avgYear;
-      const cc = x.YearAttendant ?? x.pct ?? x.cc;
-      
-      return avg !== null && avg !== '' && +avg >= 8 && cc != null && +cc >= 80;
-  });
-  const rows = sortSummaryRecords(rawRows);
+
+  const rows = sortSummaryRecords(r.summary || []);
 
   $('kt-tbody').innerHTML = rows.length
     ? rows.map((x, i) => {
         const id = x.IdNumber || x.idNumber || '';
         const fullName = [x.SaintName || x.saintName, x.FullName || x.fullName].filter(Boolean).join(' ');
         const cName = x.CurrentClass || x.ClassName || x.className || '';
-
         const avg = x.YearScore ?? x.avgYear;
         const cc = x.YearAttendant ?? x.pct ?? x.cc;
+        const qualified = avg !== null && avg !== '' && +avg >= 8 && cc != null && +cc >= 80;
+        const danhHieu = qualified ? '<span class="text-pink-600 font-bold">Giỏi</span>' : '—';
 
         return '<tr><td class="p-2 border text-center">' + (i + 1) + '</td><td class="p-2 border">' + esc(id) + '</td>' +
           '<td class="p-2 border font-medium">' + esc(fullName) + '</td><td class="p-2 border">' + esc(cName) + '</td>' +
           '<td class="p-2 border text-center">' + fmt1(avg) + '</td><td class="p-2 border text-center">' + (cc == null || cc === '' ? '—' : cc + '%') + '</td>' +
-          '<td class="p-2 border text-center text-pink-600 font-bold">Giỏi</td></tr>';
+          '<td class="p-2 border text-center">' + danhHieu + '</td></tr>';
       }).join('')
-    : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi đạt chuẩn.</td></tr>';
+    : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có dữ liệu.</td></tr>';
 }
 
 /* ---------- In Bảng Xếp Loại (Lớp / Toàn Đoàn) ---------- */
@@ -388,7 +386,7 @@ async function printRanking(isWholeDeanery = false) {
   let r;
   try {
     const payload = isWholeDeanery ? { schoolYear: yr, wholeDeanery: true } : { schoolYear: yr, className: cls };
-    r = await api('getSummary', payload);
+    r = await api('getClassReport', payload);
   } catch (e) {
     return toast(e.message);
   }
@@ -521,7 +519,6 @@ $('th-print').addEventListener('click', () => printRanking(false));
 const btnToanDoan = $('th-toandoan');
 if (btnToanDoan) btnToanDoan.addEventListener('click', () => printRanking(true));
 
-$('kt-nam').addEventListener('change', async () => { tabCache['t-kt'] = false; await renderKT(); tabCache['t-kt'] = true; });
 $('kt-lop').addEventListener('change', async () => { tabCache['t-kt'] = false; await renderKT(); tabCache['t-kt'] = true; });$('kt-excel').addEventListener('click', () => exportExcel('kt-table', 'Danh sách khen thưởng'));
 $('kt-print').addEventListener('click', () => window.print());
 

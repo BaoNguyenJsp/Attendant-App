@@ -63,7 +63,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 async function loadClassAttendance(cls, force = false) {
   if (CLASS_ATT_CACHE.cls === cls && !force) return;
 
-  const r = await api('getAttendance', { schoolYear: year(), className: cls });
+  const r = await api('getStudentAttendance', { className: cls });
   CLASS_ATT_CACHE = {
     cls: cls,
     records: r.records || [],
@@ -91,7 +91,7 @@ async function renderDD() {
   const note = $('dd-holiday-note');
   if (isHolidayWeek) {
     note.style.display = 'block';
-    note.textContent = '⚠ Tuần này là ngày nghỉ đã khai báo trong mục Quản trị.';
+    note.textContent = '⚠ Buổi này được nghỉ phép.';
   } else note.style.display = 'none';
 
   const weekRecsMap = new Map();
@@ -101,7 +101,7 @@ async function renderDD() {
     }
   });
 
-  const classStudents = sortStudents(TSTUDENTS.filter(s => s.CurrentClass === cls && String(s.Status).toLowerCase() === 'hoạt động'));
+  const classStudents = sortStudents(TSTUDENTS.filter(s => s.CurrentClass === cls));
 
   weekCache = classStudents.map(st => {
     const existing = weekRecsMap.get(String(st.IdNumber).trim()) || {};
@@ -131,7 +131,7 @@ function syncStateToCache() {
     const uiRec = uiMap.get(String(student.idNumber).trim());
     if (uiRec) {
       if (!student.sessions) student.sessions = {};
-      student.sessions[currentSession] = { status: uiRec.status, note: uiRec.note };
+      student.sessions[currentSession] = { status: uiRec.status };
     }
   });
 }
@@ -146,8 +146,7 @@ function renderSessionFromCache() {
       saintName: x.saintName || '',
       fullName: x.fullName,
       photo: x.photo || '',
-      status: st,
-      note: sData.note || ''
+      status: st
     };
   });
 
@@ -168,15 +167,12 @@ function renderDDTable() {
       '<td class="p-2 border">' + esc(s.fullName) + '</td>' +
       '<td class="p-2 border text-center"><input type="checkbox" class="attendance-checkbox" data-i="' + i + '" data-which="present" ' + (present ? 'checked' : '') + '></td>' +
       '<td class="p-2 border text-center"><input type="checkbox" class="attendance-checkbox" data-i="' + i + '" data-which="permission" ' + (permission ? 'checked' : '') + '></td>' +
-      '<td class="p-2 border"><input type="text" data-i="' + i + '" class="w-full border p-1.5 rounded text-sm" value="' + esc(s.note) + '" placeholder="Ghi chú…"></td>' +
       '</tr>';
   }).join('');
   calcDD();
 }
 
 function handleCheck(i, which) {
-  const row = $('dd-tbody').querySelector('tr[data-i="' + i + '"]');
-  if (row) ddState[i].note = row.querySelector('input[type="text"]').value || '';
   const s = ddState[i];
 
   if (which === 'present') {
@@ -189,11 +185,6 @@ function handleCheck(i, which) {
   markDirty();
 }
 
-function noteInput(i) {
-  const row = $('dd-tbody').querySelector('tr[data-i="' + i + '"]');
-  if (row) ddState[i].note = row.querySelector('input[type="text"]').value || '';
-  markDirty();
-}
 
 function markAllPresent() {
   ddState.forEach(s => s.status = 'Hiện diện');
@@ -215,27 +206,33 @@ function calcDD() {
 }
 
 async function saveAttendance() {
-  normSunday($('dd-week'));
-  syncStateToCache();
-
-  const body = {
-    schoolYear: year(),
-    weekOf: $('dd-week').value,
-    className: $('dd-lop').value,
-    records: weekCache
-  };
-
+  const btn = $('dd-save');
+  if (btn.disabled) return;
+  btn.disabled = true;
   try {
-    await api('saveAttendance', body);
-  } catch (e) {
-    return toast(e.message);
-  }
+    normSunday($('dd-week'));
+    syncStateToCache();
 
-  ddBase = ddState.map(x => ({...x}));
-  markDirty();
-  toast('Đã lưu điểm danh cho cả tuần.');
-  await loadClassAttendance($('dd-lop').value, true);
-  invalidateStatsCache();
+    const body = {
+      weekOf: $('dd-week').value,
+      className: $('dd-lop').value,
+      records: weekCache
+    };
+
+    try {
+      await api('saveStudentAttendance', body);
+    } catch (e) {
+      return toast(e.message);
+    }
+
+    ddBase = ddState.map(x => ({...x}));
+    markDirty();
+    toast('Đã lưu điểm danh cho cả tuần.');
+    await loadClassAttendance($('dd-lop').value, true);
+    invalidateStatsCache();
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 /* ---------- Trích Lục ---------- */
@@ -261,7 +258,7 @@ async function renderTL() {
     const resultsHtml = await Promise.all(hits.map(async (st) => {
       let r;
       try {
-        r = await api('searchByIdNumber', { idNumber: st.IdNumber });
+        r = await api('searchStudentById', { idNumber: st.IdNumber });
       } catch (e) {
         return `<div class="p-4 text-red-500">Lỗi tải dữ liệu cho ${esc(st.FullName)}: ${esc(e.message)}</div>`;
       }
@@ -279,9 +276,8 @@ async function renderTL() {
           <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4 flex justify-between items-start flex-wrap gap-4">
             <div>
               <h3 class="text-lg font-extrabold text-blue-900">${displayFullName}</h3>
-              <dl class="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-2 text-sm mt-2">
+              <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm mt-2">
                 <div><dt class="text-xs font-bold text-slate-500 uppercase">Mã Số</dt><dd class="font-semibold">${esc(fetchedSt.IdNumber)}</dd></div>
-                <div><dt class="text-xs font-bold text-slate-500 uppercase">Tình trạng</dt><dd class="font-semibold">${esc(fetchedSt.Status)}</dd></div>
                 <div><dt class="text-xs font-bold text-slate-500 uppercase">Lớp</dt><dd class="font-semibold">${esc(fetchedSt.CurrentClass)}</dd></div>
               </dl>
             </div>
@@ -296,7 +292,6 @@ async function renderTL() {
                   <th class="p-3 border">Tuần</th>
                   <th class="p-3 border">Buổi</th>
                   <th class="p-3 border">Tình trạng</th>
-                  <th class="p-3 border">Ghi chú</th>
                 </tr>
               </thead>
               <tbody>
@@ -305,9 +300,8 @@ async function renderTL() {
                     <td class="p-2 border text-center">${esc(fmtDate(a.WeekOf))}</td>
                     <td class="p-2 border text-center">${esc(a.Session)}</td>
                     <td class="p-2 border text-center">${esc(a.AttendanceStatus || 'Vắng')}</td>
-                    <td class="p-2 border">${esc(a.Note)}</td>
                   </tr>
-                `).join('') : '<tr><td colspan="4" class="p-4 text-center text-slate-400">Không có buổi vắng trong năm học này.</td></tr>'}
+                `).join('') : '<tr><td colspan="3" class="p-4 text-center text-slate-400">Không có buổi vắng trong năm học này.</td></tr>'}
               </tbody>
             </table>
           </div>
@@ -336,10 +330,7 @@ async function renderTK() {
 
   let r;
   try {
-    r = await api('getClassAttendanceStats', {
-      schoolYear: year(),
-      className: cls
-    });
+    r = await api('getClassAttendanceStats', { className: cls });
   } catch (e) {
     return toast(e.message);
   }
@@ -356,7 +347,7 @@ async function renderTK() {
   const maxTotal = Number(r?.maxTotal || 0);
 
   const classStudents = (Array.isArray(TSTUDENTS) ? TSTUDENTS : [])
-    .filter(s => s.CurrentClass === cls && s.Status !== 'Nghỉ');
+    .filter(s => s.CurrentClass === cls);
 
   const keyOf = id => String(id ?? '').replace(/^['0]+/, '').trim();
 
@@ -414,7 +405,7 @@ async function fetchToanDoanRawData(force = false) {
 
   const classes = TCLASSES.map(c => c.ClassName || c.className).filter(Boolean);
   const attendancePromises = classes.map(cls =>
-    api('getAttendance', { schoolYear: year(), className: cls })
+    api('getStudentAttendance', { className: cls })
       .then(res => ({ cls, records: res.records || [], holidays: res.holidays || {} }))
       .catch(err => ({ cls, records: [], holidays: {}, error: err }))
   );
@@ -510,7 +501,7 @@ async function renderToanDoan() {
   if (!tb) return toast('Không tìm thấy bảng Toàn Đoàn (td-tbody).');
 
   const classes = TCLASSES.map(c => c.ClassName || c.className).filter(Boolean);
-  const allActive = TSTUDENTS.filter(s => String(s.Status).toLowerCase() !== 'nghỉ');
+  const allActive = TSTUDENTS;
 
   if (classes.length === 0) {
     tb.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-slate-400">Không có danh sách lớp.</td></tr>';
@@ -1336,10 +1327,7 @@ $('dd-markall').addEventListener('click', markAllPresent);$('dd-refresh').addEve
 });
 $('dd-save').addEventListener('click', saveAttendance);
 
-$('dd-tbody').addEventListener('change', e => {   const cb = e.target.closest('.attendance-checkbox');   if (cb) handleCheck(+cb.dataset.i, cb.dataset.which); });$('dd-tbody').addEventListener('input', e => {
-  const inp = e.target.closest('input[data-i]');
-  if (inp) noteInput(+inp.dataset.i);
-});
+$('dd-tbody').addEventListener('change', e => { const cb = e.target.closest('.attendance-checkbox'); if (cb) handleCheck(+cb.dataset.i, cb.dataset.which); });
 
 $('tl-search').addEventListener('click', renderTL);$('tl-out').addEventListener('click', e => {
   const btn = e.target.closest('.export-tl-btn');

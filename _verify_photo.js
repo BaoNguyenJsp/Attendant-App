@@ -32,7 +32,7 @@ function post(path, body) {
 
     // 2. getAttendance
     const cls = firstStudent ? firstStudent.CurrentClass : '1A';
-    const at = await post('/api/getAttendance', {
+    const at = await post('/api/getStudentAttendance', {
       token: 'dev-shared-token',
       schoolYear: '2025-2026',
       weekOf: 1,

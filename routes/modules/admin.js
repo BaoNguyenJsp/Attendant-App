@@ -10,7 +10,7 @@ module.exports = {
     const { proxy, authz } = ctx;
     for (const a of [
       'getUsers', 'saveUsers', 'saveUser', 'getGroups', 'saveGroups',
-      'getGroupMembers', 'saveGroupMembers', 'saveClass',
+      'getGroupMembers', 'saveGroupMembers',
       'saveHolidays', 'saveConfig', 'startSchoolYear',
     ]) {
       app.post('/api/' + a, authz.requireTier(ADMIN), proxy(a));

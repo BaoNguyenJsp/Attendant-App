@@ -3,7 +3,7 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, year, isAdmin, SESSIONS, fillSel, normSunday, defaultWeek, clearApiCache , toIsoDate } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, year, isAdmin, SESSIONS, fillSel, normSunday, defaultWeek, toIsoDate } from '../shared/common.js';
 import { groupBadge } from '../shared/ui.js';
 
 await initCommon();
@@ -173,8 +173,6 @@ if (usModal) {
       toast('Đã lưu thông tin Huynh trưởng.');
       usModal.classList.remove('open');
       
-      // XÓA CACHE TẠI LOCALSTORAGE VÀ TẢI LẠI DỮ LIỆU TỪ SERVER
-      clearApiCache('getTeachers');
       await loadTeacherData();
 
       tabCache['t-us'] = false;
@@ -285,9 +283,8 @@ async function renderHolidays() {
 
 async function saveHolidayList() {
   try {
-    await api('saveHolidays', { holidays: HOLIDAYS });
+    const r = await api('saveHolidays', { holidays: HOLIDAYS });
     toast('Đã cập nhật danh sách nghỉ lễ.');
-    clearApiCache('getHolidays');
     tabCache['t-hol'] = false;
     await renderHolidays();
     tabCache['t-hol'] = true;
@@ -463,12 +460,6 @@ async function saveConfigData() {
     toast('⏳ Đang lưu cấu hình & làm mới bộ nhớ...');
     await api('saveConfig', { config: items });
 
-    // 1. Wipe all localStorage items
-    localStorage.clear();
-
-    // 2. Clear frontend API cache
-    clearApiCache();
-
     toast('Đã lưu cấu hình! Trang web sẽ tự làm mới...');
     setTimeout(() => location.reload(), 1200);
   } catch (e) {
@@ -497,7 +488,6 @@ if (btnWarm) {
     btnWarm.textContent = '⏳';
     try {
       await api('warmCache');
-      localStorage.clear();       // bỏ luôn cache phía trình duyệt để thấy dữ liệu mới
       toast('Đã làm mới bộ nhớ đệm.');
       location.reload();
     } catch (e) {
