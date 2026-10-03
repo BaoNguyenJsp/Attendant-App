@@ -339,7 +339,8 @@ function attWeekRange(sh, wkIdx, weekOf) {
   const target = String(weekOf);
   let start = -1, end = -1, gaps = false;
   for (let i = 0; i < vals.length; i++) {
-    if (String(vals[i][0]) === target) {
+    const cell = vals[i][0];
+    if ((cell instanceof Date ? fmtDate(cell) : String(cell)) === target) {
       if (start === -1) start = i + 2;
       else if (i + 2 !== end + 1) gaps = true;
       end = i + 2;
