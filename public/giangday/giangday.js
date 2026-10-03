@@ -160,9 +160,14 @@ function renderPager(total, page) {
 /* ---------- Modals & Files ---------- */
 const splitUrls = s => String(s || '').split(',').map(x => x.trim()).filter(x => /^https?:\/\//i.test(x));
 const splitNames = s => String(s || '').split('\n');
-const linkList = (urls, names) => {
+const linkList = (urls, names, types) => {
   const n = splitNames(names);
-  return splitUrls(urls).map((f, i) => ({ url: f, name: n[i] || '' }));
+  const t = (types || '').split(',');
+  return splitUrls(urls).map((f, i) => ({
+    url: f,
+    name: n[i] || '',
+    ...(t[i] === 'link' && { isLink: true }),
+  }));
 };
 
 function openModal(cls) {
@@ -172,8 +177,8 @@ function openModal(cls) {
   $('gd-modal-title').textContent = 'Giáo án — ' + cls;
   $('gd-teacher').value = editingRec && editingRec.TeacherEmail ? glvLabel(editingRec.TeacherEmail) : glvLabel(cur.email);
   $('gd-lesson').value = editingRec ? (editingRec.LessonContent || '') : '';
-  planKeep = linkList(editingRec && editingRec.LessonPlanUrl, editingRec && editingRec.LessonPlanNames);
-  revKeep = linkList(editingRec && editingRec.RevisedPlanUrl, editingRec && editingRec.RevisedPlanNames);
+  planKeep = linkList(editingRec && editingRec.LessonPlanUrl, editingRec && editingRec.LessonPlanNames, editingRec && editingRec.LessonPlanTypes);
+  revKeep = linkList(editingRec && editingRec.RevisedPlanUrl, editingRec && editingRec.RevisedPlanNames, editingRec && editingRec.RevisedPlanTypes);
   planAdd = []; revAdd = [];
   $('f-plan').value = '';$('f-rev').value = '';
   renderLists();
@@ -254,7 +259,7 @@ function processIncomingFiles(files, kind) {
   const currentAdd = isPlan ? planAdd : revAdd;
 
   for (const f of files) {
-    if (currentKeep.length + currentAdd.length >= MAX_FILE_COUNT) {
+    if (currentKeep.filter(k => !k.isLink).length + currentAdd.length >= MAX_FILE_COUNT) {
       toast(`Chỉ được phép tối đa ${MAX_FILE_COUNT} file cho phần này.`);
       break;
     }
@@ -375,9 +380,7 @@ function attachLinkAdder(section, kind) {
     const isPlan = kind === FPLAN;
     const keep = isPlan ? planKeep : revKeep;
     const pending = isPlan ? planAdd : revAdd;
-    if (keep.length + pending.length >= MAX_FILE_COUNT) return toast(`Chỉ được phép tối đa ${MAX_FILE_COUNT} file cho phần này.`);
-
-    const item = { url, ...inferLink(url) };
+    const item = { url, isLink: true, ...inferLink(url) };
     keep.push(item);
     urlI.value = '';
     renderLists();
@@ -463,8 +466,10 @@ async function saveTeaching() {
       schoolYear: year(), weekOf: wk, className: editingClass, lessonContent: lesson,
       lessonPlanUrl: planKeep.map(k => k.url).join(','),
       lessonPlanNames: planKeep.map(k => k.name).join('\n'),
+      lessonPlanTypes: planKeep.map(k => k.isLink ? 'link' : 'file').join(','),
       revisedPlanUrl: revKeep.map(k => k.url).join(','),
-      revisedPlanNames: revKeep.map(k => k.name).join('\n')
+      revisedPlanNames: revKeep.map(k => k.name).join('\n'),
+      revisedPlanTypes: revKeep.map(k => k.isLink ? 'link' : 'file').join(',')
     };
 
     await api('saveTeaching', body);

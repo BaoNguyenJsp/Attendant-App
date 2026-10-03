@@ -415,25 +415,13 @@ async function saveModal() {
 /* ---------- Excel Import & Template ---------- */
 function downloadTemplate() {
   const cls = $('hs-lop').value;
-  const sortedSts = sortStudents(TSTUDENTS.filter(s => s.CurrentClass === cls));
-  
-  const aoa = [['Số CCCD', 'Tên Thánh', 'Họ Và Tên', 'Giới Tính', 'Ngày Sinh', 'Lớp', 'Năm Nhập Học', 'Cha', 'Mẹ', 'Số Điện Thoại']];
-
-  if (sortedSts.length) {
-    sortedSts.forEach(s => {
-      aoa.push([
-        s.IdNumber, s.SaintName || '', s.FullName, s.Gender || '', s.DateOfBirth || '',
-        s.CurrentClass || cls, s.EnrollYear || '',
-        s.Father || '', s.Mother || '', s.PhoneNumber || ''
-      ]);
-    });
-  } else {
-    aoa.push(['', '', '', '', '', cls, year(), '', '', '']);
-  }
-  
+  const aoa = [
+    ['Số CCCD', 'Tên Thánh', 'Họ Và Tên', 'Giới Tính', 'Ngày Sinh', 'Lớp', 'Năm Nhập Học', 'Cha', 'Mẹ', 'Số Điện Thoại'],
+    ['079212300101', 'Maria', 'Nguyễn Thị A', 'Nữ', '2010-05-15', cls || 'Chiên Con', year(), 'Nguyễn Văn B', 'Trần Thị C', '0901234567'],
+  ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'DanhSach');
-  XLSX.writeFile(wb, 'Danh_sach_thieu_nhi_' + cls + '.xlsx');
+  XLSX.writeFile(wb, 'Danh_sach_thieu_nhi_' + (cls || 'mau') + '.xlsx');
 }
 
 async function importStudents() {

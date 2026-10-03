@@ -10,7 +10,7 @@ const TAB_HEADERS = {
   SiblingGroups:     ['SiblingGroup', 'Siblings'],
   Classes:           ['ClassName', 'Grade'],
   Students:          ['IdNumber', 'SaintName', 'FullName', 'FirstName', 'DateOfBirth', 'Gender', 'Father', 'Mother', 'PhoneNumber', 'CurrentClass', 'EnrollYear', 'Photo'],
-  Teaching:          ['Id', 'SchoolYear', 'WeekOf', 'ClassName', 'TeacherEmail', 'LessonContent', 'LessonPlanUrl', 'LessonPlanNames', 'RevisedPlanUrl', 'RevisedPlanNames', 'UpdatedBy'],
+  Teaching:          ['Id', 'SchoolYear', 'WeekOf', 'ClassName', 'TeacherEmail', 'LessonContent', 'LessonPlanUrl', 'LessonPlanNames', 'LessonPlanTypes', 'RevisedPlanUrl', 'RevisedPlanNames', 'RevisedPlanTypes', 'UpdatedBy'],
   Scores:            ['IdNumber', 'ClassName', 'Quiz15_S1', 'Exam_S1', 'Quiz15_S2', 'Exam_S2'],
   Config:            ['Key', 'Value'],
   Holidays:          ['WeekOf', 'Session', 'Reason'],
@@ -1173,8 +1173,10 @@ const ACTIONS = {
           LessonContent: r.LessonContent || '',
           LessonPlanUrl: r.LessonPlanUrl || '',
           LessonPlanNames: r.LessonPlanNames || (r.LessonPlanUrl ? 'Giáo án' : ''),
+          LessonPlanTypes: r.LessonPlanTypes || '',
           RevisedPlanUrl: r.RevisedPlanUrl || '',
           RevisedPlanNames: r.RevisedPlanNames || (r.RevisedPlanUrl ? 'Bản chỉnh sửa' : ''),
+          RevisedPlanTypes: r.RevisedPlanTypes || '',
           UpdatedBy: r.UpdatedBy || '',
           LessonFolderUrl: r.LessonPlanUrl ? extractDriveFolderUrl(r.LessonPlanUrl) : '',
           RevisedFolderUrl: r.RevisedPlanUrl ? extractDriveFolderUrl(r.RevisedPlanUrl) : ''
@@ -1211,8 +1213,8 @@ const ACTIONS = {
       SchoolYear: b.schoolYear, WeekOf: b.weekOf, ClassName: b.className,
       TeacherEmail: (old ? (old.TeacherEmail || '') : '') || b.teacherEmail || '',
       LessonContent: b.lessonContent || '',
-      LessonPlanUrl: b.lessonPlanUrl || '', LessonPlanNames: b.lessonPlanNames || '',
-      RevisedPlanUrl: b.revisedPlanUrl || '', RevisedPlanNames: b.revisedPlanNames || '',
+      LessonPlanUrl: b.lessonPlanUrl || '', LessonPlanNames: b.lessonPlanNames || '', LessonPlanTypes: b.lessonPlanTypes || '',
+      RevisedPlanUrl: b.revisedPlanUrl || '', RevisedPlanNames: b.revisedPlanNames || '', RevisedPlanTypes: b.revisedPlanTypes || '',
       UpdatedBy: b.updatedBy || b.teacherEmail || '',
     };
 
@@ -1261,9 +1263,11 @@ const ACTIONS = {
       folder = teachFolder(b.schoolYear, b.weekOf, b.className, b.kind === 'TBM' ? 'TBM' : 'GLV');
     }
 
-    const same = folder.getFilesByName(b.filename);
-    while (same.hasNext()) same.next().setTrashed(true);
-    
+    try {
+      const same = folder.getFilesByName(b.filename);
+      while (same.hasNext()) same.next().setTrashed(true);
+    } catch (e) { console.warn('setTrashed skipped:', e.message); }
+
     const file = folder.createFile(blob);
 
     if (b.isPhoto) {

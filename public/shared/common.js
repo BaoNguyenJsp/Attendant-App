@@ -290,7 +290,19 @@ export function fillSel(selId, items, value) {
 
 export function exportExcel(tableId, filename) {
   const t = $(tableId); if (!t) return;
-  const wb = XLSX.utils.table_to_book(t, {sheet:'Sheet1'});
+  const wb = XLSX.utils.table_to_book(t, {sheet:'Sheet1', raw: true});
+  const ws = wb.Sheets['Sheet1'];
+  Object.keys(ws).filter(k => k[0] !== '!').forEach(addr => {
+    const cell = ws[addr];
+    if (cell.t !== 's') return;
+    if (/^\d+,\d+$/.test(cell.v)) {
+      cell.v = parseFloat(cell.v.replace(',', '.'));
+      cell.t = 'n'; delete cell.w;
+    } else if (/^\d+$/.test(cell.v)) {
+      cell.v = parseInt(cell.v, 10);
+      cell.t = 'n'; delete cell.w;
+    }
+  });
   XLSX.writeFile(wb, filename + '.xlsx');
 }
 

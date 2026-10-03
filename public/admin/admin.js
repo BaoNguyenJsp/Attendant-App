@@ -95,7 +95,6 @@ async function renderUsers() {
         }).join('') || '<span class="text-slate-400">—</span>';
 
         return '<tr>' +
-          '<td class="p-2 border text-center">' + esc(u.Id || '—') + '</td>' +
           '<td class="p-2 border text-xs">' + esc(u.Email) + '</td>' +
           '<td class="p-2 border font-medium">' + esc([u.SaintName, u.FullName].filter(Boolean).join(' ')) + '</td>' +
           '<td class="p-2 border text-center">' + esc(u.SDT || '—') + '</td>' +
@@ -104,7 +103,7 @@ async function renderUsers() {
           '<td class="p-2 border text-center"><button data-email="' + esc(u.Email) + '" class="us-edit bg-blue-900 hover:bg-blue-800 text-white text-xs px-3 py-1.5 rounded-lg font-bold">Cập nhật</button></td>' +
         '</tr>';
       }).join('')
-    : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Không tìm thấy Huynh trưởng khớp yêu cầu.</td></tr>';
+    : '<tr><td colspan="6" class="p-4 text-center text-slate-400">Không tìm thấy Huynh trưởng khớp yêu cầu.</td></tr>';
 }
 
 function openUsModal(emailRaw) {

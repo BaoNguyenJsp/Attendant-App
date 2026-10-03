@@ -356,7 +356,8 @@ async function printTeacherStats() {
   const subHeader = `Phân đoàn/Ngành: <b>${esc(sectorName)}</b> &nbsp;|&nbsp; Lớp: <b>${esc(cls || 'Tất cả')}</b> &nbsp;|&nbsp; Năm học: <b>${esc(year())}</b>`;
 
   const printWindow = window.open('', '_blank');
-  
+  if (!printWindow) return toast('Trình duyệt chặn cửa sổ pop-up. Vui lòng cho phép pop-up cho trang này rồi thử lại.');
+
   let html = `
     <!DOCTYPE html>
     <html>

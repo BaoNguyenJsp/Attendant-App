@@ -572,12 +572,12 @@ async function renderToanDoan() {
       const sessions = r.sessions || {};
       Object.keys(sessions).forEach(sess => {
         const rawSt = sessions[sess]?.status || '';
+        if (sessionWeeks[sess]) sessionWeeks[sess].add(r.WeekOf);
         if (rawSt === 'Hiện diện' || rawSt === 'Có mặt') {
           if (studentStats[id][sess] !== undefined) {
             studentStats[id][sess]++;
             studentStats[id].total++;
           }
-          if (sessionWeeks[sess]) sessionWeeks[sess].add(r.WeekOf);
         }
       });
     });
@@ -1351,6 +1351,40 @@ $('tl-search').addEventListener('click', renderTL);$('tl-out').addEventListener(
     exportExcel(tableId, `Trich_luc_${studentName}`);
   }
 });
+
+function printAttendanceStats(isWholeDeanery) {
+  const tableId = isWholeDeanery ? 'td-table' : 'tk-table';
+  const table = $(tableId);
+  if (!table || !table.querySelector('tbody tr')) return toast('Chưa có dữ liệu để in. Vui lòng tải bảng trước.');
+  const title = isWholeDeanery ? 'BẢNG THỐNG KÊ CHUYÊN CẦN TOÀN ĐOÀN' : 'BẢNG THỐNG KÊ CHUYÊN CẦN THIẾU NHI';
+  const sub = isWholeDeanery ? '' : `Lớp: <b>${esc($('tk-lop').value)}</b> &nbsp;|&nbsp; `;
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return toast('Trình duyệt chặn cửa sổ pop-up. Vui lòng cho phép pop-up cho trang này rồi thử lại.');
+  const sigLeft = isWholeDeanery ? 'Ban Điều Hành' : 'Giáo lý viên phụ trách';
+  printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title><style>
+    body{font-family:'Times New Roman',Times,serif;padding:20px;color:#000}
+    .header{text-align:center;margin-bottom:20px}
+    .header h2{margin:0;font-size:20px;text-transform:uppercase}
+    .header h3{margin:5px 0 0;font-size:16px;font-weight:normal}
+    table{width:100%;border-collapse:collapse;margin-top:15px;font-size:13px}
+    th,td{border:1px solid #000;padding:6px;text-align:center}
+    th{background:#f4f4f4;font-weight:bold}
+    td.left,td:nth-child(2){text-align:left}
+    .footer{margin-top:40px;display:flex;justify-content:space-between;font-size:15px}
+    .signature{text-align:center;width:40%}
+    @media print{@page{size:A4 landscape;margin:15mm}}
+  </style></head><body>
+    <div class="header"><h2>${title}</h2><h3>${sub}Năm học: <b>${esc(year())}</b></h3></div>
+    ${table.outerHTML}
+    <div class="footer">
+      <div class="signature"><p><b>${sigLeft}</b></p><br><br><br></div>
+      <div class="signature"><p><b>Xứ đoàn trưởng</b></p><br><br><br></div>
+    </div>
+  </body></html>`);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => { printWindow.print(); printWindow.close(); }, 250);
+}
 
 $('tk-lop').addEventListener('change', async () => { tabCache['t-tk'] = false; await renderTK(); tabCache['t-tk'] = true; });$('tk-excel').addEventListener('click', () => exportExcel('tk-table', 'Thống kê chuyên cần lớp'));
 $('tk-print').addEventListener('click', () => printAttendanceStats(false));

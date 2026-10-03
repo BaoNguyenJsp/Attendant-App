@@ -155,28 +155,13 @@ async function saveScores() {
 /* ---------- Excel Import ---------- */
 function downloadTemplate() {
   const cls = $('nh-lop').value;
-  const sortedSts = sortStudents(activeStudents(cls));
-  const scoreMap = {};
-  
-  TSCORES.filter(s => s.ClassName === cls).forEach(s => scoreMap[s.IdNumber] = s);
-  
-  const aoa = [['Số CCCD', 'Tên thánh', 'Họ và tên', "Điểm 15' HK1", 'Kiểm tra HK1', "Điểm 15' HK2", 'Kiểm tra HK2']];
-  sortedSts.forEach(s => {
-    const sc = scoreMap[s.IdNumber] || {};
-    aoa.push([
-      s.IdNumber, 
-      s.SaintName || '', 
-      s.FullName, 
-      sc.Quiz15_S1 ?? '', 
-      sc.Exam_S1 ?? '', 
-      sc.Quiz15_S2 ?? '', 
-      sc.Exam_S2 ?? ''
-    ]);
-  });
-  
+  const aoa = [
+    ['Số CCCD', 'Tên thánh', 'Họ và tên', "Điểm 15' HK1", 'Kiểm tra HK1', "Điểm 15' HK2", 'Kiểm tra HK2'],
+    ['079212300101', 'Maria', 'Nguyễn Thị A', 8, 7.5, 9, 8.5],
+  ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Điểm');
-  XLSX.writeFile(wb, 'Khung_nhap_diem_' + cls + '.xlsx');
+  XLSX.writeFile(wb, 'Khung_nhap_diem_' + (cls || 'mau') + '.xlsx');
 }
 
 async function importScores() {
@@ -352,7 +337,11 @@ async function renderKT() {
   try { r = await api('getClassReport', {schoolYear: year(), className: cls}); }
   catch (e) { return toast(e.message); }
 
-  const rows = sortSummaryRecords(r.summary || []);
+  const rows = sortSummaryRecords(r.summary || []).filter(x => {
+    const avg = x.YearScore ?? x.avgYear;
+    const cc = x.YearAttendant ?? x.pct ?? x.cc;
+    return avg !== null && avg !== '' && +avg >= 8 && cc != null && +cc >= 80;
+  });
 
   $('kt-tbody').innerHTML = rows.length
     ? rows.map((x, i) => {
@@ -361,15 +350,12 @@ async function renderKT() {
         const cName = x.CurrentClass || x.ClassName || x.className || '';
         const avg = x.YearScore ?? x.avgYear;
         const cc = x.YearAttendant ?? x.pct ?? x.cc;
-        const qualified = avg !== null && avg !== '' && +avg >= 8 && cc != null && +cc >= 80;
-        const danhHieu = qualified ? '<span class="text-pink-600 font-bold">Giỏi</span>' : '—';
 
         return '<tr><td class="p-2 border text-center">' + (i + 1) + '</td><td class="p-2 border">' + esc(id) + '</td>' +
           '<td class="p-2 border font-medium">' + esc(fullName) + '</td><td class="p-2 border">' + esc(cName) + '</td>' +
-          '<td class="p-2 border text-center">' + fmt1(avg) + '</td><td class="p-2 border text-center">' + (cc == null || cc === '' ? '—' : cc + '%') + '</td>' +
-          '<td class="p-2 border text-center">' + danhHieu + '</td></tr>';
+          '<td class="p-2 border text-center">' + fmt1(avg) + '</td><td class="p-2 border text-center">' + cc + '%</td></tr>';
       }).join('')
-    : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có dữ liệu.</td></tr>';
+    : '<tr><td colspan="6" class="p-4 text-center text-slate-400">Không có học sinh đủ điều kiện khen thưởng.</td></tr>';
 }
 
 /* ---------- In Bảng Xếp Loại (Lớp / Toàn Đoàn) ---------- */
@@ -397,7 +383,8 @@ async function printRanking(isWholeDeanery = false) {
   const rows = sortSummaryRecords(rawRows);
 
   const printWindow = window.open('', '_blank');
-  
+  if (!printWindow) return toast('Trình duyệt chặn cửa sổ pop-up. Vui lòng cho phép pop-up cho trang này rồi thử lại.');
+
   const docTitle = isWholeDeanery ? `Xếp Loại Toàn Đoàn - ${esc(yr)}` : `Bảng Xếp Loại - ${esc(cls)}`;
   const headerTitle = isWholeDeanery ? 'BẢNG TỔNG KẾT VÀ XẾP LOẠI TOÀN ĐOÀN' : 'BẢNG TỔNG KẾT VÀ XẾP LOẠI HỌC TẬP';
   const subHeader = isWholeDeanery ? `Năm học: <b>${esc(yr)}</b>` : `Lớp: <b>${esc(cls)}</b> &nbsp;|&nbsp; Năm học: <b>${esc(yr)}</b>`;
@@ -520,7 +507,36 @@ const btnToanDoan = $('th-toandoan');
 if (btnToanDoan) btnToanDoan.addEventListener('click', () => printRanking(true));
 
 $('kt-lop').addEventListener('change', async () => { tabCache['t-kt'] = false; await renderKT(); tabCache['t-kt'] = true; });$('kt-excel').addEventListener('click', () => exportExcel('kt-table', 'Danh sách khen thưởng'));
-$('kt-print').addEventListener('click', () => window.print());
+$('kt-print').addEventListener('click', () => {
+  const table = $('kt-table');
+  if (!table || !table.querySelector('tbody tr td:not([colspan])')) return toast('Chưa có dữ liệu để in. Vui lòng tải danh sách trước.');
+  const cls = $('kt-lop').value || 'Tất cả';
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return toast('Trình duyệt chặn cửa sổ pop-up. Vui lòng cho phép pop-up cho trang này rồi thử lại.');
+  printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Danh Sách Khen Thưởng</title><style>
+    body{font-family:'Times New Roman',Times,serif;padding:20px;color:#000}
+    .header{text-align:center;margin-bottom:20px}
+    .header h2{margin:0;font-size:20px;text-transform:uppercase}
+    .header h3{margin:5px 0 0;font-size:16px;font-weight:normal}
+    table{width:100%;border-collapse:collapse;margin-top:15px;font-size:13px}
+    th,td{border:1px solid #000;padding:6px;text-align:center}
+    th{background:#f4f4f4;font-weight:bold}
+    td:nth-child(3){text-align:left}
+    .footer{margin-top:40px;display:flex;justify-content:space-between;font-size:15px}
+    .signature{text-align:center;width:40%}
+    @media print{@page{size:A4 portrait;margin:15mm}}
+  </style></head><body>
+    <div class="header"><h2>DANH SÁCH KHEN THƯỞNG</h2><h3>Lớp: <b>${esc(cls)}</b> &nbsp;|&nbsp; Năm học: <b>${esc(year())}</b></h3></div>
+    ${table.outerHTML}
+    <div class="footer">
+      <div class="signature"><p><b>Giáo lý viên phụ trách</b></p><br><br><br></div>
+      <div class="signature"><p><b>Xứ đoàn trưởng</b></p><br><br><br></div>
+    </div>
+  </body></html>`);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => { printWindow.print(); printWindow.close(); }, 250);
+});
 
 /* Boot default active tab */
 switchTab('t-nhap');
