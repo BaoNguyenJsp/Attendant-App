@@ -3,7 +3,7 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, SESSIONS, cur, year, defaultWeek, normSunday, isExec, isAdmin, fillSel, exportExcel , toIsoDate } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, SESSIONS, cur, year, lastSunday, normSunday, isExec, isAdmin, fillSel, exportExcel , toIsoDate } from '../shared/common.js';
 
 await initCommon();
 
@@ -79,7 +79,7 @@ async function loadTeacherAttendance(sector, force = false) {
 /* ---------- Điểm danh Huynh trưởng ---------- */
 async function renderGVDD() {
   if (!isExec()) return;
-  if (!$('gvdd-week').value) $('gvdd-week').value = defaultWeek();
+  if (!$('gvdd-week').value) $('gvdd-week').value = lastSunday();
   normSunday($('gvdd-week'));
 
   const sector = $('gvdd-nganh').value;
@@ -490,6 +490,6 @@ fillNganh('gvdd-nganh');
 fillNganh('gvtk-nganh');
 fillSel('gvdd-session', TSESS.map(s => ({v:s})));
 fillLop();
-$('gvdd-week').value = defaultWeek();
+$('gvdd-week').value = lastSunday();
 
 switchTab('t-gvdd');

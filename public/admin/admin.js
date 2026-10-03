@@ -3,7 +3,7 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, year, isAdmin, SESSIONS, fillSel, normSunday, defaultWeek, toIsoDate } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, year, isAdmin, SESSIONS, fillSel, normSunday, lastSunday } from '../shared/common.js';
 import { groupBadge } from '../shared/ui.js';
 
 await initCommon();
@@ -249,7 +249,7 @@ async function renderHolidays() {
 
   const holWeekInput = $('hol-week');
   if (holWeekInput) {
-    if (!holWeekInput.value) holWeekInput.value = toIsoDate(defaultWeek());
+    if (!holWeekInput.value) holWeekInput.value = lastSunday();
     normSunday(holWeekInput);
 
     // Đảm bảo không cho phép chọn ngày trước AttendanceStartDate

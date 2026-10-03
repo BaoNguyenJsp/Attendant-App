@@ -112,14 +112,22 @@ export const parseLocal = s => {
 /**
  * Returns upcoming Sunday in strict yyyy-MM-dd format for HTML date inputs
  */
-export function defaultWeek() { 
-  const d = new Date(); 
-  const day = d.getDay(); 
-  if (day !== 0) d.setDate(d.getDate() + (7 - day)); 
-  const y = d.getFullYear(); 
-  const m = String(d.getMonth() + 1).padStart(2, '0'); 
-  const date = String(d.getDate()).padStart(2, '0'); 
-  return `${y}-${m}-${date}`; 
+export function defaultWeek() {
+  const d = new Date();
+  const day = d.getDay();
+  if (day !== 0) d.setDate(d.getDate() + (7 - day));
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const date = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${date}`;
+}
+
+/** Returns most recent past Sunday (or today if today is Sunday) in yyyy-MM-dd format. */
+export function lastSunday() {
+  const d = new Date();
+  const day = d.getDay();
+  if (day !== 0) d.setDate(d.getDate() - day);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /** Nhãn khoảng tuần từ ngày Chúa Nhật (ISO): 'Tuần 20/09/2026 - 26/09/2026'. */

@@ -3,7 +3,7 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, setState, SESSIONS, TCLASSES, TSTUDENTS, year, defaultWeek, normSunday, fillClasses, fillSel, fillSessions, exportExcel, sortStudents, fmtDate, toIsoDate } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, setState, SESSIONS, TCLASSES, TSTUDENTS, year, defaultWeek, lastSunday, normSunday, fillClasses, fillSel, fillSessions, exportExcel, sortStudents, fmtDate, toIsoDate } from '../shared/common.js';
 import { rankBadge } from '../shared/ui.js';
 
 await initCommon();
@@ -73,7 +73,7 @@ async function loadClassAttendance(cls, force = false) {
 
 /* ---------- Điểm Danh ---------- */
 async function renderDD() {
-  if (!$('dd-week').value) $('dd-week').value = toIsoDate(defaultWeek());
+  if (!$('dd-week').value) $('dd-week').value = lastSunday();
   normSunday($('dd-week'));
 
   const cls = $('dd-lop').value;
@@ -524,9 +524,11 @@ async function renderToanDoan() {
   const holidaysObj = (results[0] || {}).holidays || {};
   const calMax = { 'Lễ Chúa Nhật': 0, 'Học Giáo Lý': 0, 'Chầu Thánh Thể': 0, 'Lễ Thứ Năm': 0 };
   {
+    const todayStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
     let d = new Date(schoolYearStart);
-    while (d <= today) {
+    while (true) {
       const wk = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      if (wk > todayStr) break;
       const inMonths = type === 'year' || months.includes(d.getMonth() + 1);
       if (inMonths && !holidaysObj[wk + '|']) {
         Object.keys(calMax).forEach(s => { if (!holidaysObj[wk + '|' + s]) calMax[s]++; });
