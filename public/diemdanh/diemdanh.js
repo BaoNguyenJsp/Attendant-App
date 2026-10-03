@@ -701,6 +701,7 @@ async function loadFaceApiModels() {
 
 const refDescriptors = new Map();
 let refBuildInProgress = false;
+let globalPauseUntil = 0;
 const DESC_CACHE_KEY = 'face-ref-cache-v1';
 const DESC_CACHE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 let memCache = null;
@@ -752,14 +753,15 @@ function driveUrlToImageUrl(url) {
   return 'https://lh3.googleusercontent.com/d/' + m[1] + '=w320-h320';
 }
 
-async function loadImageCORS(url, timeoutMs = 10000) {
+async function loadImageCORS(url, timeoutMs = 15000) {
+  // img.src first — lh3.googleusercontent.com rate-limits fetch far more aggressively
   try {
     const img = await loadImgElement(url, 'anonymous', timeoutMs);
     return { img, tainted: false };
   } catch (e1) {
     try {
       const r = await fetchWithTimeout(url, timeoutMs);
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+      if (!r.ok) throw new Error('HTTP ' + r.status); // surfaces 429 to retry loop
       const blob = await r.blob();
       const objUrl = URL.createObjectURL(blob);
       try {
@@ -767,6 +769,7 @@ async function loadImageCORS(url, timeoutMs = 10000) {
         return { img, tainted: false };
       } finally { URL.revokeObjectURL(objUrl); }
     } catch (e2) {
+      if (/429|rate.?limit/i.test(e2.message)) throw e2;
       try {
         const img = await loadImgElement(url, 'no-cors', timeoutMs);
         return { img, tainted: true };
@@ -819,6 +822,7 @@ async function buildReferenceDescriptors(students, onProgress) {
   const now = Date.now();
   const list = students.filter(s => s.photo && s.photo.trim());
   const total = list.length;
+  console.log(`[FaceScan] Tổng học sinh: ${students.length}, có ảnh: ${total}, không có ảnh: ${students.length - total}`);
 
   let fromCache = 0;
   for (const s of list) {
@@ -831,16 +835,26 @@ async function buildReferenceDescriptors(students, onProgress) {
   }
 
   const needBuild = list.filter(s => !refDescriptors.has(s.idNumber));
+  console.log(`[FaceScan] Từ cache: ${fromCache}, cần tải mới: ${needBuild.length}`);
   let done = fromCache, ok = fromCache, failed = 0;
 
   for (let i = 0; i < needBuild.length; i++) {
+    const wait = globalPauseUntil - Date.now();
+    if (wait > 0) {
+      console.log(`[FaceScan] Rate limit pause ${Math.ceil(wait/1000)}s...`);
+      await new Promise(r => setTimeout(r, wait));
+    }
+
     const s = needBuild[i];
     let desc = null;
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= 5; attempt++) {
       try { desc = await computeReferenceDescriptor(s.photo); break; }
       catch (e) {
-        if (/429|rate.?limit/i.test(e.message) && attempt < 3) {
-          await new Promise(r => setTimeout(r, 2000 * Math.pow(2, attempt - 1)));
+        if (/429|rate.?limit/i.test(e.message) && attempt < 5) {
+          const pause = 15000 * Math.pow(2, attempt - 1); // 15s, 30s, 60s, 120s
+          globalPauseUntil = Date.now() + pause;
+          console.log(`[FaceScan] 429 — global pause ${pause/1000}s`);
+          await new Promise(r => setTimeout(r, pause));
         } else break;
       }
     }
@@ -852,7 +866,7 @@ async function buildReferenceDescriptors(students, onProgress) {
     } else failed++;
 
     if (onProgress) onProgress({ done, total, ok, failed });
-    if (i < needBuild.length - 1) await new Promise(r => setTimeout(r, 300));
+    if (i < needBuild.length - 1) await new Promise(r => setTimeout(r, 2000));
   }
 
   if (needBuild.length > 0) await saveDescCache(cache);
