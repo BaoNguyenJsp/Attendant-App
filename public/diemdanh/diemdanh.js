@@ -3,7 +3,7 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, setState, SESSIONS, TCLASSES, TSTUDENTS, year, defaultWeek, lastSunday, normSunday, fillClasses, fillSel, fillSessions, exportExcel, sortStudents, fmtDate, toIsoDate } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, setState, SESSIONS, TCLASSES, TSTUDENTS, year, defaultWeek, lastSunday, vnTodayIso, normSunday, fillClasses, fillSel, fillSessions, exportExcel, sortStudents, fmtDate, toIsoDate } from '../shared/common.js';
 import { rankBadge } from '../shared/ui.js';
 
 await initCommon();
@@ -463,11 +463,11 @@ async function getAttendanceStartDateRange() {
   if (!schoolYearStart) {
     const startYr = typeof year === 'function' && String(year()).includes('-')
       ? parseInt(year().split('-')[0], 10)
-      : new Date().getFullYear();
+      : parseInt(vnTodayIso().slice(0, 4), 10);
     schoolYearStart = new Date(startYr, 8, 1, 0, 0, 0, 0); // Fallback 01/09
   }
 
-  const today = parseLocalDate(new Date());
+  const today = parseLocalDate(vnTodayIso());
   today.setHours(23, 59, 59, 999);
 
   return { schoolYearStart, today };

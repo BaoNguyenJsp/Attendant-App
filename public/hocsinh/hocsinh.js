@@ -3,7 +3,7 @@
    ===================================================================== */
 'use strict';
 
-import { initCommon, $, api, esc, toast, setState, sortStudents, fillClasses, TSTUDENTS, TCLASSES, year, fmtDate, toIsoDate } from '../shared/common.js';
+import { initCommon, $, api, esc, toast, setState, sortStudents, fillClasses, TSTUDENTS, TCLASSES, year, vnTodayIso, fmtDate, toIsoDate } from '../shared/common.js';
 
 await initCommon();
 
@@ -341,7 +341,7 @@ function openModal(id) {
   $('m-saint').value = st ? (st.SaintName || '') : '';
   $('m-dob').value = st ? toIsoDate(st.DateOfBirth) : '';
   $('m-gender').value = st ? (st.Gender || '') : '';
-  $('m-enroll').value = st ? (st.EnrollYear || '') : String(new Date().getFullYear());
+  $('m-enroll').value = st ? (st.EnrollYear || '') : vnTodayIso().slice(0, 4);
   $('m-father').value = st ? (st.Father || '') : '';
   $('m-mother').value = st ? (st.Mother || '') : '';
   if ($('m-phonenumber')) $('m-phonenumber').value = st ? (st.PhoneNumber || '') : '';
