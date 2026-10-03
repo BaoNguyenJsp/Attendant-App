@@ -520,6 +520,21 @@ async function renderToanDoan() {
 
   const { type, months } = getToanDoanFilterConfig();
 
+  // Calendar-based session max — correct denominator even when weeks have no records
+  const holidaysObj = (results[0] || {}).holidays || {};
+  const calMax = { 'Lễ Chúa Nhật': 0, 'Học Giáo Lý': 0, 'Chầu Thánh Thể': 0, 'Lễ Thứ Năm': 0 };
+  {
+    let d = new Date(schoolYearStart);
+    while (d <= today) {
+      const wk = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      const inMonths = type === 'year' || months.includes(d.getMonth() + 1);
+      if (inMonths && !holidaysObj[wk + '|']) {
+        Object.keys(calMax).forEach(s => { if (!holidaysObj[wk + '|' + s]) calMax[s]++; });
+      }
+      d.setDate(d.getDate() + 7);
+    }
+  }
+
   const rows = [];
   let grandTotal = 0;
   let totalCN = 0, maxTotalCN = 0;
@@ -554,17 +569,15 @@ async function renderToanDoan() {
       return true;
     });
 
-    const sessionWeeks = {
-      'Lễ Chúa Nhật': new Set(),
-      'Học Giáo Lý': new Set(),
-      'Chầu Thánh Thể': new Set(),
-      'Lễ Thứ Năm': new Set()
-    };
-
     const studentStats = {};
+    const seenKeys = new Set();
 
     filteredRecords.forEach(r => {
       const id = String(r.idNumber || r.IdNumber || '').trim();
+      const deupKey = id + '|' + r.WeekOf;
+      if (seenKeys.has(deupKey)) return; // skip duplicate rows for same student+week
+      seenKeys.add(deupKey);
+
       if (!studentStats[id]) {
         studentStats[id] = { 'Lễ Chúa Nhật': 0, 'Học Giáo Lý': 0, 'Chầu Thánh Thể': 0, 'Lễ Thứ Năm': 0, total: 0 };
       }
@@ -572,7 +585,6 @@ async function renderToanDoan() {
       const sessions = r.sessions || {};
       Object.keys(sessions).forEach(sess => {
         const rawSt = sessions[sess]?.status || '';
-        if (sessionWeeks[sess]) sessionWeeks[sess].add(r.WeekOf);
         if (rawSt === 'Hiện diện' || rawSt === 'Có mặt') {
           if (studentStats[id][sess] !== undefined) {
             studentStats[id][sess]++;
@@ -582,10 +594,10 @@ async function renderToanDoan() {
       });
     });
 
-    const maxCn = sessionWeeks['Lễ Chúa Nhật'].size;
-    const maxGl = sessionWeeks['Học Giáo Lý'].size;
-    const maxCtt = sessionWeeks['Chầu Thánh Thể'].size;
-    const maxT5 = sessionWeeks['Lễ Thứ Năm'].size;
+    const maxCn = calMax['Lễ Chúa Nhật'];
+    const maxGl = calMax['Học Giáo Lý'];
+    const maxCtt = calMax['Chầu Thánh Thể'];
+    const maxT5 = calMax['Lễ Thứ Năm'];
     const maxTotal = maxCn + maxGl + maxCtt + maxT5;
 
     maxTotalCN += maxCn * siso;
