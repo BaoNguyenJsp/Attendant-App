@@ -451,7 +451,7 @@ async function getAttendanceStartDateRange() {
   if (!startDateStr) {
     try {
       const cfg = await api('getConfig');
-      startDateStr = cfg?.AttendanceStartDate || cfg?.AttendantStartDate;
+      startDateStr = cfg?.config?.AttendanceStartDate || cfg?.config?.AttendantStartDate;
     } catch (e) {
       console.warn('[config] Không thể lấy AttendanceStartDate từ server:', e.message);
     }
