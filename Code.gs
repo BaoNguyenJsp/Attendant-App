@@ -1267,7 +1267,6 @@ const ACTIONS = {
     const file = folder.createFile(blob);
 
     if (b.isPhoto) {
-      try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) { console.warn('setSharing failed:', e.message); }
       const displayUrl = 'https://lh3.googleusercontent.com/d/' + file.getId() + '=w500';
       return { status: 'ok', url: displayUrl, driveUrl: file.getUrl() };
     } else {
