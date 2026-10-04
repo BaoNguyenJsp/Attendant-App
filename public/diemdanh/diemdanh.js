@@ -580,12 +580,15 @@ async function renderToanDoan() {
       if (seenKeys.has(deupKey)) return; // skip duplicate rows for same student+week
       seenKeys.add(deupKey);
 
+      if (holidaysObj[r.WeekOf + '|']) return; // whole-week holiday
+
       if (!studentStats[id]) {
         studentStats[id] = { 'Lễ Chúa Nhật': 0, 'Học Giáo Lý': 0, 'Chầu Thánh Thể': 0, 'Lễ Thứ Năm': 0, total: 0 };
       }
 
       const sessions = r.sessions || {};
       Object.keys(sessions).forEach(sess => {
+        if (holidaysObj[r.WeekOf + '|' + sess]) return; // session-specific holiday
         const rawSt = sessions[sess]?.status || '';
         if (rawSt === 'Hiện diện' || rawSt === 'Có mặt') {
           if (studentStats[id][sess] !== undefined) {
