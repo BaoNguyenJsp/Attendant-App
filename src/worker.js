@@ -1,9 +1,8 @@
-// src/worker.js — ESM entry point; esbuild bundles CJS modules via require()
+// src/worker.js — ESM entry point; esbuild bundles CJS modules automatically
 import { Hono } from 'hono';
-import { createRequire } from 'node:module'; // nodejs_compat provides this
 import { readSession, makeSessionCookie } from './session.js';
 
-const require = createRequire(import.meta.url);
+// esbuild injects a require shim for these CJS modules at bundle time
 const { makeCallAppsScript, makeProxy, warmCache, HttpError } = require('../lib/apps-script');
 const { makeAuthz } = require('../lib/authz');
 const registerOAuth = require('../routes/oauth');
