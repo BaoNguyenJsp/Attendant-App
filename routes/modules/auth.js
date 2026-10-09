@@ -2,14 +2,19 @@
 
 module.exports = {
   register(app) {
-    // FR-AUTH-05: đọc session đã tính khi đăng nhập, không gọi Apps Script.
-    app.post('/api/getSessionUser', (req, res) => res.json({
-      status: 'ok',
-      session: {
-        email: req.session.email, fullName: req.session.fullName,
-        groups: req.session.groups, scope: req.session.scope,
-        tier: req.session.tier, sectors: req.session.sectors,
-      },
-    }));
+    app.post('/api/getSessionUser', (c) => {
+      const sess = c.get('session') || {};
+      return c.json({
+        status: 'ok',
+        session: {
+          email: sess.email,
+          fullName: sess.fullName,
+          groups: sess.groups,
+          scope: sess.scope,
+          tier: sess.tier,
+          sectors: sess.sectors,
+        },
+      });
+    });
   },
 };

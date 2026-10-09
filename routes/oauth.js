@@ -1,7 +1,5 @@
 'use strict';
 
-const crypto = require('crypto');
-const cfg = require('../config');
 const { expandScope, computeTier, computeSectors } = require('../lib/authz');
 const signal = require('../lib/auth-signal');
 
@@ -11,64 +9,78 @@ const oauth = {
   userinfo: 'https://www.googleapis.com/oauth2/v3/userinfo',
 };
 
+function randomHex(bytes) {
+  const arr = new Uint8Array(bytes);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+}
+
 module.exports = function registerOAuth(app, ctx) {
   const { call, authz } = ctx;
   const { send } = authz;
 
-  app.get('/auth/google', (req, res) => {
-    const state = crypto.randomBytes(16).toString('hex');
-    req.session.oauthState = state;
+  app.get('/auth/google', (c) => {
+    const state = randomHex(16);
+    const sess = c.get('session') || {};
+    c.set('session', { ...sess, oauthState: state });
     const q = new URLSearchParams({
-      client_id: cfg.oauthClientId,
-      redirect_uri: cfg.oauthRedirectUri,
+      client_id: c.env.OAUTH_CLIENT_ID,
+      redirect_uri: c.env.OAUTH_REDIRECT_URI,
       response_type: 'code',
       scope: 'openid email profile',
       state,
     });
-    res.redirect(`${oauth.authorize}?${q}`);
+    return c.redirect(`${oauth.authorize}?${q}`);
   });
 
-  app.get('/auth/callback', async (req, res) => {
+  app.get('/auth/callback', async (c) => {
     try {
-      const { code, state, error } = req.query;
-      if (error) return res.redirect('/login/?login=denied');
-      if (!code || !state || state !== req.session.oauthState) return send(res, 400, 'Phiên đăng nhập không hợp lệ.');
-      delete req.session.oauthState;
+      const { code, state, error } = c.req.query();
+      const sess = c.get('session') || {};
+      if (error) return c.redirect('/login/?login=denied');
+      if (!code || !state || state !== sess.oauthState) return send(c, 400, 'Phiên đăng nhập không hợp lệ.');
 
       const tok = await fetch(oauth.token, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-          code, client_id: cfg.oauthClientId, client_secret: cfg.oauthClientSecret,
-          redirect_uri: cfg.oauthRedirectUri, grant_type: 'authorization_code',
+          code,
+          client_id: c.env.OAUTH_CLIENT_ID,
+          client_secret: c.env.OAUTH_CLIENT_SECRET,
+          redirect_uri: c.env.OAUTH_REDIRECT_URI,
+          grant_type: 'authorization_code',
         }),
       });
-      if (!tok.ok) return send(res, 502, 'Google không cấp token.');
+      if (!tok.ok) return send(c, 502, 'Google không cấp token.');
       const { access_token } = await tok.json();
 
       const me = await fetch(oauth.userinfo, { headers: { Authorization: `Bearer ${access_token}` } });
-      if (!me.ok) return send(res, 502, 'Không lấy được thông tin tài khoản.');
+      if (!me.ok) return send(c, 502, 'Không lấy được thông tin tài khoản.');
       const info = await me.json();
-      if (!info.email || info.email_verified === false) return send(res, 401, 'Tài khoản Google không hợp lệ.');
+      if (!info.email || info.email_verified === false) return send(c, 401, 'Tài khoản Google không hợp lệ.');
 
-      // Đối chiếu Users + nhóm → session (FR-AUTH-02, FR-AUTH-05)
       const data = await call('getSessionUser', { email: info.email });
       const s = data.session;
       const classes = s.classes || [];
-      req.session.email = s.email;
-      req.session.fullName = s.fullName;
-      req.session.groups = s.groups;               // [{name, type}]
-      req.session.scope = expandScope(s.groups, s.catalog, classes);
-      req.session.tier = computeTier(s.groups);
-      req.session.sectors = computeSectors(s.groups);
-      signal.clear(s.email);          // phiên mới đã tính lại quyền
-      res.redirect('/');
+      c.set('session', {
+        email: s.email,
+        fullName: s.fullName,
+        groups: s.groups,
+        scope: expandScope(s.groups, s.catalog, classes),
+        tier: computeTier(s.groups),
+        sectors: computeSectors(s.groups),
+      });
+      signal.clear(s.email);
+      return c.redirect('/');
     } catch (e) {
       console.error('login callback failed:', e.message || e);
       const denied = e.status === 401;
-      res.redirect(denied ? '/login/?login=denied' : `/login/?login=error&msg=${encodeURIComponent(e.message || '')}`);
+      return c.redirect(denied ? '/login/?login=denied' : `/login/?login=error&msg=${encodeURIComponent(e.message || '')}`);
     }
   });
 
-  app.get('/auth/logout', (req, res) => { req.session = null; res.redirect('/login/'); });
+  app.get('/auth/logout', (c) => {
+    c.set('session', null);
+    return c.redirect('/login/');
+  });
 };

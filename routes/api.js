@@ -1,12 +1,17 @@
 'use strict';
 
-// Nạp các module theo SRS. Mọi /api/* đều qua requireSession (401 nếu chưa đăng nhập).
 module.exports = function registerApi(app, ctx) {
   const { authz } = ctx;
-  app.use('/api', authz.requireSession);
+  app.use('/api/*', authz.requireSession);
 
-  const modules = [
-    'auth', 'common', 'attendance', 'teaching', 'scores', 'teacher', 'report', 'admin',
-  ];
-  for (const name of modules) require('./modules/' + name).register(app, ctx);
+  [
+    require('./modules/auth'),
+    require('./modules/common'),
+    require('./modules/attendance'),
+    require('./modules/teaching'),
+    require('./modules/scores'),
+    require('./modules/teacher'),
+    require('./modules/report'),
+    require('./modules/admin'),
+  ].forEach(m => m.register(app, ctx));
 };
