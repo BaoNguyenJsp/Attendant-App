@@ -14,6 +14,7 @@ import * as codes from '../src/lib/codes.js';
 const PAGES = [
   ['public/index.html', 'public/index.js'],
   ['public/login/index.html', 'public/login/login.js'],
+  ['public/students/index.html', 'public/students/students.js'],
 ];
 const SHARED = ['public/shared/common.js', 'public/shared/labels.js', 'public/shared/search.js', 'public/shared/ui.js'];
 const read = (path) => readFileSync(path, 'utf8');
