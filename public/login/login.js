@@ -1,27 +1,30 @@
 /* =====================================================================
-   SỔ THIẾU NHI — login/index.js
-   Trang đăng nhập: xử lý ?login=denied|error, tự động nhảy về / nếu đã
-   đăng nhập, ngược lại hiện nút "Đăng nhập bằng Google".
+   SỔ THIẾU NHI — login/login.js
+   Shows the reason of a refused sign-in, jumps to / when already signed in,
+   otherwise shows the "Đăng nhập bằng Google" button.
    ===================================================================== */
 'use strict';
 
 import { $, api } from '../shared/common.js';
 
-function showLogin(msg) {
+function showLogin(message) {
   $('login-status').style.display = 'none';
-  if (msg) { $('login-error').style.display = 'block'; $('login-error').textContent = '⛔ ' + msg; }
+  if (message) {
+    $('login-error').style.display = 'block';
+    $('login-error').textContent = `⛔ ${message}`;
+  }
   $('login-btn').style.display = 'block';
 }
 
-const q = new URLSearchParams(location.search);
-let msg = q.get('login') === 'denied' ? 'Email chưa được cấp quyền dùng hệ thống. Liên hệ quản trị.'
-  : (q.get('login') === 'error' ? q.get('msg') : '');
-if (msg) showLogin(msg);
+const query = new URLSearchParams(location.search);
+const refused = query.get('login') === 'denied' ? 'Bạn đã hủy đăng nhập bằng Google.' : (query.get('login') === 'error' ? query.get('msg') : '');
+if (refused) showLogin(refused);
 else {
   try {
-    await api('getSessionUser');
-    location.replace('/'); 
+    await api('getSession');
+    location.replace('/');
+  } catch (e) {
+    // 401 is the normal state of the login page: show the button without an error.
+    showLogin(e.status === 401 ? '' : e.message);
   }
-  // 401 = chưa đăng nhập: trạng thái bình thường của trang login → gate sạch, không báo lỗi.
-  catch (e) { showLogin(e.status === 401 ? '' : e.message); }
 }
