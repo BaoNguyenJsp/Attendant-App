@@ -11,65 +11,65 @@
 </head>
 
 <body class="bg-slate-100 min-h-screen" data-title="🧑‍🏫 Quản Lý Huynh trưởng"
-  data-sub="Điểm danh · Trích lục · Thống kê Huynh trưởng theo Ngành / Lớp — BCH ngành / Xứ đoàn" data-back="1"
-  data-role="any">
+  data-sub="Điểm danh · Trích lục · Thống kê Huynh trưởng theo Ngành — BQT ngành / Xứ đoàn"
+  data-role="exec">
 
   <div id="shell"></div>
 
   <div class="max-w-7xl mx-auto px-4 pb-6">
     <div class="bg-white rounded-t-xl border-b border-slate-300 shadow-sm px-4 pt-2 flex flex-wrap">
-      <button class="tab-btn active" data-tab="t-gvdd">📝 Điểm Danh</button>
-      <button class="tab-btn" data-tab="t-gvtrich">🔎 Trích Lục</button>
-      <button class="tab-btn" data-tab="t-gvtk">📊 Thống Kê</button>
+      <button class="tab-btn active" data-tab="t-attendance">📝 Điểm Danh</button>
+      <button class="tab-btn" data-tab="t-absences">🔎 Trích Lục</button>
+      <button class="tab-btn" data-tab="t-stats">📊 Thống Kê</button>
     </div>
 
     <!-- t-gvdd -->
-    <div id="t-gvdd" class="bg-white rounded-b-xl shadow-sm p-5" data-pane>
+    <div id="t-attendance" class="bg-white rounded-b-xl shadow-sm p-5" data-pane>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
         <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Ngành</label>
-          <select id="gvdd-nganh" class="w-full border p-2.5 rounded-lg font-semibold"></select>
+          <select id="ta-sector" class="w-full border p-2.5 rounded-lg font-semibold"></select>
         </div>
-        <div><label id="gvdd-week-label" for="gvdd-week"
+        <div><label id="ta-week-label" for="ta-week"
             class="block text-xs font-bold text-slate-600 uppercase mb-1">Tuần (Chủ Nhật)</label>
-          <input type="date" id="gvdd-week" data-week-label="gvdd-week-label"
+          <input type="date" id="ta-week" data-week-label="ta-week-label"
             class="w-full border p-2.5 rounded-lg font-semibold">
         </div>
         <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Buổi Sinh Hoạt</label>
-          <select id="gvdd-session" class="w-full border p-2.5 rounded-lg font-semibold"></select>
+          <select id="ta-session" class="w-full border p-2.5 rounded-lg font-semibold"></select>
         </div>
       </div>
 
-      <div id="gvdd-holiday-note" style="display:none"></div>
+      <div id="ta-holiday-note" style="display:none"></div>
 
       <div class="tbl-scroll sticky">
         <table class="w-full text-sm border-collapse min-w-[820px]">
           <thead>
             <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
-              <th class="p-3">Email</th>
+              <th class="p-3 admin-only">Email</th>
               <th class="p-3">Họ Tên</th>
               <th class="p-3">Lớp</th>
               <th class="p-3">Hiện Diện</th>
               <th class="p-3">Có Phép</th>
             </tr>
           </thead>
-          <tbody id="gvdd-tbody"></tbody>
+          <tbody id="ta-tbody"></tbody>
         </table>
       </div>
 
       <div class="mt-5 flex justify-between items-center flex-wrap gap-3">
         <div class="flex gap-3 flex-wrap items-center">
-          <span class="font-bold text-slate-700" id="gvdd-summary"></span>
-          <span id="gvdd-dirty"
+          <span class="font-bold text-slate-700" id="ta-summary"></span>
+          <span id="ta-dirty"
             class="bg-amber-100 border border-amber-400 text-amber-800 font-bold px-3 py-1.5 rounded-lg"
-            style="display:none">⚠ Đã sửa chưa lưu</span>
+            style="display:none">⚠ Có thay đổi chưa lưu</span>
         </div>
         <div class="flex gap-3 flex-wrap">
-          <button id="gvdd-refresh"
+          <button id="ta-refresh"
             class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-5 py-3 rounded-lg">↻ Làm mới</button>
-          <button id="gvdd-markall"
+          <button id="ta-markall"
             class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-3 rounded-lg">✅ Chọn hiện diện tất
             cả</button>
-          <button id="gvdd-save"
+          <button id="ta-save"
             class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3 rounded-lg">💾 Lưu Điểm
             Danh</button>
         </div>
@@ -77,46 +77,44 @@
     </div>
 
     <!-- t-gvtrich -->
-    <div id="t-gvtrich" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+    <div id="t-absences" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
       <div
         class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
-        <div class="md:col-span-2"><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Email Huynh
-            trưởng</label>
-          <input type="text" id="gvtrich-q" class="w-full border p-2.5 rounded-lg font-semibold"
-            placeholder="vd: a.nguyen@gmail.com">
+        <div class="md:col-span-2"><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Họ tên đầy đủ của Huynh trưởng <span class="admin-only">(hoặc email)</span></label>
+          <input type="text" id="tabs-query" class="w-full border p-2.5 rounded-lg font-semibold"
+            placeholder="vd: Giuse Trần Văn Bình">
         </div>
         <div class="flex gap-3">
-          <button id="gvtrich-search"
+          <button id="tabs-search"
             class="bg-blue-900 hover:bg-blue-800 text-white font-bold px-6 py-2.5 rounded-lg flex-1">🔎 Tra cứu</button>
         </div>
       </div>
-      <div id="gvtrich-out"></div>
+      <div id="tabs-out"></div>
     </div>
 
     <!-- t-gvtk -->
-    <div id="t-gvtk" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+    <div id="t-stats" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
       <div
         class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
         <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Ngành</label>
-          <select id="gvtk-nganh" class="w-full border p-2.5 rounded-lg font-semibold"></select>
+          <select id="ts-sector" class="w-full border p-2.5 rounded-lg font-semibold"></select>
         </div>
         <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
-          <select id="gvtk-lop" class="w-full border p-2.5 rounded-lg font-semibold"></select>
+          <select id="ts-class" class="w-full border p-2.5 rounded-lg font-semibold"></select>
         </div>
         <div class="flex items-end gap-3">
-          <button id="gvtk-excel"
+          <button id="ts-excel"
             class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-6 py-2.5 rounded-lg flex-1">⬇
             Excel</button>
-          <button id="gvtk-print" class="bg-slate-700 hover:bg-slate-800 text-white font-bold px-6 py-2.5 rounded-lg">🖨
+          <button id="ts-print" class="bg-slate-700 hover:bg-slate-800 text-white font-bold px-6 py-2.5 rounded-lg">🖨
             PDF</button>
         </div>
       </div>
       <div class="tbl-scroll sticky">
-        <table class="w-full text-sm border-collapse min-w-[960px]" id="gvtk-table">
+        <table class="w-full text-sm border-collapse min-w-[960px]" id="ts-table">
           <thead>
             <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
               <th class="p-3">Họ Tên</th>
-              <th class="p-3">Email</th>
               <th class="p-3">Lớp</th>
               <th class="p-3">Buổi dạy</th>
               <th class="p-3">Lễ CN</th>
@@ -127,13 +125,13 @@
               <th class="p-3">Tỉ lệ hiện diện</th>
             </tr>
           </thead>
-          <tbody id="gvtk-tbody"></tbody>
+          <tbody id="ts-tbody"></tbody>
         </table>
       </div>
     </div>
   </div>
 
-  <script type="module" src="giaovien.js"></script>
+  <script type="module" src="teachers.js"></script>
 </body>
 
 </html>

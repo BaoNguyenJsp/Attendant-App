@@ -19,6 +19,7 @@ const PAGES = [
   ['public/attendance/index.html', 'public/attendance/attendance.js', 'public/attendance/face-scan.js'],
   ['public/lessons/index.html', 'public/lessons/lessons.js'],
   ['public/academics/index.html', 'public/academics/academics.js'],
+  ['public/teachers/index.html', 'public/teachers/teachers.js'],
 ];
 const SHARED = ['public/shared/common.js', 'public/shared/labels.js', 'public/shared/search.js', 'public/shared/scores.js', 'public/shared/ui.js'];
 const read = (path) => readFileSync(path, 'utf8');
