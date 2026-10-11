@@ -9,65 +9,65 @@
 </head>
 <body class="bg-slate-100 min-h-screen"
       data-title="⚙ Quản Trị"
-      data-sub="Huynh trưởng · Nhóm · Phân công · Lớp · Nghỉ lễ · Chuyển năm học"
-      data-back="1"
+      data-sub="Huynh trưởng · Nhóm · Lớp · Nghỉ lễ · Cấu hình · Chuyển năm học"
+     
       data-role="admin">
 
 <div id="shell"></div>
 
 <div class="max-w-7xl mx-auto px-4 pb-6">
   <div class="bg-white rounded-t-xl border-b border-slate-300 shadow-sm px-4 pt-2 flex flex-wrap">
-    <button class="tab-btn active" data-tab="t-us">👤 Huynh trưởng</button>
-    <button class="tab-btn" data-tab="t-grp">🗂 Nhóm</button>
-    <button class="tab-btn" data-tab="t-cls">🏫 Lớp</button>
-    <button class="tab-btn" data-tab="t-hol">🗓 Nghỉ Lễ</button>
-    <button class="tab-btn" data-tab="t-cfg">⚙ Cấu hình</button>
+    <button class="tab-btn active" data-tab="t-users">👤 Huynh trưởng</button>
+    <button class="tab-btn" data-tab="t-groups">🗂 Nhóm</button>
+    <button class="tab-btn" data-tab="t-classes">🏫 Lớp</button>
+    <button class="tab-btn" data-tab="t-holidays">🗓 Nghỉ Lễ</button>
+    <button class="tab-btn" data-tab="t-config">⚙ Cấu hình</button>
     <button class="tab-btn" data-tab="t-year">🎓 Chuyển năm</button>
   </div>
 
   <!-- t-us -->
-  <div id="t-us" class="bg-white rounded-b-xl shadow-sm p-5" data-pane>
+  <div id="t-users" class="bg-white rounded-b-xl shadow-sm p-5" data-pane>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
-      <div class="md:col-span-2"><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lọc theo tên hoặc email</label>
-        <input type="text" id="us-q" class="w-full border p-2.5 rounded-lg font-semibold" placeholder="vd: Nguyễn Văn A · a.nguyen@gmail.com"></div>
-      <div class="flex items-end"><button id="us-add" class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg">＋ Thêm Huynh trưởng</button></div>
+      <div class="md:col-span-2"><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Tìm theo họ tên đầy đủ hoặc email (để trống: hiện tất cả)</label>
+        <input type="text" id="user-query" class="w-full border p-2.5 rounded-lg font-semibold" placeholder="vd: Nguyễn Văn A · a.nguyen@gmail.com"></div>
+      <div class="flex items-end"><button id="user-add" class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg">＋ Thêm Huynh trưởng</button></div>
     </div>
     <div class="tbl-scroll sticky">
       <table class="w-full text-sm border-collapse">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
           <th class="p-3">Email</th><th class="p-3">Họ Tên</th><th class="p-3">SDT</th><th class="p-3">Nhóm</th><th class="p-3">Trạng thái</th><th class="p-3"></th>
         </tr></thead>
-        <tbody id="us-tbody"></tbody>
+        <tbody id="user-tbody"></tbody>
       </table>
     </div>
   </div>
 
   <!-- t-grp -->
-  <div id="t-grp" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+  <div id="t-groups" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
     <div class="tbl-scroll sticky">
       <table class="w-full text-sm border-collapse">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
-          <th class="p-3">Nhóm</th><th class="p-3">Loại</th><th class="p-3">Scope (lớp mở rộng)</th>
+          <th class="p-3">Nhóm</th><th class="p-3">Loại</th><th class="p-3">Lớp / Ngành phụ trách</th>
         </tr></thead>
-        <tbody id="grp-tbody"></tbody>
+        <tbody id="group-tbody"></tbody>
       </table>
     </div>
   </div>
 
   <!-- t-cls -->
-  <div id="t-cls" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+  <div id="t-classes" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
     <div class="tbl-scroll sticky">
       <table class="w-full text-sm border-collapse">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
           <th class="p-3">#</th><th class="p-3">Tên Lớp</th><th class="p-3">Khối</th><th class="p-3">Sĩ số (Hoạt động)</th>
         </tr></thead>
-        <tbody id="cls-tbody"></tbody>
+        <tbody id="class-tbody"></tbody>
       </table>
     </div>
   </div>
 
   <!-- t-hol -->
-  <div id="t-hol" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+  <div id="t-holidays" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
       <div><label id="hol-week-label" for="hol-week" class="block text-xs font-bold text-slate-600 uppercase mb-1">Tuần (Chủ Nhật)</label>
         <input type="date" id="hol-week" data-week-label="hol-week-label" class="w-full border p-2.5 rounded-lg font-semibold"></div>
@@ -86,11 +86,12 @@
   </div>
 
   <!-- t-cfg -->
-  <div id="t-cfg" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+  <div id="t-config" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
     <div class="flex justify-between items-center mb-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
       <h2 class="font-bold text-lg text-slate-700">⚙ Cấu hình Hệ Thống (Config)</h2>
       <div class="flex gap-2">
-        <button id="cfg-add-row" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2 rounded-lg text-sm">＋ Thêm Cấu hình</button>
+        <button id="drive-connect" class="bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold px-4 py-2 rounded-lg text-sm">🔗 Kết nối Google Drive</button>
+        <button id="cfg-add" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2 rounded-lg text-sm">＋ Thêm Cấu hình</button>
         <button id="cfg-save" class="bg-blue-900 hover:bg-blue-800 text-white font-bold px-5 py-2 rounded-lg text-sm">💾 Lưu Cấu Hình</button>
       </div>
     </div>
@@ -112,27 +113,28 @@
   <div id="t-year" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
     <h2 class="font-bold text-lg mb-3">🎓 Chuyển Năm Học</h2>
     <ul class="space-y-1 text-sm text-slate-600 list-disc ml-5 mb-4">
-      <li>① Chốt điểm + tỉ lệ chuyên cần của <b>năm hiện tại</b> vào sheet <b>AcademicYear</b> (học bạ).</li>
-      <li>② Xóa sạch bản ghi điểm danh (Attendance, TeacherAttendance) và Nghỉ lễ (Holidays).</li>
-      <li>③ Thiếu nhi đang <b>Hoạt động</b> tự lên lớp kế tiếp theo thứ tự tab Lớp; lớp cuối <b>giữ nguyên</b> — muốn ra khỏi lớp cuối thì đổi trạng thái thành <b>Tốt nghiệp</b> / <b>Ngưng hoạt động</b>.</li>
-      <li>④ Năm học tự tăng lên 1. Nhóm / người dùng giữ nguyên.</li>
+      <li>① Chốt điểm và tỉ lệ chuyên cần của <b>năm hiện tại</b> vào học bạ của từng Thiếu nhi đang Hoạt động.</li>
+      <li>② Xóa điểm danh Thiếu nhi, điểm danh Huynh trưởng, điểm và Nghỉ lễ của năm hiện tại. Giáo án được giữ lại.</li>
+      <li>③ Thiếu nhi đang <b>Hoạt động</b> lên lớp kế tiếp theo thứ tự tab Lớp; lớp cuối <b>giữ nguyên</b> — muốn ra khỏi lớp cuối thì đổi trạng thái thành <b>Đã tốt nghiệp</b>.</li>
+      <li>④ Năm học tăng lên 1 và ngày bắt đầu điểm danh được đặt lại. Nhóm và Huynh trưởng giữ nguyên.</li>
+      <li>Tất cả là một bước: nếu có lỗi thì không có gì thay đổi và có thể chạy lại.</li>
     </ul>
     <p class="mt-5"><button id="year-open" class="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-lg">🎓 Chuyển sang năm học kế tiếp…</button></p>
   </div>
 </div>
 
 <!-- Modal: thêm / sửa người dùng -->
-<div id="us-modal" class="modal">
+<div id="user-modal" class="modal">
   <div class="modal-content">
-    <h3 id="us-m-title">Thêm Huynh trưởng / Người Dùng</h3>
+    <h3 id="user-title">Thêm Huynh trưởng / Người Dùng</h3>
     <div class="form-grid">
-      <div class="form-group full"><label>Email Google *</label><input id="us-m-email" type="text" placeholder="vd: a.nguyen@gmail.com"></div>
-      <div class="form-group"><label>Tên Thánh</label><input id="us-m-saint" type="text"></div>
-      <div class="form-group"><label>Họ Và Tên *</label><input id="us-m-full" type="text"></div>
-      <div class="form-group"><label>SDT</label><input id="us-m-sdt" type="text" placeholder="vd: 0912 345 678"></div>
-      <div class="form-group"><label>Trạng Thái</label><select id="us-m-status"><option>Hoạt động</option><option>Ngưng hoạt động</option></select></div>
+      <div class="form-group full"><label>Email Google *</label><input id="user-email" type="text" placeholder="vd: a.nguyen@gmail.com"></div>
+      <div class="form-group"><label>Tên Thánh</label><input id="user-saint" type="text"></div>
+      <div class="form-group"><label>Họ Và Tên *</label><input id="user-fullname" type="text"></div>
+      <div class="form-group"><label>SDT</label><input id="user-phone" type="text" placeholder="vd: 0912 345 678"></div>
+      <div class="form-group"><label>Trạng Thái</label><select id="user-status"></select></div>
       <div class="form-group full"><label>Nhóm (chọn nhiều)</label>
-        <div id="us-m-groups" class="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-56 overflow-y-auto border rounded-lg p-2 bg-slate-50"></div>
+        <div id="user-groups" class="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-56 overflow-y-auto border rounded-lg p-2 bg-slate-50"></div>
       </div>
     </div>
     <div class="modal-actions">
@@ -147,24 +149,24 @@
   <div class="modal-content">
     <h3>🎓 Chuyển Năm Học</h3>
     <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm mb-4 flex flex-wrap gap-2 items-center">
-      <span>Năm hiện tại: <b id="yr-old"></b></span>
+      <span>Năm hiện tại: <b id="year-old"></b></span>
       <span class="text-slate-400">→</span>
-      <span>Năm mới: <b id="yr-new"></b></span>
+      <span>Năm mới: <b id="year-new"></b></span>
     </div>
     <p class="text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm font-semibold mb-4">
-      ⚠ Hành động phá hủy — không thể hoàn tác. Nên chạy trên bản sao spreadsheet nếu còn ngờ.</p>
+      ⚠ Dữ liệu điểm danh, điểm và nghỉ lễ của năm hiện tại sẽ bị xóa sau khi chốt học bạ.</p>
     <div class="form-grid">
       <div class="form-group full"><label>Ngày bắt đầu năm học mới (AttendanceStartDate) *</label>
-        <input id="sy-start" type="date" placeholder="Chủ Nhật đầu năm học mới"></div>
+        <input id="year-start" type="date" placeholder="Chủ Nhật đầu năm học mới"></div>
     </div>
     <div class="modal-actions">
       <button type="button" class="btn-cancel">Hủy</button>
-      <button type="button" class="btn-save" id="sy-confirm">Xác nhận chuyển năm</button>
+      <button type="button" class="btn-save" id="year-confirm">Xác nhận chuyển năm</button>
     </div>
   </div>
 </div>
 
-<button id="warm-cache" type="button" title="Làm mới bộ nhớ đệm máy chủ"
+<button id="clear-cache" type="button" title="Xóa và dựng lại bộ nhớ đệm máy chủ"
         class="fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full bg-blue-900 hover:bg-blue-800 text-white text-2xl shadow-lg flex items-center justify-center disabled:opacity-60">
   🔥
 </button>
