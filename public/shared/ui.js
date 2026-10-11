@@ -31,3 +31,34 @@ export function absenceTable(tableId, absences) {
     + '<tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center"><th class="p-3 border">Tuần</th><th class="p-3 border">Buổi</th><th class="p-3 border">Tình trạng</th></tr>'
     + `</thead><tbody>${rows}</tbody></table></div>`;
 }
+
+// Opens a print window with a title, a subtitle (HTML), one table (HTML) and the two signature blocks.
+// Returns false when the browser blocked the window.
+export function printDocument({ title, subtitle, tableHtml, leftSignature, landscape = false, leftColumn = 2 }) {
+  const win = window.open('', '_blank');
+  if (!win) return false;
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(title)}</title><style>
+    body{font-family:'Times New Roman',Times,serif;padding:20px;color:#000}
+    .header{text-align:center;margin-bottom:20px}
+    .header h2{margin:0;font-size:20px;text-transform:uppercase}
+    .header h3{margin:5px 0 0;font-size:16px;font-weight:normal}
+    table{width:100%;border-collapse:collapse;margin-top:15px;font-size:13px}
+    th,td{border:1px solid #000;padding:6px;text-align:center}
+    th{background:#f4f4f4;font-weight:bold}
+    td:nth-child(${leftColumn}){text-align:left}
+    .footer{margin-top:40px;display:flex;justify-content:space-between;font-size:15px}
+    .signature{text-align:center;width:40%}
+    @media print{@page{size:A4 ${landscape ? 'landscape' : 'portrait'};margin:15mm}}
+  </style></head><body>
+    <div class="header"><h2>${esc(title)}</h2><h3>${subtitle}</h3></div>
+    ${tableHtml}
+    <div class="footer">
+      <div class="signature"><p><b>${esc(leftSignature)}</b></p><br><br><br></div>
+      <div class="signature"><p><b>Xứ đoàn trưởng</b></p><br><br><br></div>
+    </div>
+  </body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); win.close(); }, 250);
+  return true;
+}

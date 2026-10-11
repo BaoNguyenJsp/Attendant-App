@@ -9,6 +9,7 @@ import * as server from '../src/lib/text.js';
 import * as page from '../public/shared/search.js';
 import { SESSION_LABEL, MARK_LABEL, TIER_LABEL, STUDENT_STATUS_LABEL, USER_STATUS_LABEL, GENDER_LABEL, RATING_LABEL, ATTENDANCE_RATING_LABEL, SLOT_LABEL } from '../public/shared/labels.js';
 import * as codes from '../src/lib/codes.js';
+import { parseScore } from '../public/shared/scores.js';
 
 // [html, script, ...more scripts of the page]. A page is added here by the task that migrates it.
 const PAGES = [
@@ -17,8 +18,9 @@ const PAGES = [
   ['public/students/index.html', 'public/students/students.js'],
   ['public/attendance/index.html', 'public/attendance/attendance.js', 'public/attendance/face-scan.js'],
   ['public/lessons/index.html', 'public/lessons/lessons.js'],
+  ['public/academics/index.html', 'public/academics/academics.js'],
 ];
-const SHARED = ['public/shared/common.js', 'public/shared/labels.js', 'public/shared/search.js', 'public/shared/ui.js'];
+const SHARED = ['public/shared/common.js', 'public/shared/labels.js', 'public/shared/search.js', 'public/shared/scores.js', 'public/shared/ui.js'];
 const read = (path) => readFileSync(path, 'utf8');
 
 function parses(path) {
@@ -86,4 +88,12 @@ test('every code has a label', () => {
   labelled(SLOT_LABEL, codes.FILE_SLOTS);
   labelled(RATING_LABEL, ['EXCELLENT', 'GOOD', 'AVERAGE']);
   labelled(ATTENDANCE_RATING_LABEL, ['EXCELLENT', 'GOOD', 'FAIR', 'NEEDS_WORK']);
+});
+
+test('the page score rule gives the same answer as the server rule', () => {
+  for (const text of ['', '  ', '0', '0,0', '7,5', '7.5', '10', '10.5', '-1', 'abc', '1e1', '0x5', '5 ', ' 9', '１０']) {
+    assert.equal(parseScore(text), codes.parseScore(text), `score "${text}"`);
+  }
+  assert.equal(parseScore(null), null);
+  assert.equal(parseScore(0), 0);
 });
