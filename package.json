@@ -1,28 +1,22 @@
 {
   "name": "so-thieu-nhi",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Sổ Thiếu Nhi — quản lý giáo xứ (Node proxy + Apps Script + Google Sheets)",
-  "main": "server.js",
-  "type": "commonjs",
+  "description": "Sổ Thiếu Nhi — quản lý giáo xứ (Cloudflare Worker + D1 + KV + R2)",
+  "type": "module",
   "engines": {
     "node": ">=22.16"
   },
   "scripts": {
-    "start": "node server.js",
-    "selfcheck": "node server.js --selfcheck",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "preview": "wrangler dev",
     "test": "node --test \"test/*.test.mjs\"",
     "seed": "node scripts/seed-demo.mjs",
-    "db:local": "wrangler d1 execute DB --local --file=schema.sql && wrangler d1 execute DB --local --file=seed.sql"
+    "db:local": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('.wrangler/state/v3/kv', { recursive: true, force: true })\" && wrangler d1 execute DB --local --file=schema.sql && wrangler d1 execute DB --local --file=seed.sql",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
-    "cookie-session": "^2.1.0",
-    "express": "^4.19.2",
-    "hono": "^4.13.13",
-    "undici": "^7.29.1"
+    "hono": "^4.13.13"
   },
   "devDependencies": {
     "wrangler": "^4.149.0"
