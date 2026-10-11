@@ -18,14 +18,14 @@ export async function readSession(request, secret) {
   try {
     const [payload, sig] = m[1].split('.');
     if (!sig || sig !== await hmac(payload, secret)) return {};
-    return JSON.parse(atob(payload));
+    return JSON.parse(decodeURIComponent(atob(payload)));
   } catch { return {}; }
 }
 
 export async function makeSessionCookie(session, secret) {
-  if (!session || !session.email)
+  if (!session || Object.keys(session).length === 0)
     return `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
-  const payload = btoa(JSON.stringify(session));
+  const payload = btoa(encodeURIComponent(JSON.stringify(session)));
   const sig = await hmac(payload, secret);
   return `${COOKIE}=${payload}.${sig}; ${OPTS}`;
 }

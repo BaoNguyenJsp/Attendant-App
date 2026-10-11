@@ -6,14 +6,16 @@
   "main": "server.js",
   "type": "commonjs",
   "engines": {
-    "node": ">=18"
+    "node": ">=22.16"
   },
   "scripts": {
     "start": "node server.js",
     "selfcheck": "node server.js --selfcheck",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "preview": "wrangler dev"
+    "preview": "wrangler dev",
+    "test": "node --test \"test/*.test.mjs\"",
+    "seed": "node scripts/seed-demo.mjs"
   },
   "dependencies": {
     "cookie-session": "^2.1.0",
