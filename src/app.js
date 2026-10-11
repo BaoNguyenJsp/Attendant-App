@@ -33,7 +33,9 @@ export function createApp({ fetch = globalThis.fetch } = {}) {
   app.use('*', async (c, next) => {
     c.set('session', await readSession(c.req.raw, c.env.SESSION_SECRET));
     await next();
-    c.header('Set-Cookie', await makeSessionCookie(c.get('session'), c.env.SESSION_SECRET));
+    const cookie = await makeSessionCookie(c.get('session'), c.env.SESSION_SECRET);
+    // The session never travels over plain HTTP in production; local dev runs on http.
+    c.header('Set-Cookie', new URL(c.req.url).protocol === 'https:' ? `${cookie}; Secure` : cookie);
   });
 
   // R1: a valid session on every API call; a locked user or changed groups or email end it.

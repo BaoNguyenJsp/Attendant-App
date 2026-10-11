@@ -121,3 +121,13 @@ test('the hourly job empties the Drive trash queue and survives a Drive that is 
   await pending; // not connected: logged, not thrown
   assert.equal(await env.DB.prepare('SELECT COUNT(*) AS n FROM DriveTrash').first('n'), 1);
 });
+
+test('the session cookie is marked Secure on https, and not on http where local dev runs', async () => {
+  const env = await testEnv();
+  const { app } = createApp();
+  const headers = { Cookie: await cookieFor(env, 'doruoora@gmail.com') };
+  const secure = await app.request('https://app.example/api/getSession', { method: 'POST', headers }, env);
+  assert.match(secure.headers.get('Set-Cookie'), /; Secure$/);
+  const local = await app.request('http://localhost:8787/api/getSession', { method: 'POST', headers }, env);
+  assert.doesNotMatch(local.headers.get('Set-Cookie'), /Secure/);
+});
