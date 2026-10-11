@@ -9,5 +9,14 @@
   },
   "assets": {
     "directory": "public"
-  }
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "so-thieu-nhi", "database_id": "00000000-0000-0000-0000-000000000000" }
+  ],
+  "kv_namespaces": [
+    { "binding": "CACHE", "id": "00000000000000000000000000000000" }
+  ],
+  "r2_buckets": [
+    { "binding": "PHOTOS", "bucket_name": "so-thieu-nhi-photos" }
+  ]
 }
