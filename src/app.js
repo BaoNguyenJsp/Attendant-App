@@ -9,6 +9,7 @@ import { isSessionValid } from './lib/db/users.js';
 import { makeLists } from './http/lists.js';
 import { ACTIONS } from './http/actions.js';
 import { registerPhotos } from './http/photos.js';
+import { registerAuth } from './http/auth.js';
 
 const error = (c, status, message) => c.json({ status: 'error', message }, status);
 
@@ -46,6 +47,7 @@ export function createApp({ fetch = globalThis.fetch } = {}) {
     await next();
   });
 
+  registerAuth(app, { fetch });
   registerPhotos(app, context);
 
   app.post('/api/:action', async (c) => {

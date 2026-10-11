@@ -18,5 +18,8 @@
   ],
   "r2_buckets": [
     { "binding": "PHOTOS", "bucket_name": "so-thieu-nhi-photos" }
-  ]
+  ],
+  "triggers": {
+    "crons": ["0 * * * *"]
+  }
 }
