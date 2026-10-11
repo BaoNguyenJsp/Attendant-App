@@ -15,6 +15,7 @@ const PAGES = [
   ['public/index.html', 'public/index.js'],
   ['public/login/index.html', 'public/login/login.js'],
   ['public/students/index.html', 'public/students/students.js'],
+  ['public/attendance/index.html', 'public/attendance/attendance.js', 'public/attendance/face-scan.js'],
 ];
 const SHARED = ['public/shared/common.js', 'public/shared/labels.js', 'public/shared/search.js', 'public/shared/ui.js'];
 const read = (path) => readFileSync(path, 'utf8');
@@ -24,7 +25,10 @@ function parses(path) {
   writeFileSync(copy, read(path));
   execFileSync(process.execPath, ['--check', copy], { stdio: 'pipe' });
 }
-const exportsOf = (source) => new Set([...source.matchAll(/export\s+(?:async\s+)?(?:const|let|function|class)\s+([A-Za-z_$][\w$]*)/g)].map((m) => m[1]));
+const exportsOf = (source) => new Set([
+  ...[...source.matchAll(/export\s+(?:async\s+)?(?:const|let|function|class)\s+([A-Za-z_$][\w$]*)/g)].map((m) => m[1]),
+  ...[...source.matchAll(/export\s*\{([^}]*)\}/g)].flatMap((m) => m[1].split(',').map((n) => n.trim().split(/\s+as\s+/).pop()).filter(Boolean)),
+]);
 const importsOf = (source) => [...source.matchAll(/import\s*\{([^}]*)\}\s*from\s*'([^']+)'/g)]
   .map((m) => ({ from: m[2], names: m[1].split(',').map((n) => n.trim().split(/\s+as\s+/)[0]).filter(Boolean) }));
 
