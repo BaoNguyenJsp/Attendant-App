@@ -60,3 +60,6 @@ export function sundaysBetween(from, to) {
   for (let t = parse(upcomingSunday(from)).getTime(); t <= end; t += 7 * DAY) out.push(format(new Date(t)));
   return out;
 }
+
+// Today's date in Vietnam (UTC+7, no daylight saving). The Worker itself runs in UTC.
+export const todayVN = (nowMs = Date.now()) => format(new Date(nowMs + 7 * 3600000));
