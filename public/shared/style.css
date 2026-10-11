@@ -45,7 +45,7 @@
 .b-admin{background:#fce7f3;color:#9d174d;border:1px solid #fbcfe8}
 
 /* role-restricted UI — hidden until session known */
-.exec-only,.admin-only{display:none}
+.exec-only:not(.shown),.admin-only:not(.shown){display:none}
 
 @media print{
   .no-print{display:none!important}

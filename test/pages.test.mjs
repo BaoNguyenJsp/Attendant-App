@@ -99,3 +99,9 @@ test('the page score rule gives the same answer as the server rule', () => {
   assert.equal(parseScore(null), null);
   assert.equal(parseScore(0), 0);
 });
+
+test('role-only elements are hidden by the stylesheet until setVis marks them shown', () => {
+  // The stylesheet hides them first, so clearing an inline style can never show them: a class has to.
+  assert.match(read('public/shared/style.css'), /\.exec-only:not\(\.shown\),\s*\.admin-only:not\(\.shown\)\s*\{\s*display:\s*none/);
+  assert.match(read('public/shared/common.js'), /classList\.toggle\('shown', on\)/);
+});

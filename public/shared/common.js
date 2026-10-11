@@ -63,7 +63,8 @@ export function fillClasses(...selectIds) {
 }
 
 export function setVis(selector, on) {
-  document.querySelectorAll(selector).forEach((el) => { el.style.display = on ? '' : 'none'; });
+  // The stylesheet hides these until they carry .shown, so each keeps its own display (cell, inline, flex…).
+  document.querySelectorAll(selector).forEach((el) => el.classList.toggle('shown', on));
 }
 
 // Tabs: buttons .tab-btn[data-tab] show the pane with that id; handlers[tabId] runs each time its tab is shown.
