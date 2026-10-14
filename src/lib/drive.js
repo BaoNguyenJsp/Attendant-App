@@ -40,14 +40,28 @@ export function makeDrive({ db, clientId, clientSecret, fetch = globalThis.fetch
     return (await made.json()).id;
   }
 
+  // False when the folder was deleted, or it or a folder above it is in the trash: an upload into it would
+  // succeed but nobody would see the file.
+  async function alive(folderId) {
+    const res = await call(`${FILES_URL}/${encodeURIComponent(folderId)}?fields=trashed`);
+    return res.ok && !(await res.json()).trashed;
+  }
+
   // The folder for a path under the root, created on demand. Ids are remembered in DriveFolders.
-  // ponytail: a remembered folder that was deleted in Drive is not noticed; delete its DriveFolders rows to recreate it.
+  // Usual case: the last folder is remembered and still there, one check. Otherwise the path is walked from
+  // the root and every missing or deleted folder is created again.
+  // ponytail: no lock, so two requests that both miss DriveFolders each create the folder. One save is one
+  // request; two users creating the same new folder in the same second can still duplicate it.
+  // Upgrade path: claim the PathKey row in D1 before creating the folder.
   async function folderFor(rootId, parts) {
+    const remembered = (pathKey) => db.prepare('SELECT FolderId FROM DriveFolders WHERE PathKey = ?').bind(pathKey).first('FolderId');
+    const last = await remembered([rootId, ...parts].join('/'));
+    if (last && await alive(last)) return last;
     let parent = rootId;
     for (let i = 0; i < parts.length; i++) {
       const pathKey = [rootId, ...parts.slice(0, i + 1)].join('/');
-      let id = await db.prepare('SELECT FolderId FROM DriveFolders WHERE PathKey = ?').bind(pathKey).first('FolderId');
-      if (!id) {
+      let id = await remembered(pathKey);
+      if (!id || !(await alive(id))) {
         id = await childFolder(parent, parts[i]);
         await db.prepare('INSERT OR REPLACE INTO DriveFolders (PathKey, FolderId) VALUES (?, ?)').bind(pathKey, id).run();
       }

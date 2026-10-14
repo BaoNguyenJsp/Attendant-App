@@ -9,7 +9,7 @@ Trình duyệt (public/…)             trang tĩnh + ES module, không build
 Cloudflare Worker (src/, Hono)      đăng nhập Google · phiên trong cookie ký · phân quyền R1–R8
    ├── D1  (schema.sql)             toàn bộ dữ liệu
    ├── KV                           bộ nhớ đệm các danh sách ít đổi
-   ├── R2                           ảnh thiếu nhi (riêng tư)
+   ├── D1 bảng StudentPhotos        ảnh thiếu nhi (riêng tư); chuyển sang R2 bằng cách bật binding PHOTOS
    └── Google Drive REST            file giáo án (một tài khoản chủ, kết nối từ trang Quản trị)
 ```
 
@@ -23,7 +23,7 @@ Trang cũ (Express + Apps Script + Google Sheet, nhánh `master`) vẫn chạy r
 | `src/lib/` | Mã dùng chung: mã (codes), chuẩn hoá chữ và ngày, quyền, cache, Drive |
 | `src/lib/db/` | Mỗi mảng một module đọc/ghi D1: `org`, `users`, `students`, `attendance`, `academics`, `lessons` |
 | `src/http/` | `actions.js` (mọi `POST /api/<action>`), `photos.js`, `auth.js`, `lists.js` |
-| `src/app.js`, `src/worker.js` | Ứng dụng Hono và điểm vào của Worker (`fetch`, cron mỗi giờ) |
+| `src/app.js`, `src/worker.js` | Ứng dụng Hono và điểm vào của Worker (`fetch`, cron mỗi tuần) |
 | `public/` | Giao diện: `lessons`, `attendance`, `academics`, `students`, `teachers`, `admin`, `login`, `shared` |
 | `schema.sql` | Lược đồ D1 (chạy lại được: xoá rồi tạo) |
 | `scripts/seed-demo.mjs` | Sinh dữ liệu mẫu → `seed.sql` |
@@ -59,9 +59,10 @@ npm run smoke     # khi `npm run dev` đang chạy: đi qua mọi trang và mọ
    ```bash
    npx wrangler d1 create so-thieu-nhi
    npx wrangler kv namespace create CACHE
-   npx wrangler r2 bucket create so-thieu-nhi-photos
    ```
-   Không đặt lifecycle rule cho bucket: ảnh không tự hết hạn.
+   Ảnh thiếu nhi lưu trong D1 (bảng `StudentPhotos`), không cần R2. Khi muốn chuyển sang R2: bật R2 trên tài khoản,
+   `npx wrangler r2 bucket create so-thieu-nhi-photos` (không đặt lifecycle rule: ảnh không tự hết hạn), bỏ chú thích
+   khối `r2_buckets` trong `wrangler.jsonc`, rồi `npm run deploy`. Ảnh mới vào R2; ảnh cũ vẫn đọc được từ D1.
 3. Google Cloud Console → OAuth client (Web application), **tạo client secret mới** (secret cũ đã nằm trong lịch sử git):
    - Redirect URI: `https://<worker-url>/auth/callback` và `https://<worker-url>/auth/drive/callback`
    - Bật **Google Drive API**; đưa OAuth consent screen sang **In production**.
@@ -87,4 +88,4 @@ npm run smoke     # khi `npm run dev` đang chạy: đi qua mọi trang và mọ
 - **Nhóm và lớp** không có màn hình sửa: sửa bằng SQL trong Cloudflare console, rồi bấm nút bộ nhớ đệm (góc dưới phải trang Quản trị). Người có nhóm bị đổi cần đăng nhập lại: `UPDATE Users SET AuthVersion = AuthVersion + 1 WHERE Id = …`.
 - **Lịch sử cấu hình** nằm ở bảng `ConfigHistory` (không có màn hình).
 - **Khôi phục**: D1 giữ lịch sử 30 ngày (`wrangler d1 time-travel`).
-- **File giáo án đã gỡ** được chuyển vào thùng rác Drive bởi cron mỗi giờ (bảng `DriveTrash` là hàng đợi).
+- **File giáo án đã gỡ** được chuyển vào thùng rác Drive bởi cron mỗi tuần (Chủ nhật 00:00 UTC) (bảng `DriveTrash` là hàng đợi).

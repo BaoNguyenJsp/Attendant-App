@@ -7,6 +7,7 @@ DROP TABLE IF EXISTS Scores;
 DROP TABLE IF EXISTS TeacherAttendance;
 DROP TABLE IF EXISTS Attendance;
 DROP TABLE IF EXISTS SiblingMembers;
+DROP TABLE IF EXISTS StudentPhotos;
 DROP TABLE IF EXISTS Students;
 DROP TABLE IF EXISTS Holidays;
 DROP TABLE IF EXISTS ConfigHistory;
@@ -110,6 +111,13 @@ CREATE TABLE SiblingMembers (
   FamilyId  INTEGER NOT NULL
 );
 CREATE INDEX SiblingMembers_FamilyId ON SiblingMembers (FamilyId);
+
+-- Photo bytes while R2 is not used (see src/http/photos.js). Always read one row by StudentId, never the whole table.
+CREATE TABLE StudentPhotos (
+  StudentId   INTEGER PRIMARY KEY REFERENCES Students (Id) ON DELETE CASCADE,
+  ContentType TEXT NOT NULL,
+  Bytes       BLOB NOT NULL
+);
 
 CREATE TABLE Attendance (
   StudentId    INTEGER NOT NULL REFERENCES Students (Id) ON DELETE CASCADE,

@@ -4,7 +4,7 @@ import { seededD1 } from './helpers/seeded.mjs';
 import { AppError } from '../src/lib/errors.js';
 import { loadSession } from '../src/lib/db/users.js';
 import { makeDrive, NOT_CONNECTED } from '../src/lib/drive.js';
-import { getLessons, saveLesson, createUploadUrl, emptyDriveTrash } from '../src/lib/db/lessons.js';
+import { getLessons, saveLesson, createUploadUrls, emptyDriveTrash } from '../src/lib/db/lessons.js';
 
 const status = (code) => (e) => e instanceof AppError && e.status === code;
 const WEEK = '2026-10-11'; // no lesson yet in the demo data
@@ -16,6 +16,7 @@ const trashQueue = async (db) => (await db.prepare('SELECT FileId FROM DriveTras
 // A stand-in for Google: records calls, creates folder ids on demand.
 function fakeGoogle() {
   const calls = [];
+  const gone = new Set(); // folder ids deleted in Drive
   let folders = 0;
   const fetch = async (url, init = {}) => {
     const u = String(url);
@@ -25,9 +26,10 @@ function fakeGoogle() {
     if (u.includes('/upload/drive/v3/files')) return json({}, { Location: 'https://upload.example/session-1' });
     if (init.method === 'PATCH') return u.endsWith('/missing') ? new Response('', { status: 404 }) : u.endsWith('/broken') ? new Response('', { status: 500 }) : json({});
     if (init.method === 'POST') return json({ id: `folder-${++folders}` });
+    if (gone.has(u.match(/\/files\/([^?]+)\?fields=trashed/)?.[1])) return new Response('', { status: 404 });
     return json({ files: [] });
   };
-  return { fetch, calls };
+  return { fetch, calls, gone };
 }
 
 async function connected(db, google = fakeGoogle()) {
@@ -97,16 +99,16 @@ test('lesson rules: scope, Sunday, three uploaded files per slot, links start wi
 test('an upload link needs the class in scope and a connected Drive', async () => {
   const db = await seededD1();
   const t = await teacher(db);
-  const request = { weekOf: WEEK, classId: 1, slot: 'PLAN', filename: 'bai:6.pdf', origin: 'https://app.example' };
+  const request = { weekOf: WEEK, classId: 1, files: [{ slot: 'PLAN', filename: 'bai:6.pdf' }], origin: 'https://app.example' };
   const offline = makeDrive({ db, clientId: 'id', clientSecret: 'secret', fetch: fakeGoogle().fetch });
-  await assert.rejects(createUploadUrl(db, offline, t, request), (e) => status(409)(e) && e.message === NOT_CONNECTED);
+  await assert.rejects(createUploadUrls(db, offline, t, request), (e) => status(409)(e) && e.message === NOT_CONNECTED);
 
   const { google, drive } = await connected(db);
-  await assert.rejects(createUploadUrl(db, drive, t, { ...request, classId: 2 }), status(403));
-  await assert.rejects(createUploadUrl(db, drive, t, { ...request, slot: 'GLV' }), status(400));
-  await assert.rejects(createUploadUrl(db, drive, t, { ...request, filename: ' ' }), status(400));
+  await assert.rejects(createUploadUrls(db, drive, t, { ...request, classId: 2 }), status(403));
+  await assert.rejects(createUploadUrls(db, drive, t, { ...request, files: [{ slot: 'GLV', filename: 'a.pdf' }] }), status(400));
+  await assert.rejects(createUploadUrls(db, drive, t, { ...request, files: [{ slot: 'PLAN', filename: ' ' }] }), status(400));
 
-  assert.equal(await createUploadUrl(db, drive, t, request), 'https://upload.example/session-1');
+  assert.deepEqual(await createUploadUrls(db, drive, t, request), ['https://upload.example/session-1']);
   const folders = (await db.prepare('SELECT PathKey FROM DriveFolders ORDER BY PathKey').all()).results.map((r) => r.PathKey);
   assert.deepEqual(folders, ['root/2026-2027', 'root/2026-2027/Chiên Con', 'root/2026-2027/Chiên Con/2026-10-11', 'root/2026-2027/Chiên Con/2026-10-11/PLAN']);
   const upload = google.calls.find((c) => c.url.includes('/upload/'));
@@ -114,10 +116,19 @@ test('an upload link needs the class in scope and a connected Drive', async () =
   assert.equal(upload.headers.Origin, 'https://app.example');
   assert.equal(upload.headers.Authorization, 'Bearer token-1');
 
-  // the second link reuses the remembered folders and the token
+  // a second save reuses the remembered folders and the token: three files of one slot = one folder check, three sessions
   const before = google.calls.length;
-  await createUploadUrl(db, drive, t, request);
-  assert.equal(google.calls.length, before + 1);
+  const three = ['a.pdf', 'b.pdf', 'c.pdf'].map((filename) => ({ slot: 'PLAN', filename }));
+  assert.equal((await createUploadUrls(db, drive, t, { ...request, files: three })).length, 3);
+  assert.equal(google.calls.length, before + 4);
+  await assert.rejects(createUploadUrls(db, drive, t, { ...request, files: [] }), status(400));
+
+  // the class folder was deleted in Drive: it and the folders below it are created again, the year folder is kept
+  for (const id of ['folder-2', 'folder-3', 'folder-4']) google.gone.add(id);
+  await createUploadUrls(db, drive, t, request);
+  assert.deepEqual(JSON.parse(google.calls.at(-1).body).parents, ['folder-7']);
+  const ids = (await db.prepare('SELECT FolderId FROM DriveFolders ORDER BY PathKey').all()).results.map((r) => r.FolderId);
+  assert.deepEqual(ids, ['folder-1', 'folder-5', 'folder-6', 'folder-7']);
 });
 
 test('the trash job trashes queued files and keeps the ones that failed', async () => {

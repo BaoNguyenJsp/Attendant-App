@@ -1,0 +1,135 @@
+CHỨC NĂNG THEO TỪNG VAI TRÒ NGƯỜI DÙNG
+======================================
+
+Vai trò
+-------
+- Huynh trưởng lớp: phụ trách lớp của mình.
+- Ngành: phụ trách các lớp trong ngành.
+- BQT ngành: phụ trách các lớp trong ngành và quản lý Huynh trưởng của ngành đó.
+- Xứ đoàn: toàn quyền.
+
+Vai trò cao hơn làm được mọi việc của vai trò thấp hơn.
+"Lớp của mình" bên dưới nghĩa là các lớp người dùng được phân công.
+
+
+CHƯA ĐĂNG NHẬP
+--------------
+- Đăng nhập bằng tài khoản Google.
+  - Chỉ đăng nhập được khi Xứ đoàn đã thêm email và tài khoản không bị khóa.
+- Đăng xuất.
+
+
+HUYNH TRƯỞNG LỚP và NGÀNH
+-------------------------
+
+Trang Thiếu nhi
+- Xem danh sách Thiếu nhi của lớp mình, lọc theo trạng thái (Hoạt động, Ngưng hoạt động, Đã tốt nghiệp).
+  - Thấy: số CCCD, tên thánh, họ tên, giới tính, ngày sinh, cha, mẹ, số điện thoại, anh chị em.
+- Sao chép số điện thoại bằng một nút bấm.
+- Xem thư viện ảnh của lớp mình.
+- Tra cứu Thiếu nhi toàn đoàn:
+  - Phải nhập đúng và đủ họ tên (có dấu), hoặc tên thánh + họ tên, hoặc số CCCD.
+  - Kết quả hiện lớp, trạng thái, thông tin và ảnh của Thiếu nhi đó.
+- Không thêm, không sửa Thiếu nhi.
+- Không chuyển lớp, không nhập Excel, không tải hay xóa ảnh.
+
+Trang Chuyên cần
+- Điểm danh lớp mình theo tuần, cho 4 buổi:
+  Lễ Chúa Nhật, Học Giáo lý, Chầu Thánh Thể, Lễ Thứ Năm.
+  - Đánh dấu từng em: hiện diện, có phép, vắng.
+  - Đánh dấu cả lớp một lần.
+  - Điểm danh bằng quét khuôn mặt.
+  - Sửa hoặc xóa dấu đã lưu.
+- Thấy buổi nào trong tuần là ngày nghỉ.
+- Trích lục vắng mặt của một Thiếu nhi bất kỳ (nhập đúng họ tên hoặc số CCCD), xuất Excel.
+- Xem thống kê chuyên cần của bất kỳ lớp nào trong năm học, xuất Excel, in.
+- Xem thống kê toàn đoàn theo năm, quý hoặc tháng, có xếp loại từng lớp, xuất Excel, in.
+
+Trang Học tập
+- Nhập và sửa điểm lớp mình: 15 phút và thi của học kỳ 1, học kỳ 2.
+  - Điểm từ 0 đến 10, được để trống.
+- Trích lục học bạ của một Thiếu nhi bất kỳ (nhập đúng họ tên hoặc số CCCD):
+  kết quả các năm trước và năm hiện tại, xuất Excel.
+- Xem bảng tổng hợp và xếp loại của bất kỳ lớp nào, năm hiện tại hoặc năm cũ, xuất Excel, in.
+- Xem danh sách khen thưởng của bất kỳ lớp nào, xuất Excel, in.
+- Không xem được xếp loại toàn đoàn.
+
+Trang Giảng dạy
+- Xem bài học theo tuần của tất cả các lớp, kèm giáo án và đường dẫn.
+- Xem thống kê bài học theo lớp.
+- Cập nhật bài học của lớp mình: nội dung, địa điểm.
+- Đính kèm Giáo án (GLV) và Giáo án đã chỉnh sửa (TBM), tối đa 3 tệp tải lên mỗi phần, hoặc thêm đường dẫn.
+- Gỡ tệp; tệp đã gỡ được chuyển vào thùng rác Google Drive.
+- Sửa bài học do Huynh trưởng khác của lớp đã soạn.
+
+Không thấy
+- Trang Huynh trưởng.
+- Trang Quản trị.
+
+
+BQT NGÀNH (thêm vào các chức năng trên)
+---------------------------------------
+
+Trang Huynh trưởng (chỉ ngành mình quản lý)
+- Xem danh sách Huynh trưởng của ngành, theo lớp.
+- Điểm danh Huynh trưởng theo tuần, cho 5 buổi: 4 buổi của Thiếu nhi và Họp Huynh trưởng.
+- Trích lục vắng mặt của một Huynh trưởng trong ngành (nhập đúng họ tên), xuất Excel.
+- Xem thống kê: số buổi hiện diện và số bài đã dạy của từng Huynh trưởng, lọc theo lớp, xuất Excel, in.
+- Không thấy email của Huynh trưởng.
+
+Trang Học tập
+- Xem và in xếp loại toàn đoàn.
+
+
+XỨ ĐOÀN (thêm vào các chức năng trên)
+-------------------------------------
+
+Trang Thiếu nhi
+- Xem danh sách và thư viện ảnh của mọi lớp.
+- Thêm Thiếu nhi.
+- Sửa thông tin, đổi trạng thái, chuyển lớp.
+- Gắn hoặc gỡ anh chị em.
+- Nhập danh sách từ Excel vào một lớp, tải file mẫu.
+- Tải ảnh, xóa ảnh của Thiếu nhi (JPEG hoặc PNG, tối đa 2 MB).
+
+Điểm danh, điểm số, bài học
+- Làm được cho mọi lớp.
+
+Trang Huynh trưởng
+- Làm mọi việc của BQT ngành, cho mọi ngành.
+- Điểm danh các thành viên Xứ đoàn.
+- Thấy email của Huynh trưởng và tìm theo email.
+
+Trang Quản trị
+- Huynh trưởng:
+  - Xem danh bạ tất cả người dùng, có email và số điện thoại.
+  - Thêm, sửa, khóa, mở khóa người dùng.
+  - Xếp người dùng vào nhóm hoặc đưa ra khỏi nhóm. Người đó phải đăng nhập lại.
+- Nhóm:
+  - Thêm nhóm loại Lớp, Ngành, BQT ngành hoặc Xứ đoàn.
+  - Đổi lớp hoặc ngành mà nhóm phụ trách.
+  - Xóa nhóm không còn thành viên.
+- Lớp:
+  - Thêm lớp, đổi tên lớp.
+  - Xóa lớp chưa có Thiếu nhi, điểm danh, điểm số, bài học.
+  - Đổi thứ tự lớp (đây là thứ tự lên lớp cuối năm).
+- Nghỉ lễ:
+  - Đặt ngày nghỉ: từng buổi của từng tuần.
+- Cấu hình:
+  - Sửa năm học hiện tại, ngày bắt đầu điểm danh, thư mục Google Drive và các mục khác.
+  - Kết nối ứng dụng với tài khoản Google Drive để lưu giáo án.
+  - Làm mới dữ liệu đệm.
+- Chuyển năm. Thao tác này sẽ:
+  - lưu kết quả cả năm của từng Thiếu nhi vào học bạ,
+  - xóa điểm danh, điểm số, điểm danh Huynh trưởng và ngày nghỉ,
+  - cho mọi Thiếu nhi đang hoạt động lên một lớp,
+  - đặt năm học mới và ngày bắt đầu điểm danh mới.
+- Nhập Sheet cũ:
+  - Kiểm tra tệp Google Sheet cũ: xem sẽ nhập gì và bỏ qua dòng nào.
+  - Nhập tệp. Thao tác này thay toàn bộ dữ liệu và đăng xuất mọi người.
+
+
+HỆ THỐNG TỰ LÀM
+---------------
+- Mỗi tuần (Chủ nhật), các tệp giáo án đã gỡ được chuyển vào thùng rác Google Drive.
+- Người dùng bị đăng xuất khi Xứ đoàn khóa tài khoản, đổi nhóm hoặc đổi email của họ.

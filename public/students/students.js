@@ -7,7 +7,7 @@
 
 import {
   initCommon, load, state, $, api, apiSend, esc, toast, fillSel, fillClasses, setupTabs, sortStudents,
-  isAdmin, canWriteClass, className, personName, photoUrl, fmtDate, toIsoDate, vnTodayIso,
+  isAdmin, className, personName, photoUrl, fmtDate, toIsoDate,
 } from '../shared/common.js';
 import { GENDER_LABEL, STUDENT_STATUS_LABEL } from '../shared/labels.js';
 import { matchesStudent } from '../shared/search.js';
@@ -40,7 +40,6 @@ const detailCells = (s) => `<td class="p-2 border text-center whitespace-nowrap"
   + `<td class="p-2 border text-sm">${esc(s.father ?? '')}</td>`
   + `<td class="p-2 border text-sm">${esc(s.mother ?? '')}</td>`
   + `<td class="p-2 border text-center">${phoneCell(s)}</td>`
-  + `<td class="p-2 border text-center">${esc(s.enrollYear ?? '')}</td>`
   + `<td class="p-2 border text-center">${siblingCell(s)}</td>`;
 
 async function copyPhone(event) {
@@ -58,15 +57,13 @@ async function copyPhone(event) {
 function renderClass() {
   const classId = Number($('st-class').value);
   const status = $('st-status').value;
-  const editable = canWriteClass(classId);
-  $('st-add').style.display = editable ? '' : 'none';
   const rows = sortStudents(state.students.filter((s) => s.classId === classId && s.status === status));
   $('st-tbody').innerHTML = rows.length
     ? rows.map((s) => `<tr class="hover:bg-slate-50 transition-colors bg-white">${detailCells(s)}`
-      + '<td class="p-2 border text-center sticky-col">'
-      + (editable ? `<button data-id="${s.id}" class="edit-student bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs px-4 py-2 rounded-lg whitespace-nowrap">Cập nhật</button>` : '—')
-      + '</td></tr>').join('')
-    : `<tr><td colspan="10" class="p-4 text-center text-slate-400">Không có Thiếu nhi "${esc(STUDENT_STATUS_LABEL[status])}" trong lớp ${esc(className(classId))}.</td></tr>`;
+      // Only Xứ đoàn adds and edits here; for others the column is not drawn (its header is .admin-only).
+      + (isAdmin() ? `<td class="p-2 border text-center sticky-col"><button data-id="${s.id}" class="edit-student bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs px-4 py-2 rounded-lg whitespace-nowrap">Cập nhật</button></td>` : '')
+      + '</tr>').join('')
+    : `<tr><td colspan="9" class="p-4 text-center text-slate-400">Không có Thiếu nhi "${esc(STUDENT_STATUS_LABEL[status])}" trong lớp ${esc(className(classId))}.</td></tr>`;
 }
 
 /* ---------- Tab 3: whole-parish search (exact match, every match shown) ---------- */
@@ -74,7 +71,7 @@ function renderSearch() {
   const query = $('st-search').value;
   const body = $('st-search-tbody');
   if (!query.trim()) {
-    body.innerHTML = '<tr><td colspan="12" class="p-4 text-center text-slate-400">Nhập đúng họ tên hoặc số CCCD để tìm kiếm...</td></tr>';
+    body.innerHTML = '<tr><td colspan="11" class="p-4 text-center text-slate-400">Nhập đúng họ tên hoặc số CCCD để tìm kiếm...</td></tr>';
     return;
   }
   const hits = state.students.filter((s) => matchesStudent(s, query));
@@ -85,7 +82,7 @@ function renderSearch() {
       + `<td class="p-2 border text-center font-bold text-blue-900">${esc(className(s.classId))}</td>`
       + `<td class="p-2 border text-center">${badge(STUDENT_STATUS_LABEL[s.status], STATUS_TONE[s.status])}</td>`
       + `${detailCells(s)}</tr>`).join('')
-    : '<tr><td colspan="12" class="p-4 text-center text-slate-400">Không tìm thấy Thiếu nhi nào khớp chính xác.</td></tr>';
+    : '<tr><td colspan="11" class="p-4 text-center text-slate-400">Không tìm thấy Thiếu nhi nào khớp chính xác.</td></tr>';
 }
 
 function showPhoto(id) {
@@ -103,20 +100,18 @@ function photoCard(s) {
     + `<div class="text-[10px] text-slate-500 text-center font-mono">${esc(s.idNumber)}</div>`;
   if (!s.hasPhoto) {
     const box = isAdmin()
-      ? `<button type="button" class="photo-upload w-full aspect-square bg-slate-50 border-2 border-dashed border-slate-300 rounded-md mb-2 flex flex-col items-center justify-center hover:bg-blue-50 hover:border-blue-400 text-slate-400 transition-colors" data-id="${s.id}" title="Nhấn để tải ảnh lên"><span class="text-3xl mb-1">+</span><span class="text-[10px] font-medium">Tải ảnh</span></button>`
-      : '<div class="w-full aspect-square bg-slate-50 border border-slate-200 rounded-md mb-2 flex items-center justify-center text-slate-300 text-[10px]">Chưa có ảnh</div>';
+      ? `<button type="button" class="photo-upload w-full aspect-[3/4] bg-slate-50 border-2 border-dashed border-slate-300 rounded-md mb-2 flex flex-col items-center justify-center hover:bg-blue-50 hover:border-blue-400 text-slate-400 transition-colors" data-id="${s.id}" title="Nhấn để tải ảnh lên"><span class="text-3xl mb-1">+</span><span class="text-[10px] font-medium">Tải ảnh</span></button>`
+      : '<div class="w-full aspect-[3/4] bg-slate-50 border border-slate-200 rounded-md mb-2 flex items-center justify-center text-slate-300 text-[10px]">Chưa có ảnh</div>';
     return `<div class="border rounded-lg p-2 flex flex-col items-center bg-white shadow-sm">${box}${caption}</div>`;
   }
   const corner = 'absolute text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-md';
-  // Remove and replace sit in opposite corners so one is not pressed for the other.
+  // To replace a photo: remove it, then upload the new one.
   const adminButtons = isAdmin()
     ? `<button type="button" class="photo-remove ${corner} -top-1 -right-1 bg-red-500 hover:bg-red-600" data-id="${s.id}" title="Xóa ảnh">✕</button>`
-      + `<button type="button" class="photo-upload ${corner} -top-1 -left-1 bg-blue-600 hover:bg-blue-700" data-id="${s.id}" title="Thay ảnh khác">🔄</button>`
     : '';
   return '<div class="border rounded-lg p-2 flex flex-col items-center bg-white shadow-sm relative hover:border-blue-300 transition-colors">'
-    + `<img src="${photoUrl(s)}" loading="lazy" decoding="async" alt="" class="w-full aspect-square object-cover rounded-md mb-2 bg-slate-100">`
+    + `<img src="${photoUrl(s)}" loading="lazy" decoding="async" alt="" class="w-full aspect-[3/4] object-cover rounded-md mb-2 bg-slate-100">`
     + adminButtons
-    + `<a class="${corner} top-1/2 -right-1 bg-slate-600 hover:bg-slate-700 no-underline" href="${photoUrl(s)}&download=1" title="Tải ảnh về">⬇</a>`
     + `${caption}</div>`;
 }
 
@@ -128,18 +123,24 @@ function renderGallery() {
     : `<div class="col-span-full text-center p-8 text-slate-400">Không có Thiếu nhi nào trong lớp ${esc(className(classId))}.</div>`;
 }
 
-// Centre crop to a square, 200 x 200, JPEG 85 % (about 15-30 KB): what the face scan needs.
+// Centre crop to 3:4 (ID photo shape), 210 x 280, JPEG 85 % (about 25-40 KB): enough for the face scan and
+// small enough for the D1 storage limit. Old square photos are shown cropped the same way until replaced.
+const PHOTO_WIDTH = 210;
+const PHOTO_HEIGHT = 280;
+
 function resizePhoto(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
       URL.revokeObjectURL(url);
-      const side = Math.min(img.width, img.height);
+      // The largest 3:4 box that fits the picture, centred.
+      const width = Math.min(img.width, img.height * PHOTO_WIDTH / PHOTO_HEIGHT);
+      const height = width * PHOTO_HEIGHT / PHOTO_WIDTH;
       const canvas = document.createElement('canvas');
-      canvas.width = 200;
-      canvas.height = 200;
-      canvas.getContext('2d').drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, 200, 200);
+      canvas.width = PHOTO_WIDTH;
+      canvas.height = PHOTO_HEIGHT;
+      canvas.getContext('2d').drawImage(img, (img.width - width) / 2, (img.height - height) / 2, width, height, 0, 0, PHOTO_WIDTH, PHOTO_HEIGHT);
       canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Không xử lý được ảnh.'))), 'image/jpeg', 0.85);
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Tệp không phải là ảnh.')); };
@@ -152,7 +153,6 @@ const setPhoto = (id, photoVersion) => {
   renderGallery();
 };
 
-// Upload and replace are the same: the new photo overwrites the old one in one step.
 function pickPhoto(id) {
   const input = document.createElement('input');
   input.type = 'file';
@@ -221,7 +221,6 @@ function openForm(id) {
   $('m-saint').value = s?.saintName ?? '';
   $('m-dob').value = s?.dateOfBirth ?? '';
   $('m-gender').value = s?.gender ?? '';
-  $('m-enroll').value = s ? (s.enrollYear ?? '') : vnTodayIso().slice(0, 4);
   $('m-father').value = s?.father ?? '';
   $('m-mother').value = s?.mother ?? '';
   // Status is asked only for an existing student; a new one is always "Hoạt động".
@@ -233,10 +232,7 @@ function openForm(id) {
   $('m-sibling-search').value = '';
   $('m-sibling-dropdown').classList.add('hidden');
 
-  // Only Xứ đoàn moves a student to another class (R4): for others the field is shown but locked.
-  const classes = s && !isAdmin() ? state.classes : (isAdmin() ? state.classes : state.classes.filter((c) => canWriteClass(c.id)));
-  fillSel('m-class', classes.map((c) => ({ v: c.id, t: c.name })), s ? s.classId : Number($('st-class').value));
-  $('m-class').disabled = !!s && !isAdmin();
+  fillSel('m-class', state.classes.map((c) => ({ v: c.id, t: c.name })), s ? s.classId : Number($('st-class').value));
 
   $('st-modal').classList.add('open');
   setTimeout(() => $('m-fullname').focus(), 50);
@@ -256,7 +252,6 @@ async function saveForm() {
     dateOfBirth: $('m-dob').value || null,
     gender: $('m-gender').value || null,
     classId: Number($('m-class').value),
-    enrollYear: $('m-enroll').value.trim(),
     father: $('m-father').value.trim(),
     mother: $('m-mother').value.trim(),
     phones: readPhones(),

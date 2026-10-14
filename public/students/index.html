@@ -34,7 +34,7 @@
         </div>
         <div class="md:col-span-2 flex flex-wrap sm:flex-nowrap items-end gap-2">
           <button id="st-add"
-            class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg whitespace-nowrap">＋
+            class="admin-only w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg whitespace-nowrap">＋
             Thêm thiếu nhi</button>
           <label
             class="admin-only w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-lg text-center cursor-pointer whitespace-nowrap"
@@ -61,9 +61,8 @@
               <th class="p-3">Cha</th>
               <th class="p-3">Mẹ</th>
               <th class="p-3">SĐT</th>
-              <th class="p-3">Năm Nhập Học</th>
               <th class="p-3">Anh/Chị/Em</th>
-              <th class="p-3 sticky-col">Thao Tác</th>
+              <th class="admin-only p-3 sticky-col">Thao Tác</th>
             </tr>
           </thead>
           <tbody id="st-tbody"></tbody>
@@ -106,7 +105,6 @@
               <th class="p-3">Cha</th>
               <th class="p-3">Mẹ</th>
               <th class="p-3">SĐT</th>
-              <th class="p-3">Năm Nhập Học</th>
               <th class="p-3">Anh/Chị/Em</th>
             </tr>
           </thead>
@@ -128,7 +126,6 @@
         <div class="form-group"><label>Ngày Sinh</label><input id="m-dob" type="date"></div>
         <div class="form-group"><label>Giới Tính</label><select id="m-gender"></select></div>
         <div class="form-group"><label>Lớp *</label><select id="m-class"></select></div>
-        <div class="form-group"><label>Năm Nhập Học</label><input id="m-enroll" type="number" min="1900" max="2100"></div>
         <div class="form-group" id="m-status-row"><label>Trạng Thái</label><select id="m-status"></select></div>
         <div class="form-group"><label>Họ Tên Cha</label><input id="m-father" type="text"></div>
         <div class="form-group"><label>Họ Tên Mẹ</label><input id="m-mother" type="text"></div>
@@ -158,7 +155,7 @@
   <div id="photo-modal" class="modal">
     <div class="modal-content" style="max-width:320px;text-align:center">
       <h3 id="photo-modal-title"></h3>
-      <img id="photo-modal-img" alt="" class="mx-auto rounded-lg bg-slate-100" style="width:200px;height:200px;object-fit:cover">
+      <img id="photo-modal-img" alt="" class="mx-auto rounded-lg bg-slate-100" style="width:210px;height:280px;object-fit:cover">
       <div class="modal-actions">
         <button type="button" class="btn-cancel">Đóng</button>
       </div>

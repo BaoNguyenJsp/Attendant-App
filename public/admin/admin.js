@@ -1,7 +1,7 @@
 /* =====================================================================
    SỔ THIẾU NHI — admin/admin.js (Xứ đoàn only)
-   Users (UC-M1), groups (UC-M2), classes (UC-M3), holidays (UC-M4), configuration (UC-M5),
-   year rollover (UC-M6), cache (UC-M7), Drive connection (UC-M8).
+   Users (UC-M1), groups and classes with their edit forms (UC-M2, UC-M3), holidays (UC-M4), configuration (UC-M5),
+   year rollover (UC-M6), cache (UC-M7), Drive connection (UC-M8), import of the old Google Sheet.
    ===================================================================== */
 'use strict';
 
@@ -16,11 +16,14 @@ await load('classes');
 let directory = { users: [], groups: [], memberships: [] };
 let holidays = [];
 const TIER_ORDER = Object.keys(TIER_LABEL); // CLASS, SECTOR, SECTOR_ADMIN, ADMIN
-const groupsOf = (userId) => directory.memberships.filter((m) => m.userId === userId).map((m) => directory.groups.find((g) => g.id === m.groupId)).filter(Boolean);
+// directory.groups is kept in display order, so the groups of a user come out in that order too.
+const groupsOf = (userId) => directory.groups.filter((g) => directory.memberships.some((m) => m.userId === userId && m.groupId === g.id));
 const classNames = (ids) => ids.map((id) => state.classes.find((c) => c.id === id)?.name).filter(Boolean).join(', ');
 
 async function loadDirectory() {
   const { users, groups, memberships } = await api('getDirectory');
+  // Display order everywhere: Lớp, Ngành, BQT ngành, Xứ đoàn; by name inside a type (numbers as numbers: Ấu 2 before Ấu 10).
+  groups.sort((a, b) => TIER_ORDER.indexOf(a.type) - TIER_ORDER.indexOf(b.type) || a.name.localeCompare(b.name, 'vi', { numeric: true }));
   directory = { users, groups, memberships };
 }
 
@@ -50,8 +53,7 @@ function openUser(id) {
   $('user-phone').value = u?.phone ?? '';
   $('user-status').value = u?.status ?? 'ACTIVE';
   const mine = new Set(u ? groupsOf(u.id).map((g) => g.id) : []);
-  const groups = [...directory.groups].sort((a, b) => TIER_ORDER.indexOf(a.type) - TIER_ORDER.indexOf(b.type) || a.id - b.id);
-  $('user-groups').innerHTML = groups.map((g) => `<label class="flex items-center gap-2 text-sm py-0.5"><input type="checkbox" class="user-group" value="${g.id}"${mine.has(g.id) ? ' checked' : ''}> ${tierBadge(g.type)} ${esc(g.name)}</label>`).join('');
+  $('user-groups').innerHTML = directory.groups.map((g) => `<label class="flex items-center gap-2 text-sm py-0.5"><input type="checkbox" class="user-group" value="${g.id}"${mine.has(g.id) ? ' checked' : ''}> ${tierBadge(g.type)} ${esc(g.name)}</label>`).join('');
   $('user-modal').classList.add('open');
 }
 
@@ -81,19 +83,115 @@ async function saveUser() {
   renderUsers();
 }
 
-/* ---------- Groups and classes (read only; changed in the Cloudflare console, then the cache button) ---------- */
+/* ---------- Groups and classes ---------- */
+const EDIT_BUTTON = 'bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs px-3 py-2 rounded-lg whitespace-nowrap';
+const DELETE_BUTTON = 'bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs px-3 py-2 rounded-lg whitespace-nowrap';
+
+// After a change the server has rewritten its lists; the page reads them again.
+async function change(action, body, done) {
+  try {
+    await api(action, body);
+    await Promise.all([load('classes'), loadDirectory()]);
+  } catch (e) {
+    toast(e.message);
+    return false;
+  }
+  renderGroups();
+  renderClasses();
+  toast(done);
+  return true;
+}
+
 function renderGroups() {
   const covered = (g) => {
     if (g.type === 'ADMIN') return 'Tất cả các lớp';
     if (g.type === 'SECTOR_ADMIN') return esc(directory.groups.find((s) => s.id === g.sectorGroupId)?.name ?? '—');
     return esc(classNames(g.classIds));
   };
-  $('group-tbody').innerHTML = directory.groups.map((g) => `<tr><td class="p-2 border font-medium">${esc(g.name)}</td><td class="p-2 border text-center">${tierBadge(g.type)}</td><td class="p-2 border">${covered(g)}</td></tr>`).join('');
+  $('group-tbody').innerHTML = directory.groups.map((g) => `<tr><td class="p-2 border font-medium">${esc(g.name)}</td><td class="p-2 border text-center">${tierBadge(g.type)}</td><td class="p-2 border">${covered(g)}</td>`
+    + `<td class="p-2 border text-sm">${esc(g.description ?? '')}</td>`
+    + `<td class="p-2 border text-center whitespace-nowrap"><button class="edit-group ${EDIT_BUTTON}" data-id="${g.id}">Cập nhật</button> <button class="delete-group ${DELETE_BUTTON}" data-id="${g.id}">Xóa</button></td></tr>`).join('');
+}
+
+let editingGroup = null;
+
+// Only the field of the chosen type is shown.
+function showGroupFields() {
+  const type = $('group-type').value;
+  for (const [row, shown] of [['group-class-row', 'CLASS'], ['group-classes-row', 'SECTOR'], ['group-sector-row', 'SECTOR_ADMIN'], ['group-admin-row', 'ADMIN']]) {
+    $(row).style.display = type === shown ? '' : 'none';
+  }
+}
+
+function openGroup(id) {
+  editingGroup = id ? directory.groups.find((g) => g.id === Number(id)) : null;
+  const g = editingGroup;
+  $('group-title').textContent = g ? `Cập nhật nhóm — ${g.name}` : 'Thêm nhóm';
+  $('group-name').value = g?.name ?? '';
+  $('group-description').value = g?.description ?? '';
+  $('group-type').value = g?.type ?? 'CLASS';
+  $('group-type').disabled = !!g;
+  const mine = new Set(g?.classIds ?? []);
+  fillSel('group-class', state.classes.map((c) => ({ v: c.id, t: c.name })), g?.classIds[0]);
+  $('group-classes').innerHTML = state.classes.map((c) => `<label class="flex items-center gap-2 text-sm py-0.5"><input type="checkbox" class="group-class-box" value="${c.id}"${mine.has(c.id) ? ' checked' : ''}> ${esc(c.name)}</label>`).join('');
+  fillSel('group-sector', directory.groups.filter((s) => s.type === 'SECTOR').map((s) => ({ v: s.id, t: s.name })), g?.sectorGroupId);
+  showGroupFields();
+  $('group-modal').classList.add('open');
+}
+
+async function saveGroup() {
+  const type = $('group-type').value;
+  const name = $('group-name').value.trim();
+  if (!name) return toast('Nhập tên nhóm.');
+  const classIds = type === 'CLASS' ? [Number($('group-class').value)].filter(Boolean)
+    : type === 'SECTOR' ? [...$('group-classes').querySelectorAll('.group-class-box:checked')].map((box) => Number(box.value)) : [];
+  const body = { id: editingGroup?.id, name, type, description: $('group-description').value.trim(), classIds, sectorGroupId: type === 'SECTOR_ADMIN' ? Number($('group-sector').value) : null };
+  if (await change('saveGroup', body, 'Đã lưu nhóm.')) $('group-modal').classList.remove('open');
+}
+
+function deleteGroup(id) {
+  const g = directory.groups.find((x) => x.id === Number(id));
+  if (g && confirm(`Xóa nhóm ${g.name}?`)) change('deleteGroup', { id: g.id }, 'Đã xóa nhóm.');
 }
 
 function renderClasses() {
   $('class-tbody').innerHTML = state.classes.map((c, i) => `<tr><td class="p-2 border text-center">${i + 1}</td><td class="p-2 border font-medium">${esc(c.name)}</td>`
-    + `<td class="p-2 border text-center">${esc(c.grade ?? '')}</td><td class="p-2 border text-center font-bold">${c.size}</td></tr>`).join('');
+    + `<td class="p-2 border text-center">${esc(c.grade ?? '')}</td><td class="p-2 border text-center font-bold">${c.size}</td>`
+    + '<td class="p-2 border text-center whitespace-nowrap">'
+    + `<button class="move-class px-2 text-lg text-slate-500 hover:text-blue-900 disabled:opacity-30" data-id="${c.id}" data-step="-1" title="Lên trên"${i === 0 ? ' disabled' : ''}>▲</button>`
+    + `<button class="move-class px-2 text-lg text-slate-500 hover:text-blue-900 disabled:opacity-30" data-id="${c.id}" data-step="1" title="Xuống dưới"${i === state.classes.length - 1 ? ' disabled' : ''}>▼</button> `
+    + `<button class="edit-class ${EDIT_BUTTON}" data-id="${c.id}">Cập nhật</button> <button class="delete-class ${DELETE_BUTTON}" data-id="${c.id}">Xóa</button></td></tr>`).join('');
+}
+
+let editingClass = null;
+
+function openClass(id) {
+  editingClass = id ? state.classes.find((c) => c.id === Number(id)) : null;
+  $('class-title').textContent = editingClass ? `Cập nhật lớp — ${editingClass.name}` : 'Thêm lớp';
+  $('class-name').value = editingClass?.name ?? '';
+  $('class-grade').value = editingClass?.grade ?? '';
+  $('class-modal').classList.add('open');
+}
+
+async function saveClass() {
+  const name = $('class-name').value.trim();
+  if (!name) return toast('Nhập tên lớp.');
+  if (await change('saveClass', { id: editingClass?.id, name, grade: $('class-grade').value.trim() }, 'Đã lưu lớp.')) $('class-modal').classList.remove('open');
+}
+
+// One step up or down in the promotion order.
+function moveClass(id, step) {
+  const ids = state.classes.map((c) => c.id);
+  const from = ids.indexOf(Number(id));
+  const to = from + step;
+  if (from < 0 || to < 0 || to >= ids.length) return;
+  [ids[from], ids[to]] = [ids[to], ids[from]];
+  change('reorderClasses', { ids }, 'Đã đổi thứ tự lớp.');
+}
+
+function deleteClass(id) {
+  const c = state.classes.find((x) => x.id === Number(id));
+  if (c && confirm(`Xóa lớp ${c.name}?`)) change('deleteClass', { id: c.id }, 'Đã xóa lớp.');
 }
 
 /* ---------- Holidays: one session of one week each ---------- */
@@ -189,6 +287,51 @@ async function confirmYear() {
   }
 }
 
+/* ---------- Import of the old Google Sheet: check first, write only after a confirmation ---------- */
+let importTabs = null;
+
+async function previewImport() {
+  const file = $('imp-file').files[0];
+  importTabs = null;
+  $('imp-run').disabled = true;
+  $('imp-report').innerHTML = file ? '<p class="text-slate-500">Đang kiểm tra tệp…</p>' : '';
+  if (!file) return;
+  try {
+    // Raw cell values: the server converts the dates, so the time zone of the browser cannot shift a day.
+    const wb = XLSX.read(await file.arrayBuffer());
+    const tabs = Object.fromEntries(wb.SheetNames.map((name) => [name,
+      XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: '' }).map((row) => ({ ...row, _row: row.__rowNum__ + 1 }))]));
+    const { counts, skipped } = await api('importSheet', { tabs });
+    importTabs = tabs;
+    $('imp-run').disabled = false;
+    $('imp-report').innerHTML = '<h3 class="font-bold mb-2">Sẽ nhập</h3><table class="text-sm border-collapse mb-4">'
+      + Object.entries(counts).map(([table, n]) => `<tr><td class="p-1.5 px-3 border font-mono">${esc(table)}</td><td class="p-1.5 px-3 border text-right font-bold">${n}</td></tr>`).join('') + '</table>'
+      + `<h3 class="font-bold mb-2">Dòng bị bỏ qua (${skipped.length})</h3>`
+      + (skipped.length
+        ? '<div class="tbl-scroll"><table class="w-full text-sm border-collapse">' + skipped.map((s) => `<tr><td class="p-1.5 border font-mono whitespace-nowrap">${esc(s.tab)}</td><td class="p-1.5 border text-center">${s.row}</td><td class="p-1.5 border">${esc(s.reason)}</td></tr>`).join('') + '</table></div>'
+        : '<p class="text-slate-500 text-sm">Không có.</p>');
+  } catch (e) {
+    $('imp-report').innerHTML = '';
+    toast(e.message);
+  }
+}
+
+async function runImport() {
+  if (!importTabs) return;
+  if (prompt(`Toàn bộ dữ liệu trên ${location.host} sẽ bị XÓA và thay bằng dữ liệu của tệp. Gõ NHAP để xác nhận.`) !== 'NHAP') return;
+  const button = $('imp-run');
+  button.disabled = true;
+  try {
+    await api('importSheet', { tabs: importTabs, confirm: true });
+    toast('Đã nhập xong. Hãy đăng nhập lại.');
+    setTimeout(() => location.replace('/login/'), 1500);
+  } catch (e) {
+    // All or nothing: after an error nothing was changed.
+    toast(`Chưa nhập (không có gì thay đổi): ${e.message}`);
+    button.disabled = false;
+  }
+}
+
 /* ---------- Cache and Drive ---------- */
 async function clearCache() {
   const button = $('clear-cache');
@@ -207,12 +350,30 @@ $('user-tbody').addEventListener('click', (e) => {
   if (button) openUser(button.dataset.id);
 });
 
-for (const id of ['user-modal', 'year-modal']) {
+for (const id of ['user-modal', 'year-modal', 'class-modal', 'group-modal']) {
   const modal = $(id);
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('open'); });
   modal.querySelector('.btn-cancel').addEventListener('click', () => modal.classList.remove('open'));
 }
 $('user-modal').querySelector('.btn-save').addEventListener('click', saveUser);
+$('class-modal').querySelector('.btn-save').addEventListener('click', saveClass);
+$('group-modal').querySelector('.btn-save').addEventListener('click', saveGroup);
+$('class-add').addEventListener('click', () => openClass());
+$('group-add').addEventListener('click', () => openGroup());
+$('group-type').addEventListener('change', showGroupFields);
+$('class-tbody').addEventListener('click', (e) => {
+  const button = e.target.closest('button');
+  if (!button) return;
+  if (button.classList.contains('move-class')) moveClass(button.dataset.id, Number(button.dataset.step));
+  else if (button.classList.contains('edit-class')) openClass(button.dataset.id);
+  else if (button.classList.contains('delete-class')) deleteClass(button.dataset.id);
+});
+$('group-tbody').addEventListener('click', (e) => {
+  const button = e.target.closest('button');
+  if (!button) return;
+  if (button.classList.contains('edit-group')) openGroup(button.dataset.id);
+  else if (button.classList.contains('delete-group')) deleteGroup(button.dataset.id);
+});
 $('year-confirm').addEventListener('click', confirmYear);
 $('year-open').addEventListener('click', openYear);
 
@@ -233,9 +394,13 @@ $('cfg-tbody').addEventListener('click', (e) => {
 });
 $('drive-connect').addEventListener('click', () => { location.href = '/auth/drive'; });
 $('clear-cache').addEventListener('click', clearCache);
+$('imp-file').addEventListener('change', previewImport);
+$('imp-run').addEventListener('click', runImport);
+$('imp-host').textContent = location.host;
 
 /* ---------- Start ---------- */
 fillSel('user-status', Object.entries(USER_STATUS_LABEL).map(([v, t]) => ({ v, t })));
+fillSel('group-type', Object.entries(TIER_LABEL).map(([v, t]) => ({ v, t })));
 // No "Cả tuần": a whole week is closed by adding its sessions one by one.
 fillSel('hol-session', TEACHER_SESSIONS.map((code) => ({ v: code, t: SESSION_LABEL[code] })));
 snapToSunday($('hol-week'));

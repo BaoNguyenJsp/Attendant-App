@@ -71,21 +71,28 @@ export async function saveLesson(db, actor, input) {
   return (await getLessons(db, { schoolYear })).find((l) => l.weekOf === weekOf && l.classId === classId);
 }
 
-// UC-L3: a link the browser uploads one file to, in <root>/<year>/<class>/<week>/<PLAN|REVISED>.
-export async function createUploadUrl(db, drive, actor, { schoolYear, weekOf, classId, slot, filename, origin }) {
+// UC-L3: for each file a link the browser uploads it to, in <root>/<year>/<class>/<week>/<PLAN|REVISED>.
+// One call per save, so the folder of a slot is checked or created once however many files go into it.
+export async function createUploadUrls(db, drive, actor, { schoolYear, weekOf, classId, files, origin }) {
   requireClass(actor, Number(classId));
   requireWeek(weekOf);
-  if (!FILE_SLOTS.includes(slot)) fail(400, 'Loại giáo án không hợp lệ.');
-  const name = safeName(filename);
-  if (!name) fail(400, 'Thiếu tên tệp.');
+  if (!Array.isArray(files) || !files.length || files.length > MAX_UPLOADS_PER_SLOT * FILE_SLOTS.length) fail(400, 'Danh sách tệp không hợp lệ.');
+  const wanted = files.map((f) => ({ slot: f?.slot, name: safeName(f?.filename) }));
+  if (wanted.some((f) => !FILE_SLOTS.includes(f.slot))) fail(400, 'Loại giáo án không hợp lệ.');
+  if (wanted.some((f) => !f.name)) fail(400, 'Thiếu tên tệp.');
   const className = await db.prepare('SELECT Name FROM Classes WHERE Id = ?').bind(Number(classId)).first('Name');
   if (!className) fail(400, 'Lớp không tồn tại.');
   const config = await configMap(db);
-  const folderId = await drive.folderFor(config.DriveFolderId || 'root', [schoolYear || config.CurrentSchoolYear, className, weekOf, slot].map(safeName));
-  return drive.createUploadUrl({ folderId, filename: name, origin });
+  const folderIds = {};
+  const urls = [];
+  for (const f of wanted) { // one after another: requests side by side would each create the folders
+    folderIds[f.slot] ??= await drive.folderFor(config.DriveFolderId || 'root', [schoolYear || config.CurrentSchoolYear, className, weekOf, f.slot].map(safeName));
+    urls.push(await drive.createUploadUrl({ folderId: folderIds[f.slot], filename: f.name, origin }));
+  }
+  return urls;
 }
 
-// UC-X1, hourly. A file that cannot be trashed stays in the queue for the next run.
+// UC-X1, weekly. A file that cannot be trashed stays in the queue for the next run.
 export async function emptyDriveTrash(db, drive) {
   const queue = await all(db, 'SELECT FileId FROM DriveTrash LIMIT 50');
   let done = 0;

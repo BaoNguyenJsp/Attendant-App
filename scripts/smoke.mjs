@@ -122,7 +122,7 @@ await ok('getLessons', TEACHER, 'getLessons', {}, (j) => j.lessons.length >= 36)
 const link = { url: 'https://example.com/a,b', name: 'Tài liệu, có dấu phẩy.pdf', type: 'LINK' };
 await ok('saveLesson with a link holding a comma', TEACHER, 'saveLesson', { weekOf, classId: 1, content: 'Bài kiểm tra khói', planFiles: [link], revisedFiles: [] },
   (j) => j.lesson.planFiles[0].url === link.url && j.lesson.location === 'Trong lớp');
-await refused('an upload link needs a connected Drive', TEACHER, 'createUploadUrl', { weekOf, classId: 1, slot: 'PLAN', filename: 'a.pdf' }, 409);
+await refused('an upload link needs a connected Drive', TEACHER, 'createUploadUrls', { weekOf, classId: 1, files: [{ slot: 'PLAN', filename: 'a.pdf' }] }, 409);
 
 /* ---------- admin ---------- */
 const saved = await ok('saveUser with groups', ADMIN, 'saveUser', { user: { email: 'smoke@example.com', fullName: 'Lê Thị Khói' }, groupIds: [2] }, (j) => j.user.id > 60);

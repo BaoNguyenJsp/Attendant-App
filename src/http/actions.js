@@ -2,7 +2,7 @@
 // ctx = { db, env, actor, today, lists, drive, origin }. The result is merged into { status: 'ok' }.
 import { fail } from '../lib/errors.js';
 import { requireTier, canManageSector, isAdmin } from '../lib/access.js';
-import { saveConfig, saveHolidays } from '../lib/db/org.js';
+import { saveConfig, saveHolidays, saveClass, deleteClass, reorderClasses, saveGroup, deleteGroup } from '../lib/db/org.js';
 import { saveUser } from '../lib/db/users.js';
 import { saveStudent, importStudents } from '../lib/db/students.js';
 import {
@@ -10,7 +10,8 @@ import {
   getTeacherAttendance, saveTeacherAttendance, getTeacherAttendanceStats, searchTeachers, getTeacherAbsences,
 } from '../lib/db/attendance.js';
 import { getScores, saveScores, getClassReport, getStudentRecord, startSchoolYear } from '../lib/db/academics.js';
-import { getLessons, saveLesson, createUploadUrl } from '../lib/db/lessons.js';
+import { getLessons, saveLesson, createUploadUrls } from '../lib/db/lessons.js';
+import { importSheet } from '../lib/db/sheet-import.js';
 
 // Ids arrive as numbers or as text from a <select>; anything else is a bad request.
 function id(value, label = 'Mã') {
@@ -33,6 +34,16 @@ function sector(actor, value) {
 
 const publicSession = ({ userId, email, fullName, saintName, tier, classIds, sectorGroupIds }) => ({ userId, email, fullName, saintName, tier, classIds, sectorGroupIds });
 const list = (name, key = name) => ({ run: async ({ lists }) => ({ [key]: await lists.get(name) }) });
+
+// Classes and groups (Xứ đoàn): every change rewrites the three lists that show them.
+const manage = (change) => ({
+  tier: 'ADMIN',
+  run: async ({ db, lists }, b) => {
+    await change(db, b);
+    for (const name of ['classes', 'groups', 'directory']) await lists.refresh(name);
+    return {};
+  },
+});
 
 export const ACTIONS = {
   getSession: { run: ({ actor }) => ({ session: publicSession(actor) }) },
@@ -119,9 +130,9 @@ export const ACTIONS = {
   /* ---------- lessons ---------- */
   getLessons: { run: async ({ db }, b) => ({ lessons: await getLessons(db, { schoolYear: b.schoolYear }) }) },
   saveLesson: { run: async ({ db, actor }, b) => ({ lesson: await saveLesson(db, actor, { ...b, classId: id(b.classId, 'Lớp') }) }) },
-  createUploadUrl: {
+  createUploadUrls: {
     run: async ({ db, drive, actor, origin }, b) => ({
-      uploadUrl: await createUploadUrl(db, drive, actor, { schoolYear: b.schoolYear, weekOf: b.weekOf, classId: id(b.classId, 'Lớp'), slot: b.slot, filename: b.filename, origin }),
+      uploadUrls: await createUploadUrls(db, drive, actor, { schoolYear: b.schoolYear, weekOf: b.weekOf, classId: id(b.classId, 'Lớp'), files: b.files, origin }),
     }),
   },
 
@@ -134,6 +145,11 @@ export const ACTIONS = {
       return { user };
     },
   },
+  saveClass: manage((db, b) => saveClass(db, { id: optionalId(b.id), name: b.name, grade: b.grade })),
+  deleteClass: manage((db, b) => deleteClass(db, id(b.id))),
+  reorderClasses: manage((db, b) => reorderClasses(db, b.ids)),
+  saveGroup: manage((db, b) => saveGroup(db, { id: optionalId(b.id), name: b.name, type: b.type, description: b.description, classIds: b.classIds, sectorGroupId: b.sectorGroupId })),
+  deleteGroup: manage((db, b) => deleteGroup(db, id(b.id))),
   saveConfig: {
     tier: 'ADMIN',
     run: async ({ db, actor, lists }, b) => {
@@ -154,6 +170,15 @@ export const ACTIONS = {
     run: async ({ db, actor, today, lists }, b) => {
       const result = await startSchoolYear(db, { attendanceStartDate: b.attendanceStartDate, today }, actor.userId);
       await lists.rebuild();
+      return result;
+    },
+  },
+  // confirm false = report only; confirm true replaces all data of this database.
+  importSheet: {
+    tier: 'ADMIN',
+    run: async ({ db, actor, lists }, b) => {
+      const result = await importSheet(db, actor, { tabs: b.tabs, confirm: b.confirm === true });
+      if (result.imported) await lists.rebuild();
       return result;
     },
   },

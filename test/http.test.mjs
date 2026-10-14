@@ -46,7 +46,7 @@ test('unknown actions are 404; actions above the tier of the user are 403', asyn
   const env = await testEnv();
   assert.equal((await call(env, TEACHER, 'dropEverything'))[0], 404);
   assert.equal((await call(env, TEACHER, 'constructor'))[0], 404);
-  for (const action of ['getDirectory', 'saveUser', 'saveConfig', 'saveHolidays', 'importStudents', 'startSchoolYear', 'clearCache']) {
+  for (const action of ['getDirectory', 'saveUser', 'saveConfig', 'saveHolidays', 'importStudents', 'startSchoolYear', 'importSheet', 'clearCache', 'saveClass', 'deleteClass', 'reorderClasses', 'saveGroup', 'deleteGroup']) {
     assert.equal((await call(env, TEACHER, action))[0], 403, action);
   }
   for (const action of ['getTeacherAttendance', 'saveTeacherAttendance', 'getTeacherAttendanceStats', 'searchTeachers', 'getTeacherAbsences']) {
@@ -175,7 +175,7 @@ test('lessons: read by anyone, saved within scope, upload link needs a connected
   const [status, json] = await call(env, TEACHER, 'saveLesson', { weekOf: '2026-10-11', classId: 1, content: 'Bài 6', planFiles: [{ url: 'https://example.com/a', name: 'a', type: 'LINK' }] });
   assert.deepEqual([status, json.lesson.location, json.lesson.planFiles.length], [200, 'Trong lớp', 1]);
   assert.equal((await call(env, TEACHER, 'saveLesson', { weekOf: '2026-10-11', classId: 2, content: 'x' }))[0], 403);
-  const [code, error] = await call(env, TEACHER, 'createUploadUrl', { weekOf: '2026-10-11', classId: 1, slot: 'PLAN', filename: 'a.pdf' });
+  const [code, error] = await call(env, TEACHER, 'createUploadUrls', { weekOf: '2026-10-11', classId: 1, files: [{ slot: 'PLAN', filename: 'a.pdf' }] });
   assert.equal(code, 409);
   assert.match(error.message, /Google Drive chưa được kết nối/);
 });
@@ -209,6 +209,32 @@ test('photos: an admin uploads, everyone signed in views and downloads, an admin
   assert.equal((await photo(env, TEACHER, 'GET', 1)).status, 404);
   assert.equal(env.PHOTOS.has('students/1'), false);
   assert.equal((await call(env, TEACHER, 'getStudents'))[1].students.find((s) => s.id === 1).hasPhoto, false);
+});
+
+test('photos live in D1 without the R2 binding; after a switch to R2 the old ones stay readable and new ones go to R2', async () => {
+  const env = await testEnv();
+  const r2 = env.PHOTOS;
+  delete env.PHOTOS;
+  const stored = () => env.DB.prepare('SELECT COUNT(*) AS n FROM StudentPhotos').first('n');
+
+  assert.equal((await photo(env, ADMIN, 'PUT', 1, JPEG)).status, 200);
+  assert.equal((await photo(env, ADMIN, 'PUT', 2, JPEG)).status, 200);
+  assert.equal(await stored(), 2);
+  const get = await photo(env, TEACHER, 'GET', 1);
+  assert.deepEqual([get.status, get.headers.get('Content-Type')], [200, 'image/jpeg']);
+  assert.deepEqual(new Uint8Array(await get.arrayBuffer()), JPEG);
+  assert.equal((await photo(env, ADMIN, 'PUT', 1, JPEG)).status, 200); // replace keeps one row
+  assert.equal(await stored(), 2);
+
+  env.PHOTOS = r2; // the switch
+  assert.deepEqual(new Uint8Array(await (await photo(env, TEACHER, 'GET', 2)).arrayBuffer()), JPEG);
+  assert.equal((await photo(env, ADMIN, 'PUT', 1, JPEG)).status, 200);
+  assert.deepEqual([r2.has('students/1'), await stored()], [true, 1]);
+  assert.equal((await photo(env, TEACHER, 'GET', 1)).status, 200);
+  assert.equal((await photo(env, ADMIN, 'DELETE', 2)).status, 200);
+  assert.equal((await photo(env, ADMIN, 'DELETE', 1)).status, 200);
+  assert.deepEqual([r2.has('students/1'), await stored()], [false, 0]);
+  assert.equal((await photo(env, TEACHER, 'GET', 2)).status, 404);
 });
 
 test('photos: only JPEG or PNG up to 2 MB reach the bucket', async () => {

@@ -235,40 +235,42 @@ function openForm(classId) {
   $('ls-modal').classList.add('open');
 }
 
-// The file goes straight from the browser to Google Drive; the server only hands out the upload link.
-async function uploadOne(file, slot) {
-  const { uploadUrl } = await api('createUploadUrl', { schoolYear: state.year, weekOf: $('ls-week').value, classId: editing.classId, slot, filename: file.name });
+// The files go straight from the browser to Google Drive; the server only hands out the upload links.
+async function uploadOne(file, uploadUrl) {
   const res = await fetch(uploadUrl, { method: 'PUT', mode: 'cors', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
   if (!res.ok) throw new Error('Upload trực tiếp thất bại');
   const { id } = await res.json();
   return { url: `https://drive.google.com/file/d/${id}/view`, name: file.name, type: 'FILE', driveFileId: id, size: file.size };
 }
 
-// Three at a time. A file that fails stays queued, so pressing save again continues with the rest.
-async function uploadQueued(slot) {
-  const s = slots[slot];
+// One request per save gets the links of every queued file: the server checks or creates the Drive folders once.
+// Uploads run three at a time. A file that fails stays queued, so pressing save again continues with the rest.
+async function uploadQueued() {
+  const queued = Object.entries(slots).flatMap(([slot, s]) => s.queued.map((file) => ({ slot, file })));
+  if (!queued.length) return;
+  const { uploadUrls } = await api('createUploadUrls', {
+    schoolYear: state.year, weekOf: $('ls-week').value, classId: editing.classId,
+    files: queued.map(({ slot, file }) => ({ slot, filename: file.name })),
+  });
   let failed = 0;
-  let message = '';
-  const files = [...s.queued];
-  for (let i = 0; i < files.length; i += 3) {
-    const batch = files.slice(i, i + 3);
-    batch.forEach((file) => { file.uploading = true; });
+  for (let i = 0; i < queued.length; i += 3) {
+    const batch = queued.slice(i, i + 3);
+    batch.forEach(({ file }) => { file.uploading = true; });
     renderFiles();
-    await Promise.all(batch.map(async (file) => {
+    await Promise.all(batch.map(async ({ slot, file }, j) => {
+      const s = slots[slot];
       try {
-        const entry = await uploadOne(file, slot);
+        const entry = await uploadOne(file, uploadUrls[i + j]);
         s.queued.splice(s.queued.indexOf(file), 1);
         s.kept.push(entry);
-      } catch (e) {
+      } catch {
         file.uploading = false;
         failed += 1;
-        message = e.message;
       }
       renderFiles();
     }));
   }
-  // "Drive is not connected" is said as it is; other failures get the retry hint.
-  if (failed) throw new Error(/Google Drive chưa được kết nối/.test(message) ? message : `Có ${failed} file tải lên thất bại. Vui lòng thử bấm lưu lại để tải tiếp.`);
+  if (failed) throw new Error(`Có ${failed} file tải lên thất bại. Vui lòng thử bấm lưu lại để tải tiếp.`);
 }
 
 const sendable = (entries) => entries.map(({ url, name, type, driveFileId }) => ({ url, name, type, driveFileId }));
@@ -283,8 +285,7 @@ async function saveForm() {
   button.disabled = true;
   button.textContent = '⏳ Đang xử lý...';
   try {
-    await uploadQueued('PLAN');
-    await uploadQueued('REVISED');
+    await uploadQueued();
     const { lesson } = await api('saveLesson', {
       schoolYear: state.year, weekOf: $('ls-week').value, classId: editing.classId, content,
       location: $('ls-location').value.trim(),

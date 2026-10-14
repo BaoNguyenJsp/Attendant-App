@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Quản Trị — Sổ Thiếu Nhi</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="/shared/style.css">
 </head>
 <body class="bg-slate-100 min-h-screen"
@@ -23,6 +24,7 @@
     <button class="tab-btn" data-tab="t-holidays">🗓 Nghỉ Lễ</button>
     <button class="tab-btn" data-tab="t-config">⚙ Cấu hình</button>
     <button class="tab-btn" data-tab="t-year">🎓 Chuyển năm</button>
+    <button class="tab-btn" data-tab="t-import">📥 Nhập Sheet cũ</button>
   </div>
 
   <!-- t-us -->
@@ -44,10 +46,14 @@
 
   <!-- t-grp -->
   <div id="t-groups" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+    <div class="flex flex-wrap justify-between items-center gap-3 mb-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
+      <p class="text-sm text-slate-600">Thành viên của nhóm được chọn ở tab Huynh trưởng. Đổi lớp hoặc ngành phụ trách thì thành viên của nhóm phải đăng nhập lại.</p>
+      <button id="group-add" class="bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg whitespace-nowrap">＋ Thêm nhóm</button>
+    </div>
     <div class="tbl-scroll sticky">
       <table class="w-full text-sm border-collapse">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
-          <th class="p-3">Nhóm</th><th class="p-3">Loại</th><th class="p-3">Lớp / Ngành phụ trách</th>
+          <th class="p-3">Nhóm</th><th class="p-3">Loại</th><th class="p-3">Lớp / Ngành phụ trách</th><th class="p-3">Mô tả</th><th class="p-3">Thao tác</th>
         </tr></thead>
         <tbody id="group-tbody"></tbody>
       </table>
@@ -56,10 +62,14 @@
 
   <!-- t-cls -->
   <div id="t-classes" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+    <div class="flex flex-wrap justify-between items-center gap-3 mb-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
+      <p class="text-sm text-slate-600">Thứ tự ở đây là thứ tự lên lớp khi chuyển năm học: Thiếu nhi của mỗi lớp lên lớp ngay bên dưới.</p>
+      <button id="class-add" class="bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg whitespace-nowrap">＋ Thêm lớp</button>
+    </div>
     <div class="tbl-scroll sticky">
       <table class="w-full text-sm border-collapse">
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
-          <th class="p-3">#</th><th class="p-3">Tên Lớp</th><th class="p-3">Khối</th><th class="p-3">Sĩ số (Hoạt động)</th>
+          <th class="p-3">#</th><th class="p-3">Tên Lớp</th><th class="p-3">Khối</th><th class="p-3">Sĩ số (Hoạt động)</th><th class="p-3">Thao tác</th>
         </tr></thead>
         <tbody id="class-tbody"></tbody>
       </table>
@@ -121,6 +131,24 @@
     </ul>
     <p class="mt-5"><button id="year-open" class="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-lg">🎓 Chuyển sang năm học kế tiếp…</button></p>
   </div>
+
+  <!-- t-import -->
+  <div id="t-import" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+    <h2 class="font-bold text-lg mb-3">📥 Nhập Dữ Liệu Từ Google Sheet Cũ</h2>
+    <ul class="space-y-1 text-sm text-slate-600 list-disc ml-5 mb-4">
+      <li>① Trong Google Sheet cũ: <b>Tệp → Tải xuống → Microsoft Excel (.xlsx)</b>, rồi chọn tệp đó ở đây.</li>
+      <li>② Trang kiểm tra tệp và hiện số dòng sẽ nhập cùng các dòng bị bỏ qua. Bước này <b>chưa ghi gì</b>.</li>
+      <li>③ Bấm nhập và xác nhận. Tất cả là một bước: nếu có lỗi thì không có gì thay đổi và có thể chạy lại.</li>
+      <li>Ảnh Thiếu nhi không được nhập. Kết nối Google Drive được giữ nguyên. Mọi người phải đăng nhập lại.</li>
+    </ul>
+    <p class="text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm font-semibold mb-4">
+      ⚠ Toàn bộ dữ liệu hiện có trên <b id="imp-host"></b> (Huynh trưởng, nhóm, lớp, Thiếu nhi, điểm danh, điểm, học bạ, giáo án) sẽ bị xóa và thay bằng dữ liệu của tệp.</p>
+    <div class="flex flex-wrap gap-3 items-center mb-4">
+      <input type="file" id="imp-file" accept=".xlsx" class="border p-2 rounded-lg text-sm">
+      <button id="imp-run" disabled class="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-2.5 rounded-lg disabled:opacity-50">📥 Nhập vào cơ sở dữ liệu…</button>
+    </div>
+    <div id="imp-report"></div>
+  </div>
 </div>
 
 <!-- Modal: thêm / sửa người dùng -->
@@ -136,6 +164,43 @@
       <div class="form-group full"><label>Nhóm (chọn nhiều)</label>
         <div id="user-groups" class="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-56 overflow-y-auto border rounded-lg p-2 bg-slate-50"></div>
       </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel">Hủy</button>
+      <button type="button" class="btn-save">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: thêm / sửa lớp -->
+<div id="class-modal" class="modal">
+  <div class="modal-content">
+    <h3 id="class-title">Thêm lớp</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>Tên lớp *</label><input id="class-name" type="text" placeholder="vd: Ấu 1"></div>
+      <div class="form-group"><label>Khối</label><input id="class-grade" type="text" placeholder="vd: Ấu"></div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel">Hủy</button>
+      <button type="button" class="btn-save">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: thêm / sửa nhóm -->
+<div id="group-modal" class="modal">
+  <div class="modal-content">
+    <h3 id="group-title">Thêm nhóm</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>Tên nhóm *</label><input id="group-name" type="text" placeholder="vd: Lớp Ấu 1"></div>
+      <div class="form-group"><label>Loại * (không đổi được sau khi tạo)</label><select id="group-type"></select></div>
+      <div class="form-group full"><label>Mô tả</label><input id="group-description" type="text"></div>
+      <div class="form-group full" id="group-class-row"><label>Lớp phụ trách *</label><select id="group-class"></select></div>
+      <div class="form-group full" id="group-classes-row"><label>Các lớp của ngành</label>
+        <div id="group-classes" class="grid grid-cols-2 sm:grid-cols-3 gap-1 max-h-56 overflow-y-auto border rounded-lg p-2 bg-slate-50"></div>
+      </div>
+      <div class="form-group full" id="group-sector-row"><label>Ngành phụ trách *</label><select id="group-sector"></select></div>
+      <p class="form-group full text-sm text-slate-500" id="group-admin-row">Nhóm Xứ đoàn phụ trách tất cả các lớp.</p>
     </div>
     <div class="modal-actions">
       <button type="button" class="btn-cancel">Hủy</button>
