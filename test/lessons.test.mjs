@@ -4,7 +4,7 @@ import { seededD1 } from './helpers/seeded.mjs';
 import { AppError } from '../src/lib/errors.js';
 import { loadSession } from '../src/lib/db/users.js';
 import { makeDrive, NOT_CONNECTED } from '../src/lib/drive.js';
-import { getLessons, saveLesson, createUploadUrls, emptyDriveTrash } from '../src/lib/db/lessons.js';
+import { getLessons, saveLesson, createUploadUrls, emptyDriveTrash, trashYearFolders } from '../src/lib/db/lessons.js';
 
 const status = (code) => (e) => e instanceof AppError && e.status === code;
 const WEEK = '2026-10-11'; // no lesson yet in the demo data
@@ -138,4 +138,18 @@ test('the trash job trashes queued files and keeps the ones that failed', async 
   assert.equal(await emptyDriveTrash(db, drive), 2); // a file that is already gone counts as done
   assert.deepEqual(await trashQueue(db), ['broken']);
   assert.equal(google.calls.filter((c) => c.method === 'PATCH').length, 3);
+});
+
+test('the year folders of removed lessons are trashed under the root, every copy of a duplicated one', async () => {
+  const db = await seededD1();
+  await db.prepare("UPDATE Config SET Value = 'ROOT' WHERE Key = 'DriveFolderId'").run();
+  const google = fakeGoogle();
+  const search = google.fetch;
+  google.fetch = async (url, init) => {
+    const q = new URL(String(url)).searchParams.get('q') ?? '';
+    return q.includes("'ROOT' in parents and name = '2024-2025'") ? (await search(url, init), Response.json({ files: [{ id: 'Y24' }, { id: 'Y24b' }] })) : search(url, init);
+  };
+  const { drive } = await connected(db, google);
+  await trashYearFolders(db, drive, ['2024-2025', '2023-2024']);
+  assert.deepEqual(google.calls.filter((c) => c.method === 'PATCH').map((c) => c.url.split('/').pop()), ['Y24', 'Y24b']);
 });

@@ -28,13 +28,16 @@ export function makeDrive({ db, clientId, clientSecret, fetch = globalThis.fetch
 
   const call = async (url, init = {}) => fetch(url, { ...init, headers: { ...init.headers, Authorization: `Bearer ${await accessToken()}` } });
 
-  async function childFolder(parentId, name) {
+  // Ids of the folders called `name` directly in the parent (two when two requests raced to create it).
+  async function findFolders(parentId, name) {
     const query = `'${parentId}' in parents and name = '${name.replace(/['\\]/g, '\\$&')}' and mimeType = '${FOLDER_TYPE}' and trashed = false`;
     const found = await call(`${FILES_URL}?q=${encodeURIComponent(query)}&fields=${encodeURIComponent('files(id)')}`);
-    if (found.ok) {
-      const { files } = await found.json();
-      if (files?.length) return files[0].id;
-    }
+    return found.ok ? ((await found.json()).files ?? []).map((f) => f.id) : [];
+  }
+
+  async function childFolder(parentId, name) {
+    const [existing] = await findFolders(parentId, name);
+    if (existing) return existing;
     const made = await call(FILES_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, mimeType: FOLDER_TYPE, parents: [parentId] }) });
     if (!made.ok) fail(502, 'Không tạo được thư mục trên Google Drive.');
     return (await made.json()).id;
@@ -88,5 +91,5 @@ export function makeDrive({ db, clientId, clientSecret, fetch = globalThis.fetch
     return res.ok || res.status === 404;
   }
 
-  return { folderFor, createUploadUrl, trash };
+  return { folderFor, findFolders, createUploadUrl, trash };
 }

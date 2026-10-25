@@ -84,7 +84,7 @@ test('the rollover archives, clears, promotes and moves the year in one step', a
   // a leftover archive row of a failed earlier attempt must not block the retry
   await db.prepare("INSERT INTO AcademicYear (SchoolYear, StudentId, ClassName) VALUES ('2026-2027', 51, 'leftover')").run();
 
-  assert.deepEqual(await startSchoolYear(db, { attendanceStartDate: '2027-09-05', today: TODAY }, 1), { newYear: '2027-2028' });
+  assert.deepEqual(await startSchoolYear(db, { attendanceStartDate: '2027-09-05', today: TODAY }, 1), { newYear: '2027-2028', removedYears: [] });
 
   assert.equal(await count(db, "SELECT COUNT(*) AS n FROM AcademicYear WHERE SchoolYear = '2026-2027'"), 599); // active students only
   const archived = await db.prepare("SELECT ClassName, Semester1Avg, YearAvg, AttendancePct, Rating FROM AcademicYear WHERE SchoolYear = '2026-2027' AND StudentId = 51").first();
@@ -104,6 +104,21 @@ test('the rollover archives, clears, promotes and moves the year in one step', a
   assert.deepEqual([config.CurrentSchoolYear, config.AttendanceStartDate], ['2027-2028', '2027-09-05']);
   const history = (await db.prepare("SELECT Key, Value FROM ConfigHistory WHERE Action = 'UPDATED' ORDER BY Key").all()).results;
   assert.deepEqual(history, [{ Key: 'AttendanceStartDate', Value: '2027-09-05' }, { Key: 'CurrentSchoolYear', Value: '2027-2028' }]);
+});
+
+test('the rollover removes lessons older than the old year and names their years for the Drive cleanup', async () => {
+  const db = await seededD1(); // current year 2026-2027
+  await db.batch([
+    db.prepare("INSERT INTO Lessons (Id, SchoolYear, WeekOf, ClassId, TeacherId) VALUES (900, '2025-2026', '2025-09-14', 1, 1), (901, '2024-2025', '2024-09-15', 1, 1)"),
+    db.prepare("INSERT INTO LessonFiles (LessonId, Slot, Position, Url, Type, DriveFileId) VALUES (900, 'PLAN', 0, 'https://x/a', 'FILE', 'OLD_FILE'), (901, 'REVISED', 0, 'https://x/c', 'LINK', NULL)"),
+    db.prepare("INSERT INTO DriveFolders (PathKey, FolderId) VALUES ('root/2023-2024', 'Y23'), ('root/2025-2026/Ấu 1', 'Y25A'), ('root/2026-2027', 'Y26')"),
+  ]);
+  const { removedYears } = await startSchoolYear(db, { attendanceStartDate: '2027-09-05', today: TODAY }, 1);
+  assert.deepEqual(removedYears, ['2023-2024', '2024-2025', '2025-2026']); // a year with only a folder left counts too
+  assert.equal(await count(db, 'SELECT COUNT(*) AS n FROM Lessons'), 36); // the 2026-2027 lessons stay
+  assert.equal(await count(db, 'SELECT COUNT(*) AS n FROM LessonFiles WHERE LessonId IN (900, 901)'), 0);
+  assert.equal(await count(db, 'SELECT COUNT(*) AS n FROM DriveTrash'), 0); // no file by file: the year folder goes
+  assert.deepEqual((await db.prepare('SELECT PathKey FROM DriveFolders').all()).results.map((r) => r.PathKey), ['root/2026-2027']);
 });
 
 test('a refused rollover changes nothing', async () => {

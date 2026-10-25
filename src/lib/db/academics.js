@@ -94,7 +94,18 @@ export async function startSchoolYear(db, { attendanceStartDate, today }, actorI
     ...insertMany(db, 'AcademicYear', ['SchoolYear', 'StudentId', 'ClassName', 'Semester1Avg', 'Semester2Avg', 'YearAvg', 'AttendancePct', 'Rating'], results),
     // 2. clear the data of the year; lessons stay, they carry their school year
     ...['Attendance', 'Scores', 'TeacherAttendance', 'Holidays'].map((table) => db.prepare(`DELETE FROM ${table}`)),
+    // 2b. lessons of the years before the old year are removed ('YYYY-YYYY' sorts as text); the caller trashes
+    // their year folders on Drive. Remembered folder ids of those years are forgotten.
+    db.prepare('DELETE FROM LessonFiles WHERE LessonId IN (SELECT Id FROM Lessons WHERE SchoolYear < ?)').bind(oldYear),
+    db.prepare('DELETE FROM Lessons WHERE SchoolYear < ?').bind(oldYear),
   ];
+  const removedYears = new Set((await all(db, 'SELECT DISTINCT SchoolYear FROM Lessons WHERE SchoolYear < ?', oldYear)).map((r) => r.SchoolYear));
+  for (const { PathKey } of await all(db, 'SELECT PathKey FROM DriveFolders')) {
+    const year = PathKey.split('/')[1]; // <root>/<year>/<class>/<week>/<slot>
+    if (!(year < oldYear)) continue;
+    removedYears.add(year);
+    statements.push(db.prepare('DELETE FROM DriveFolders WHERE PathKey = ?').bind(PathKey));
+  }
   // 3. promote in place, from the top down so nobody moves twice; the last class stays where it is
   for (let i = classes.length - 2; i >= 0; i--) {
     statements.push(db.prepare("UPDATE Students SET ClassId = ?, UpdatedAt = ?, UpdatedBy = ? WHERE ClassId = ? AND Status = 'ACTIVE'").bind(classes[i + 1].Id, stamp, actorId, classes[i].Id));
@@ -108,5 +119,5 @@ export async function startSchoolYear(db, { attendanceStartDate, today }, actorI
     changes.map(([Key, Value]) => ({ Key, Value, Action: Key in config ? 'UPDATED' : 'ADDED', ChangedBy: actorId }))));
 
   await db.batch(statements);
-  return { newYear };
+  return { newYear, removedYears: [...removedYears].sort() };
 }

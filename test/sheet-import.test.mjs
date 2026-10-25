@@ -4,6 +4,7 @@ import { seededD1 } from './helpers/seeded.mjs';
 import { AppError } from '../src/lib/errors.js';
 import { loadSession, isSessionValid } from '../src/lib/db/users.js';
 import { mapSheet, importSheet } from '../src/lib/db/sheet-import.js';
+import { templateSheets } from '../public/shared/import-template.js';
 
 const count = (db, table) => db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first('n');
 const ADMIN = { email: 'doruoora@gmail.com' };
@@ -112,4 +113,14 @@ test('an import that would lock the admin out, or that fails half way, changes n
   await assert.rejects(importSheet(db, ADMIN, { tabs: tabs(), confirm: true }));
   assert.equal(await count(db, 'Students'), 600);
   assert.equal(await count(db, 'Users'), 60);
+});
+
+test('the sample workbook of the admin page imports without a skipped line', () => {
+  // the browser reads each tab with a header row, so the rows come back as objects keyed by column
+  const tabs = Object.fromEntries(templateSheets().map(([tab, [header, ...rows]]) => [tab, rows.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i]])))]));
+  const { data, skipped } = mapSheet(tabs);
+  assert.deepEqual(skipped, []);
+  for (const table of ['Users', 'Classes', 'Groups', 'GroupClasses', 'Memberships', 'Config', 'Holidays', 'Students', 'SiblingMembers', 'Attendance', 'TeacherAttendance', 'Scores', 'AcademicYear', 'Lessons', 'LessonFiles']) {
+    assert.ok(data[table].length, `${table} has rows`);
+  }
 });

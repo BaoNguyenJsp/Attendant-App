@@ -124,7 +124,7 @@
     <h2 class="font-bold text-lg mb-3">🎓 Chuyển Năm Học</h2>
     <ul class="space-y-1 text-sm text-slate-600 list-disc ml-5 mb-4">
       <li>① Chốt điểm và tỉ lệ chuyên cần của <b>năm hiện tại</b> vào học bạ của từng Thiếu nhi đang Hoạt động.</li>
-      <li>② Xóa điểm danh Thiếu nhi, điểm danh Huynh trưởng, điểm và Nghỉ lễ của năm hiện tại. Giáo án được giữ lại.</li>
+      <li>② Xóa điểm danh Thiếu nhi, điểm danh Huynh trưởng, điểm và Nghỉ lễ của năm hiện tại. Giáo án năm hiện tại được giữ lại; giáo án <b>các năm trước đó</b> bị xóa (vd chuyển 2025-2026 → 2026-2027 thì xóa giáo án 2024-2025 trở về trước), file trên Google Drive được chuyển vào thùng rác ở chế độ nền.</li>
       <li>③ Thiếu nhi đang <b>Hoạt động</b> lên lớp kế tiếp theo thứ tự tab Lớp; lớp cuối <b>giữ nguyên</b> — muốn ra khỏi lớp cuối thì đổi trạng thái thành <b>Đã tốt nghiệp</b>.</li>
       <li>④ Năm học tăng lên 1 và ngày bắt đầu điểm danh được đặt lại. Nhóm và Huynh trưởng giữ nguyên.</li>
       <li>Tất cả là một bước: nếu có lỗi thì không có gì thay đổi và có thể chạy lại.</li>
@@ -136,7 +136,7 @@
   <div id="t-import" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
     <h2 class="font-bold text-lg mb-3">📥 Nhập Dữ Liệu Từ Google Sheet Cũ</h2>
     <ul class="space-y-1 text-sm text-slate-600 list-disc ml-5 mb-4">
-      <li>① Trong Google Sheet cũ: <b>Tệp → Tải xuống → Microsoft Excel (.xlsx)</b>, rồi chọn tệp đó ở đây.</li>
+      <li>① Trong Google Sheet cũ: <b>Tệp → Tải xuống → Microsoft Excel (.xlsx)</b>, rồi chọn tệp đó ở đây. Chưa có Sheet cũ: tải <b>tệp mẫu</b> (tab HuongDan ghi giá trị hợp lệ của từng cột), điền rồi chọn tệp.</li>
       <li>② Trang kiểm tra tệp và hiện số dòng sẽ nhập cùng các dòng bị bỏ qua. Bước này <b>chưa ghi gì</b>.</li>
       <li>③ Bấm nhập và xác nhận. Tất cả là một bước: nếu có lỗi thì không có gì thay đổi và có thể chạy lại.</li>
       <li>Ảnh Thiếu nhi không được nhập. Kết nối Google Drive được giữ nguyên. Mọi người phải đăng nhập lại.</li>
@@ -144,6 +144,7 @@
     <p class="text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm font-semibold mb-4">
       ⚠ Toàn bộ dữ liệu hiện có trên <b id="imp-host"></b> (Huynh trưởng, nhóm, lớp, Thiếu nhi, điểm danh, điểm, học bạ, giáo án) sẽ bị xóa và thay bằng dữ liệu của tệp.</p>
     <div class="flex flex-wrap gap-3 items-center mb-4">
+      <button id="imp-template" type="button" class="border border-blue-900 text-blue-900 hover:bg-blue-50 font-semibold px-4 py-2.5 rounded-lg">⬇ Tải tệp mẫu (.xlsx)</button>
       <input type="file" id="imp-file" accept=".xlsx" class="border p-2 rounded-lg text-sm">
       <button id="imp-run" disabled class="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-2.5 rounded-lg disabled:opacity-50">📥 Nhập vào cơ sở dữ liệu…</button>
     </div>
@@ -219,7 +220,7 @@
       <span>Năm mới: <b id="year-new"></b></span>
     </div>
     <p class="text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm font-semibold mb-4">
-      ⚠ Dữ liệu điểm danh, điểm và nghỉ lễ của năm hiện tại sẽ bị xóa sau khi chốt học bạ.</p>
+      ⚠ Dữ liệu điểm danh, điểm và nghỉ lễ của năm hiện tại sẽ bị xóa sau khi chốt học bạ. Giáo án (kèm file trên Google Drive) của các năm trước năm hiện tại cũng bị xóa.</p>
     <div class="form-grid">
       <div class="form-group full"><label>Ngày bắt đầu năm học mới (AttendanceStartDate) *</label>
         <input id="year-start" type="date" placeholder="Chủ Nhật đầu năm học mới"></div>

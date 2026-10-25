@@ -92,6 +92,16 @@ export async function createUploadUrls(db, drive, actor, { schoolYear, weekOf, c
   return urls;
 }
 
+// After a rollover: the folder <root>/<year> of each removed year goes to the trash with everything in it.
+// The old Apps Script used the same layout under the same root, so this covers the imported files too.
+// ponytail: runs once after the response; if Drive is not connected then, the folders stay. Queue the years in D1 if that matters.
+export async function trashYearFolders(db, drive, years) {
+  const rootId = (await configMap(db)).DriveFolderId || 'root';
+  for (const year of years) {
+    for (const id of await drive.findFolders(rootId, safeName(year))) await drive.trash(id);
+  }
+}
+
 // UC-X1, weekly. A file that cannot be trashed stays in the queue for the next run.
 export async function emptyDriveTrash(db, drive) {
   const queue = await all(db, 'SELECT FileId FROM DriveTrash LIMIT 50');

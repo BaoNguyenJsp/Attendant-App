@@ -22,7 +22,7 @@ const PAGES = [
   ['public/teachers/index.html', 'public/teachers/teachers.js'],
   ['public/admin/index.html', 'public/admin/admin.js'],
 ];
-const SHARED = ['public/shared/common.js', 'public/shared/labels.js', 'public/shared/search.js', 'public/shared/scores.js', 'public/shared/ui.js'];
+const SHARED = ['public/shared/common.js', 'public/shared/labels.js', 'public/shared/search.js', 'public/shared/scores.js', 'public/shared/ui.js', 'public/shared/import-template.js'];
 const read = (path) => readFileSync(path, 'utf8');
 
 function parses(path) {

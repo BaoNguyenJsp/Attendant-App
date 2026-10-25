@@ -10,7 +10,7 @@ import {
   getTeacherAttendance, saveTeacherAttendance, getTeacherAttendanceStats, searchTeachers, getTeacherAbsences,
 } from '../lib/db/attendance.js';
 import { getScores, saveScores, getClassReport, getStudentRecord, startSchoolYear } from '../lib/db/academics.js';
-import { getLessons, saveLesson, createUploadUrls } from '../lib/db/lessons.js';
+import { getLessons, saveLesson, createUploadUrls, trashYearFolders } from '../lib/db/lessons.js';
 import { importSheet } from '../lib/db/sheet-import.js';
 
 // Ids arrive as numbers or as text from a <select>; anything else is a bad request.
@@ -167,9 +167,11 @@ export const ACTIONS = {
   },
   startSchoolYear: {
     tier: 'ADMIN',
-    run: async ({ db, actor, today, lists }, b) => {
+    run: async ({ db, actor, today, lists, drive, waitUntil }, b) => {
       const result = await startSchoolYear(db, { attendanceStartDate: b.attendanceStartDate, today }, actor.userId);
       await lists.rebuild();
+      // The year folders of the removed lessons go to the Drive trash after the answer.
+      if (result.removedYears.length) waitUntil(trashYearFolders(db, drive, result.removedYears).catch((e) => console.error('drive trash after rollover:', e.message)));
       return result;
     },
   },

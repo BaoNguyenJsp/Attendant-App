@@ -9,6 +9,7 @@ import { initCommon, load, state, $, api, esc, toast, fillSel, setupTabs, TEACHE
 import { SESSION_LABEL, USER_STATUS_LABEL, TIER_LABEL } from '../shared/labels.js';
 import { matchesPerson } from '../shared/search.js';
 import { badge, tierBadge, STATUS_TONE } from '../shared/ui.js';
+import { templateSheets } from '../shared/import-template.js';
 
 await initCommon();
 await load('classes');
@@ -290,6 +291,12 @@ async function confirmYear() {
 /* ---------- Import of the old Google Sheet: check first, write only after a confirmation ---------- */
 let importTabs = null;
 
+function downloadTemplate() {
+  const wb = XLSX.utils.book_new();
+  for (const [name, rows] of templateSheets()) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), name);
+  XLSX.writeFile(wb, 'mau-nhap-du-lieu.xlsx');
+}
+
 async function previewImport() {
   const file = $('imp-file').files[0];
   importTabs = null;
@@ -394,6 +401,7 @@ $('cfg-tbody').addEventListener('click', (e) => {
 });
 $('drive-connect').addEventListener('click', () => { location.href = '/auth/drive'; });
 $('clear-cache').addEventListener('click', clearCache);
+$('imp-template').addEventListener('click', downloadTemplate);
 $('imp-file').addEventListener('change', previewImport);
 $('imp-run').addEventListener('click', runImport);
 $('imp-host').textContent = location.host;

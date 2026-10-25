@@ -25,6 +25,8 @@ export function createApp({ fetch = globalThis.fetch } = {}) {
     today: todayVN(),
     lists: makeLists(c.env.DB, c.env.CACHE),
     drive: driveOf(c.env),
+    // Work that may finish after the response. Tests have no execution context; the promise then just runs.
+    waitUntil: (promise) => { try { c.executionCtx.waitUntil(promise); } catch { /* no execution context */ } },
     // Google ties an upload session to the page origin that will PUT the file.
     origin: c.req.header('Origin') ?? new URL(c.req.url).origin,
   });
