@@ -7,7 +7,7 @@
 
 import {
   initCommon, load, state, $, api, esc, toast, fillSel, fillClasses, setupTabs, sortStudents, exportExcel,
-  SESSIONS, MARK, canWriteClass, className, personName, photoUrl, snapToSunday, pct,
+  SESSIONS, MARK, canWriteClass, className, personName, photoUrl, snapToSunday, pct, dateRange, rangeLabel,
 } from '../shared/common.js';
 import { SESSION_LABEL, ATTENDANCE_RATING_LABEL } from '../shared/labels.js';
 import { matchesStudent } from '../shared/search.js';
@@ -154,7 +154,7 @@ async function renderStats() {
   const classId = Number($('stats-class').value);
   if (!classId) return;
   let r;
-  try { r = await api('getStudentAttendanceStats', { classId }); } catch (e) { return toast(e.message); }
+  try { r = await api('getStudentAttendanceStats', { classId, ...dateRange('stats-from', 'stats-to') }); } catch (e) { return toast(e.message); }
   const students = activeOf(classId);
   $('stats-tbody').innerHTML = students.length
     ? students.map((s, i) => {
@@ -168,12 +168,8 @@ async function renderStats() {
 
 /* ---------- Tab 4: whole parish (counted by the server in one query) ---------- */
 async function renderOverview() {
-  const period = $('ov-period').value.toUpperCase();
-  $('ov-wrap-quarter').style.display = period === 'QUARTER' ? 'block' : 'none';
-  $('ov-wrap-month').style.display = period === 'MONTH' ? 'block' : 'none';
-  const value = period === 'QUARTER' ? Number($('ov-quarter').value) : period === 'MONTH' ? Number($('ov-month').value) : undefined;
   let r;
-  try { r = await api('getAttendanceOverview', { period, value }); } catch (e) { return toast(e.message); }
+  try { r = await api('getAttendanceOverview', dateRange('ov-from', 'ov-to')); } catch (e) { return toast(e.message); }
   $('ov-total').textContent = r.totalStudents;
   $('ov-sunday').textContent = `${r.sundayMassPct}%`;
   $('ov-thursday').textContent = `${r.thursdayMassPct}%`;
@@ -238,13 +234,13 @@ $('abs-out').addEventListener('click', (e) => {
   if (button) exportExcel(button.dataset.table, `Trich_luc_${button.dataset.name}`);
 });
 
-$('stats-class').addEventListener('change', renderStats);
+for (const id of ['stats-class', 'stats-from', 'stats-to']) $(id).addEventListener('change', renderStats);
 $('stats-excel').addEventListener('click', () => exportExcel('stats-table', 'Thống kê chuyên cần lớp'));
-$('stats-print').addEventListener('click', () => printTable('stats-table', 'BẢNG THỐNG KÊ CHUYÊN CẦN THIẾU NHI', `Lớp: <b>${esc(className($('stats-class').value))}</b> &nbsp;|&nbsp; `, 'Giáo lý viên phụ trách'));
+$('stats-print').addEventListener('click', () => printTable('stats-table', 'BẢNG THỐNG KÊ CHUYÊN CẦN THIẾU NHI', `Lớp: <b>${esc(className($('stats-class').value))}</b> &nbsp;|&nbsp; ${rangeLabel(dateRange('stats-from', 'stats-to'))}`, 'Giáo lý viên phụ trách'));
 
-for (const id of ['ov-period', 'ov-quarter', 'ov-month']) $(id).addEventListener('change', renderOverview);
+for (const id of ['ov-from', 'ov-to']) $(id).addEventListener('change', renderOverview);
 $('ov-excel').addEventListener('click', () => exportExcel('ov-table', 'Thống kê toàn đoàn'));
-$('ov-print').addEventListener('click', () => printTable('ov-table', 'BẢNG THỐNG KÊ CHUYÊN CẦN TOÀN ĐOÀN', '', 'Ban Điều Hành'));
+$('ov-print').addEventListener('click', () => printTable('ov-table', 'BẢNG THỐNG KÊ CHUYÊN CẦN TOÀN ĐOÀN', rangeLabel(dateRange('ov-from', 'ov-to')), 'Ban Điều Hành'));
 
 /* ---------- Start ---------- */
 const showTab = setupTabs({ 't-stats': renderStats, 't-overview': renderOverview });

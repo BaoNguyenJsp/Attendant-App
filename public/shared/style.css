@@ -69,6 +69,10 @@ body[data-role]:not(.ready) .loading-overlay{visibility:visible}
 
 /* ===== bảng cuộn dọc khi dài hơn khung (áp dụng được cho mọi bảng) ===== */
 table th{white-space:nowrap}
+/* bấm tiêu đề cột để sắp xếp (shared/common.js) */
+table:not([data-nosort]) thead th:not(:empty):not([colspan]){cursor:pointer;user-select:none}
+thead th[data-sort="asc"]::after{content:" ▲"}
+thead th[data-sort="desc"]::after{content:" ▼"}
 .tbl-scroll{max-height:min(58vh,720px);overflow:auto;border:1px solid #cbd5e1;border-radius:8px}
 .tbl-scroll th,.tbl-scroll td{border:1px solid #e2e8f0}
 .tbl-scroll.sticky thead th{position:sticky;top:0;background:#1e3a8a;color:#fff;z-index:2}

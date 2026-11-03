@@ -4,6 +4,8 @@
    ===================================================================== */
 'use strict';
 
+import { sortableTables } from './sort.js';
+
 /* ---------- Codes ---------- */
 export const SESSIONS = ['SUNDAY_MASS', 'CATECHISM', 'ADORATION', 'THURSDAY_MASS'];
 export const TEACHER_SESSIONS = [...SESSIONS, 'TEACHER_MEETING'];
@@ -139,6 +141,16 @@ export function fmtDate(value) {
   const m = String(value ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m ? `${m[3]}/${m[2]}/${m[1]}` : String(value ?? '');
 }
+
+/** "Từ ngày … đến ngày" inputs -> { from, to }; {} when one is empty, so the filter is off. */
+export function dateRange(fromId, toId) {
+  const from = $(fromId).value;
+  const to = $(toId).value;
+  return from && to ? { from, to } : {};
+}
+
+/** Print line for a date range; '' when the filter is off. */
+export const rangeLabel = ({ from, to }) => (from ? `Từ ngày <b>${fmtDate(from)}</b> đến ngày <b>${fmtDate(to)}</b> &nbsp;|&nbsp; ` : '');
 
 /** A date typed or read from Excel ('YYYY-MM-DD', 'D/M/YYYY' or a Date) -> 'YYYY-MM-DD'; '' when it is not a date. */
 export function toIsoDate(value) {
@@ -294,6 +306,7 @@ export async function initCommon() {
   shell();
   setVis('.exec-only', isExec());
   setVis('.admin-only', isAdmin());
+  sortableTables();
 }
 
 window.addEventListener('error', (e) => toast(`Lỗi: ${e.message || 'unknown'}`));

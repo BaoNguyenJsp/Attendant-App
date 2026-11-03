@@ -86,8 +86,8 @@ export const ACTIONS = {
       return {};
     },
   },
-  getStudentAttendanceStats: { run: ({ db, today }, b) => getStudentAttendanceStats(db, { classId: id(b.classId, 'Lớp'), today }) },
-  getAttendanceOverview: { run: ({ db, today }, b) => getAttendanceOverview(db, { period: b.period, value: b.value, today }) },
+  getStudentAttendanceStats: { run: ({ db, today }, b) => getStudentAttendanceStats(db, { classId: id(b.classId, 'Lớp'), from: b.from, to: b.to, today }) },
+  getAttendanceOverview: { run: ({ db, today }, b) => getAttendanceOverview(db, { from: b.from, to: b.to, today }) },
 
   /* ---------- teachers (R6, R8) ---------- */
   getTeacherAttendance: {
@@ -106,7 +106,7 @@ export const ACTIONS = {
   },
   getTeacherAttendanceStats: {
     tier: 'SECTOR_ADMIN',
-    run: ({ db, actor, today }, b) => getTeacherAttendanceStats(db, { sectorGroupId: sector(actor, b.sectorGroupId), classId: optionalId(b.classId, 'Lớp'), today }),
+    run: ({ db, actor, today }, b) => getTeacherAttendanceStats(db, { sectorGroupId: sector(actor, b.sectorGroupId), classId: optionalId(b.classId, 'Lớp'), from: b.from, to: b.to, today }),
   },
   searchTeachers: { tier: 'SECTOR_ADMIN', run: async ({ db, actor }, b) => ({ teachers: await searchTeachers(db, actor, b.query) }) },
   getTeacherAbsences: { tier: 'SECTOR_ADMIN', run: ({ db, actor, today }, b) => getTeacherAbsences(db, actor, { userId: id(b.userId), today }) },

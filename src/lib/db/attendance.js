@@ -30,6 +30,14 @@ async function yearWeeks(db, today) {
   return start && isDate(start) ? sundaysBetween(start, today) : [];
 }
 
+// Optional "Từ ngày … đến ngày" filter on the weeks; it applies only when both dates are set.
+export function inRange(weeks, from, to) {
+  if (!from || !to) return weeks;
+  if (!isDate(from) || !isDate(to)) fail(400, 'Ngày lọc không hợp lệ.');
+  if (from > to) fail(400, '"Từ ngày" phải trước hoặc bằng "Đến ngày".');
+  return weeks.filter((w) => w >= from && w <= to);
+}
+
 const marksOf = (row, sessions) => Object.fromEntries(Object.entries(sessions).map(([code, column]) => [code, row[column]]));
 
 // Marks of a request in column order; a session that is not sent is unmarked.
@@ -97,8 +105,8 @@ export async function saveStudentAttendance(db, actor, { classId, weekOf, record
   if (statements.length) await db.batch(statements);
 }
 
-export async function getStudentAttendanceStats(db, { classId, today }) {
-  const weeks = await yearWeeks(db, today);
+export async function getStudentAttendanceStats(db, { classId, from, to, today }) {
+  const weeks = inRange(await yearWeeks(db, today), from, to);
   const { max, maxTotal } = possibleSessions(weeks, await listHolidays(db), STUDENT_SESSIONS);
   const stats = {};
   if (weeks.length) {
@@ -120,15 +128,8 @@ export async function presentTotals(db, today) {
 }
 
 // UC-T5: the database counts the present marks per class; the Worker only divides.
-export async function getAttendanceOverview(db, { period = 'YEAR', value, today }) {
-  const n = Number(value);
-  let months = null;
-  if (period === 'QUARTER' && Number.isInteger(n) && n >= 1 && n <= 4) months = [n * 3 - 2, n * 3 - 1, n * 3];
-  else if (period === 'MONTH' && Number.isInteger(n) && n >= 1 && n <= 12) months = [n];
-  else if (period !== 'YEAR') fail(400, 'Bộ lọc thời gian không hợp lệ.');
-
-  let weeks = await yearWeeks(db, today);
-  if (months) weeks = weeks.filter((w) => months.includes(Number(w.slice(5, 7))));
+export async function getAttendanceOverview(db, { from, to, today }) {
+  const weeks = inRange(await yearWeeks(db, today), from, to);
   const { max, maxTotal } = possibleSessions(weeks, await listHolidays(db), STUDENT_SESSIONS);
   const rows = weeks.length
     ? await all(db, `SELECT s.ClassId AS classId, ${presentSums(STUDENT_SESSIONS)} FROM Attendance a JOIN Students s ON s.Id = a.StudentId
@@ -201,15 +202,18 @@ export async function saveTeacherAttendance(db, { sectorGroupId, weekOf, records
   if (statements.length) await db.batch(statements);
 }
 
-export async function getTeacherAttendanceStats(db, { sectorGroupId, classId, today }) {
-  const weeks = await yearWeeks(db, today);
+export async function getTeacherAttendanceStats(db, { sectorGroupId, classId, from, to, today }) {
+  const weeks = inRange(await yearWeeks(db, today), from, to);
   const { max, maxTotal } = possibleSessions(weeks, await listHolidays(db), TEACHER_SESSIONS);
   const teachers = (await teacherRoster(db, sectorGroupId)).filter((t) => !classId || t.classId === classId);
   const rows = weeks.length
     ? await all(db, `SELECT a.UserId AS id, ${presentSums(TEACHER_SESSIONS)} FROM TeacherAttendance a WHERE a.WeekOf BETWEEN ? AND ? GROUP BY a.UserId`, weeks[0], weeks.at(-1))
     : [];
   const present = new Map(rows.map(({ id, ...counts }) => [id, counts]));
-  const taught = new Map((await all(db, 'SELECT TeacherId AS id, COUNT(*) AS n FROM Lessons WHERE SchoolYear = ? GROUP BY TeacherId', (await configMap(db)).CurrentSchoolYear)).map((r) => [r.id, r.n]));
+  // The lessons taught follow the same date filter; inRange above has already checked the dates.
+  const ranged = from && to ? [from, to] : [];
+  const taught = new Map((await all(db, `SELECT TeacherId AS id, COUNT(*) AS n FROM Lessons WHERE SchoolYear = ?${ranged.length ? ' AND WeekOf BETWEEN ? AND ?' : ''} GROUP BY TeacherId`,
+    (await configMap(db)).CurrentSchoolYear, ...ranged)).map((r) => [r.id, r.n]));
   const zero = Object.fromEntries(Object.keys(TEACHER_SESSIONS).map((code) => [code, 0]));
   return {
     max, maxTotal,

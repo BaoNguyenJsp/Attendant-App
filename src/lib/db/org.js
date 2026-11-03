@@ -153,15 +153,19 @@ export async function saveConfig(db, items, userId) {
 export const listHolidays = (db) => all(db, 'SELECT WeekOf AS weekOf, Session AS session, Reason AS reason FROM Holidays ORDER BY WeekOf, Session');
 
 // `holidays` is the full list. One holiday is one session of one week (UC-M4).
+// The week rules check only new holidays, so a stored one that breaks them (start date moved later) can still be deleted.
 export async function saveHolidays(db, holidays) {
   const start = (await configMap(db)).AttendanceStartDate;
+  const stored = new Set((await listHolidays(db)).map((h) => `${h.weekOf}|${h.session}`));
   const seen = new Set();
   const rows = [];
   for (const h of holidays ?? []) {
-    if (!isDate(h.weekOf) || toSunday(h.weekOf) !== h.weekOf) fail(400, 'Tuần nghỉ phải là một ngày Chúa Nhật.');
-    if (start && h.weekOf < start) fail(400, 'Tuần nghỉ không được trước ngày bắt đầu điểm danh.');
-    if (!Object.hasOwn(TEACHER_SESSIONS, h.session)) fail(400, 'Buổi nghỉ không hợp lệ.');
     const key = `${h.weekOf}|${h.session}`;
+    if (!stored.has(key)) {
+      if (!isDate(h.weekOf) || toSunday(h.weekOf) !== h.weekOf) fail(400, 'Tuần nghỉ phải là một ngày Chúa Nhật.');
+      if (start && h.weekOf < start) fail(400, 'Tuần nghỉ không được trước ngày bắt đầu điểm danh.');
+    }
+    if (!Object.hasOwn(TEACHER_SESSIONS, h.session)) fail(400, 'Buổi nghỉ không hợp lệ.');
     if (seen.has(key)) fail(400, 'Ngày nghỉ bị trùng (cùng tuần và cùng buổi).');
     seen.add(key);
     rows.push({ WeekOf: h.weekOf, Session: h.session, Reason: String(h.reason ?? '').trim() || null });

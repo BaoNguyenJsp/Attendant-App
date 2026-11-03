@@ -95,19 +95,21 @@
     <!-- t-gvtk -->
     <div id="t-stats" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
       <div
-        class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
+        class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-[repeat(4,minmax(0,1fr))_auto] gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
         <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Ngành</label>
           <select id="ts-sector" class="w-full border p-2.5 rounded-lg font-semibold"></select>
         </div>
         <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
           <select id="ts-class" class="w-full border p-2.5 rounded-lg font-semibold"></select>
         </div>
+        <div><label for="ts-from" class="block text-xs font-bold text-slate-600 uppercase mb-1">Từ ngày</label>
+          <input type="date" id="ts-from" class="w-full border p-2.5 rounded-lg font-semibold"></div>
+        <div><label for="ts-to" class="block text-xs font-bold text-slate-600 uppercase mb-1">Đến ngày</label>
+          <input type="date" id="ts-to" class="w-full border p-2.5 rounded-lg font-semibold"></div>
         <div class="flex items-end gap-3">
           <button id="ts-excel"
-            class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-6 py-2.5 rounded-lg flex-1">⬇
-            Excel</button>
-          <button id="ts-print" class="bg-slate-700 hover:bg-slate-800 text-white font-bold px-6 py-2.5 rounded-lg">🖨
-            PDF</button>
+            class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-6 py-2.5 rounded-lg whitespace-nowrap">⬇ Excel</button>
+          <button id="ts-print" class="bg-slate-700 hover:bg-slate-800 text-white font-bold px-6 py-2.5 rounded-lg whitespace-nowrap">🖨 PDF</button>
         </div>
       </div>
       <div class="tbl-scroll sticky">

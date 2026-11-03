@@ -10,6 +10,7 @@ import * as page from '../public/shared/search.js';
 import { SESSION_LABEL, MARK_LABEL, TIER_LABEL, STUDENT_STATUS_LABEL, USER_STATUS_LABEL, GENDER_LABEL, RATING_LABEL, ATTENDANCE_RATING_LABEL, SLOT_LABEL } from '../public/shared/labels.js';
 import * as codes from '../src/lib/codes.js';
 import { parseScore } from '../public/shared/scores.js';
+import { sortKey, compareValues } from '../public/shared/sort.js';
 
 // [html, script, ...more scripts of the page]. A page is added here by the task that migrates it.
 const PAGES = [
@@ -22,7 +23,7 @@ const PAGES = [
   ['public/teachers/index.html', 'public/teachers/teachers.js'],
   ['public/admin/index.html', 'public/admin/admin.js'],
 ];
-const SHARED = ['public/shared/common.js', 'public/shared/labels.js', 'public/shared/search.js', 'public/shared/scores.js', 'public/shared/ui.js', 'public/shared/import-template.js'];
+const SHARED = ['public/shared/common.js', 'public/shared/labels.js', 'public/shared/search.js', 'public/shared/scores.js', 'public/shared/ui.js', 'public/shared/import-template.js', 'public/shared/sort.js'];
 const read = (path) => readFileSync(path, 'utf8');
 
 function parses(path) {
@@ -104,4 +105,15 @@ test('role-only elements are hidden by the stylesheet until setVis marks them sh
   // The stylesheet hides them first, so clearing an inline style can never show them: a class has to.
   assert.match(read('public/shared/style.css'), /\.exec-only:not\(\.shown\),\s*\.admin-only:not\(\.shown\)\s*\{\s*display:\s*none/);
   assert.match(read('public/shared/common.js'), /classList\.toggle\('shown', on\)/);
+});
+
+test('table sorting reads dates, decimal commas and percents, and keeps blanks last', () => {
+  assert.equal(sortKey(' 05/10/2026 '), '2026-10-05');
+  assert.equal(sortKey('7,5'), 7.5);
+  assert.equal(sortKey('92%'), 92);
+  assert.equal(sortKey('Ấu 1'), 'Ấu 1');
+  const sorted = (values) => values.map(sortKey).sort(compareValues);
+  assert.deepEqual(sorted(['8,3', '', '10', '8,25']), [8.25, 8.3, 10, '']);
+  assert.deepEqual(sorted(['Ấu 10', 'Ấu 2', 'Chiên Con']), ['Ấu 2', 'Ấu 10', 'Chiên Con']);
+  assert.deepEqual(sorted(['01/02/2026', '15/01/2026']), ['2026-01-15', '2026-02-01']);
 });

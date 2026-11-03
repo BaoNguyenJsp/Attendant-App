@@ -24,7 +24,8 @@
     <button class="tab-btn" data-tab="t-holidays">🗓 Nghỉ Lễ</button>
     <button class="tab-btn" data-tab="t-config">⚙ Cấu hình</button>
     <button class="tab-btn" data-tab="t-year">🎓 Chuyển năm</button>
-    <button class="tab-btn" data-tab="t-import">📥 Nhập Sheet cũ</button>
+    <!-- Hidden: the one-time import is done. Remove `hidden` to use it again. -->
+    <button class="tab-btn" data-tab="t-import" hidden>📥 Nhập Sheet cũ</button>
   </div>
 
   <!-- t-us -->
@@ -67,7 +68,8 @@
       <button id="class-add" class="bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg whitespace-nowrap">＋ Thêm lớp</button>
     </div>
     <div class="tbl-scroll sticky">
-      <table class="w-full text-sm border-collapse">
+      <!-- data-nosort: the row order here is the class order, set with ▲ ▼ -->
+      <table class="w-full text-sm border-collapse" data-nosort>
         <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
           <th class="p-3">#</th><th class="p-3">Tên Lớp</th><th class="p-3">Khối</th><th class="p-3">Sĩ số (Hoạt động)</th><th class="p-3">Thao tác</th>
         </tr></thead>

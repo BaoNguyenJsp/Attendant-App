@@ -94,8 +94,8 @@ await ok('an all-unmarked row is deleted', TEACHER, 'saveStudentAttendance', { c
 await ok('… and no longer returned', TEACHER, 'getStudentAttendance', { classId: 1, weekOf }, (j) => !j.records.some((r) => r.studentId === first.id));
 await refused('a non-Sunday is refused', TEACHER, 'saveStudentAttendance', { classId: 1, weekOf: '2026-09-07', records: [] }, 400);
 await ok('getStudentAttendanceStats', TEACHER, 'getStudentAttendanceStats', { classId: 1 }, (j) => j.maxTotal > 0);
-await ok('getAttendanceOverview (grouped query)', TEACHER, 'getAttendanceOverview', { period: 'YEAR' }, (j) => j.classes.length === 12 && j.totalStudents === 601);
-await ok('getAttendanceOverview by month', TEACHER, 'getAttendanceOverview', { period: 'MONTH', value: 9 }, (j) => j.classes.length === 12);
+await ok('getAttendanceOverview (grouped query)', TEACHER, 'getAttendanceOverview', {}, (j) => j.classes.length === 12 && j.totalStudents === 601);
+await ok('getAttendanceOverview by date range', TEACHER, 'getAttendanceOverview', { from: '2026-09-01', to: '2026-09-30' }, (j) => j.classes.length === 12);
 await ok('getStudentAbsences', TEACHER, 'getStudentAbsences', { studentId: first.id }, (j) => Array.isArray(j.absences));
 
 /* ---------- teachers ---------- */

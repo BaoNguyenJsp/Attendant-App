@@ -7,7 +7,7 @@
 
 import {
   initCommon, load, state, $, api, esc, toast, fillSel, setupTabs, exportExcel,
-  TEACHER_SESSIONS, MARK, isAdmin, personName, snapToSunday, pct,
+  TEACHER_SESSIONS, MARK, isAdmin, personName, snapToSunday, pct, dateRange, rangeLabel,
 } from '../shared/common.js';
 import { SESSION_LABEL } from '../shared/labels.js';
 import { absenceTable, printDocument } from '../shared/ui.js';
@@ -141,7 +141,7 @@ async function renderStats() {
   const sectorGroupId = listOf('ts-sector');
   if (!sectorGroupId) return;
   let r;
-  try { r = await api('getTeacherAttendanceStats', { sectorGroupId, classId: $('ts-class').value || undefined }); } catch (e) { return toast(e.message); }
+  try { r = await api('getTeacherAttendanceStats', { sectorGroupId, classId: $('ts-class').value || undefined, ...dateRange('ts-from', 'ts-to') }); } catch (e) { return toast(e.message); }
   $('ts-tbody').innerHTML = r.stats.length
     ? r.stats.map((t) => {
       const total = TEACHER_SESSIONS.reduce((sum, code) => sum + t.present[code], 0);
@@ -159,7 +159,7 @@ function printStats() {
   const list = $('ts-sector').selectedOptions[0]?.textContent ?? '';
   const opened = printDocument({
     title: 'BẢNG THỐNG KÊ CHUYÊN CẦN HUYNH TRƯỞNG',
-    subtitle: `${esc(list)} &nbsp;|&nbsp; Năm học: <b>${esc(state.year)}</b>`,
+    subtitle: `${esc(list)} &nbsp;|&nbsp; ${rangeLabel(dateRange('ts-from', 'ts-to'))}Năm học: <b>${esc(state.year)}</b>`,
     tableHtml: table.outerHTML,
     leftSignature: 'Ban Quản Trị Ngành',
     landscape: true,
@@ -189,7 +189,7 @@ $('tabs-out').addEventListener('click', (e) => {
 });
 
 $('ts-sector').addEventListener('change', () => { fillStatsClasses(); renderStats(); });
-$('ts-class').addEventListener('change', renderStats);
+for (const id of ['ts-class', 'ts-from', 'ts-to']) $(id).addEventListener('change', renderStats);
 $('ts-excel').addEventListener('click', () => exportExcel('ts-table', 'Thống kê Huynh trưởng'));
 $('ts-print').addEventListener('click', printStats);
 

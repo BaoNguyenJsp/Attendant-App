@@ -99,7 +99,7 @@ test('the overview gives one line per class from one grouped count', async () =>
   await saveStudentAttendance(db, a, { classId: 1, weekOf: '2026-09-06', records: everyone });
   await saveStudentAttendance(db, a, { classId: 1, weekOf: '2026-10-04', records: everyone.slice(0, 25) });
 
-  const year = await getAttendanceOverview(db, { period: 'YEAR', today: TODAY });
+  const year = await getAttendanceOverview(db, { today: TODAY });
   assert.equal(year.totalStudents, 600);
   assert.equal(year.classes.length, 12);
   // class 1: 75 present Sunday Masses of 6 weeks x 50 students
@@ -107,19 +107,23 @@ test('the overview gives one line per class from one grouped count', async () =>
   assert.equal(year.sundayMassPct, 2); // 75 of 6 x 600
   assert.equal(year.thursdayMassPct, 0);
 
+  // "Từ ngày … đến ngày": only the weeks inside, and only when both ends are set
   // September has 4 Sundays: 50 of 4 x 50
-  assert.equal((await getAttendanceOverview(db, { period: 'MONTH', value: 9, today: TODAY })).classes[0].pct.SUNDAY_MASS, 25);
-  // October so far has 2 Sundays: 25 of 2 x 50
-  assert.equal((await getAttendanceOverview(db, { period: 'MONTH', value: 10, today: TODAY })).classes[0].pct.SUNDAY_MASS, 25);
-  assert.equal((await getAttendanceOverview(db, { period: 'QUARTER', value: 4, today: TODAY })).classes[0].pct.SUNDAY_MASS, 25);
-  // a quarter with no week so far
-  assert.equal((await getAttendanceOverview(db, { period: 'QUARTER', value: 1, today: TODAY })).classes[0].pctTotal, 0);
-  await assert.rejects(getAttendanceOverview(db, { period: 'MONTH', value: 13, today: TODAY }), status(400));
-  await assert.rejects(getAttendanceOverview(db, { period: 'WEEK', today: TODAY }), status(400));
+  assert.equal((await getAttendanceOverview(db, { from: '2026-09-01', to: '2026-09-30', today: TODAY })).classes[0].pct.SUNDAY_MASS, 25);
+  assert.equal((await getAttendanceOverview(db, { from: '2026-10-04', to: '2026-10-04', today: TODAY })).classes[0].pct.SUNDAY_MASS, 50);
+  assert.equal((await getAttendanceOverview(db, { from: '2026-10-04', today: TODAY })).classes[0].pct.SUNDAY_MASS, 25);
+  await assert.rejects(getAttendanceOverview(db, { from: '2026-10-05', to: '2026-10-04', today: TODAY }), status(400));
+  await assert.rejects(getAttendanceOverview(db, { from: 'x', to: '2026-10-04', today: TODAY }), status(400));
+  const sept = await getStudentAttendanceStats(db, { classId: 1, from: '2026-09-06', to: '2026-09-06', today: TODAY });
+  assert.equal(sept.maxTotal, 4);
+  assert.equal(sept.stats[1].total, 1);
+
+  // a range with no week so far
+  assert.equal((await getAttendanceOverview(db, { from: '2027-01-01', to: '2027-03-31', today: TODAY })).classes[0].pctTotal, 0);
 
   // classes without active students are left out
   await db.prepare("UPDATE Students SET Status = 'INACTIVE' WHERE ClassId = 12").run();
-  assert.equal((await getAttendanceOverview(db, { period: 'YEAR', today: TODAY })).classes.length, 11);
+  assert.equal((await getAttendanceOverview(db, { today: TODAY })).classes.length, 11);
 });
 
 test('absences list every session not present, unmarked weeks included, holidays skipped', async () => {
@@ -188,6 +192,13 @@ test('teacher attendance: changed rows only, five sessions, roster checked', asy
   assert.equal(mine.taught, await db.prepare("SELECT COUNT(*) AS n FROM Lessons WHERE TeacherId = ? AND SchoolYear = '2026-2027'").bind(first.userId).first('n'));
   assert.ok(!('email' in mine));
   assert.equal((await getTeacherAttendanceStats(db, { sectorGroupId: sector, classId: first.classId, today: TODAY })).stats.length, 4);
+
+  // the date filter narrows both the marks and the lessons taught
+  const later = await getTeacherAttendanceStats(db, { sectorGroupId: sector, from: '2026-09-13', to: '2026-10-11', today: TODAY });
+  assert.equal(later.maxTotal, 25);
+  const mineLater = later.stats.find((s) => s.userId === first.userId);
+  assert.equal(mineLater.present.SUNDAY_MASS, 0);
+  assert.equal(mineLater.taught, await db.prepare("SELECT COUNT(*) AS n FROM Lessons WHERE TeacherId = ? AND SchoolYear = '2026-2027' AND WeekOf BETWEEN '2026-09-13' AND '2026-10-11'").bind(first.userId).first('n'));
 });
 
 test('teacher search is exact and limited to the sectors of the user; only Xứ đoàn searches by email', async () => {

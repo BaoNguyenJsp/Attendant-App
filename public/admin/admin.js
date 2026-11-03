@@ -23,8 +23,10 @@ const classNames = (ids) => ids.map((id) => state.classes.find((c) => c.id === i
 
 async function loadDirectory() {
   const { users, groups, memberships } = await api('getDirectory');
-  // Display order everywhere: Lớp, Ngành, BQT ngành, Xứ đoàn; by name inside a type (numbers as numbers: Ấu 2 before Ấu 10).
-  groups.sort((a, b) => TIER_ORDER.indexOf(a.type) - TIER_ORDER.indexOf(b.type) || a.name.localeCompare(b.name, 'vi', { numeric: true }));
+  // Display order everywhere: Lớp, Ngành, BQT ngành, Xứ đoàn; inside a type, in the order of the tab Lớp (by the first class
+  // a group covers), then by name (numbers as numbers: Ấu 2 before Ấu 10). Needs state.classes loaded first.
+  const classRank = (g) => Math.min(...(g.classIds ?? []).map((id) => state.classes.findIndex((c) => c.id === id)).filter((i) => i >= 0), Infinity);
+  groups.sort((a, b) => TIER_ORDER.indexOf(a.type) - TIER_ORDER.indexOf(b.type) || classRank(a) - classRank(b) || a.name.localeCompare(b.name, 'vi', { numeric: true }));
   directory = { users, groups, memberships };
 }
 
@@ -92,7 +94,8 @@ const DELETE_BUTTON = 'bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs
 async function change(action, body, done) {
   try {
     await api(action, body);
-    await Promise.all([load('classes'), loadDirectory()]);
+    await load('classes');
+    await loadDirectory(); // after the classes: groups are sorted by class order
   } catch (e) {
     toast(e.message);
     return false;

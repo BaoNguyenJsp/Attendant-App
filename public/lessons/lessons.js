@@ -7,7 +7,7 @@
 
 import {
   initCommon, load, state, $, api, esc, toast, setupTabs,
-  canWriteClass, className, personName, upcomingSunday, snapToSunday, fmtDate,
+  canWriteClass, className, personName, upcomingSunday, snapToSunday, fmtDate, dateRange,
 } from '../shared/common.js';
 
 await initCommon();
@@ -71,7 +71,8 @@ function renderCards() {
 /* ---------- Tab 2: statistics by class ---------- */
 const filtered = () => {
   const classId = Number($('ls-class').value);
-  return classId ? lessons.filter((l) => l.classId === classId) : lessons;
+  const { from, to } = dateRange('ls-from', 'ls-to');
+  return lessons.filter((l) => (!classId || l.classId === classId) && (!from || (l.weekOf >= from && l.weekOf <= to)));
 };
 
 function renderFrequency() {
@@ -374,7 +375,7 @@ $('ls-cards').addEventListener('click', (e) => {
   const button = e.target.closest('.btn-update');
   if (button) openForm(Number(button.dataset.class));
 });
-$('ls-class').addEventListener('change', () => { historyPage = 1; renderStats(); });
+for (const id of ['ls-class', 'ls-from', 'ls-to']) $(id).addEventListener('change', () => { historyPage = 1; renderStats(); });
 $('ls-pager').addEventListener('click', (e) => {
   const button = e.target.closest('.btn-page');
   if (!button || button.disabled) return;

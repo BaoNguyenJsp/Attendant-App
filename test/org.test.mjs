@@ -102,6 +102,17 @@ test('saveHolidays replaces the list and enforces the rules of UC-M4', async () 
   assert.equal((await listHolidays(db)).length, 2);
 });
 
+test('a stored holiday that breaks the week rules can still be kept or deleted', async () => {
+  const db = await seededD1();
+  await saveHolidays(db, [{ weekOf: '2026-09-13', session: 'CATECHISM' }]);
+  await db.exec("INSERT INTO Holidays (WeekOf, Session) VALUES ('2026-08-30', 'ADORATION'); UPDATE Config SET Value = '2026-09-20' WHERE Key = 'AttendanceStartDate';");
+  const old = { weekOf: '2026-08-30', session: 'ADORATION' };
+  assert.deepEqual(await saveHolidays(db, [{ weekOf: '2026-09-13', session: 'CATECHISM' }, old]), [{ ...old, reason: null }, { weekOf: '2026-09-13', session: 'CATECHISM', reason: null }]);
+  assert.deepEqual(await saveHolidays(db, [old]), [{ ...old, reason: null }]);
+  assert.deepEqual(await saveHolidays(db, []), []);
+  await assert.rejects(saveHolidays(db, [{ weekOf: '2026-09-13', session: 'CATECHISM' }]), status(400)); // new again: before the start date
+});
+
 test('yearOptions runs from the first archived year to the current one', async () => {
   const db = await seededD1();
   assert.deepEqual(await yearOptions(db), ['2025-2026', '2026-2027']);
