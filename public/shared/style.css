@@ -37,6 +37,29 @@
 
 .attendance-checkbox{width:1.2rem;height:1.2rem;cursor:pointer;accent-color:#1e3c72}
 
+/* ===== điểm danh (Thiếu nhi + Huynh trưởng): giao diện bảng (cũ) / thẻ (mới, #t-attendance.v2); lớp .att-* gắn trong HTML ===== */
+#t-attendance:not(.v2) .v2-only,#t-attendance.v2 .v1-only{display:none}
+/* thẻ: lề khung nhỏ lại trên điện thoại để nút và tên rộng hơn */
+#t-attendance.v2{--pad:1.25rem;padding:var(--pad)}
+@media(max-width:640px){#t-attendance.v2{--pad:.5rem}}
+/* thẻ: khối chọn lớp/tuần/buổi + thanh công cụ dính đầu màn hình, thanh lưu dính đáy; chỉ danh sách cuộn */
+#t-attendance.v2 .att-top{position:sticky;top:0;z-index:30;padding:.6rem;margin-bottom:.75rem;box-shadow:0 6px 10px -8px rgba(15,23,42,.4)}
+#t-attendance.v2 .att-filters{gap:.5rem}
+/* nút chia đều một hàng (chữ ngắn); nhiều nút quá thì vẫn vuốt ngang được */
+#t-attendance.v2 .att-actions{display:grid;grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:1fr;gap:.4rem;overflow-x:auto;scrollbar-width:none;margin-top:.5rem}
+#t-attendance.v2 .att-actions>button{grid-column:auto;white-space:nowrap;padding:.5rem .25rem}
+@media(min-width:640px){#t-attendance.v2 .att-actions{grid-auto-columns:max-content;justify-content:start}#t-attendance.v2 .att-actions>button{padding:.5rem .9rem}}
+#t-attendance.v2 .att-actions>span[aria-hidden],#t-attendance.v2 #fs-status{display:none}
+#t-attendance.v2 .att-bottom{position:sticky;bottom:0;z-index:30;background:#fff;border-top:1px solid #cbd5e1;margin:.75rem calc(-1*var(--pad)) calc(-1*var(--pad));padding:.5rem var(--pad);gap:.4rem;border-radius:0 0 .75rem .75rem}
+#t-attendance.v2 .att-bottom>div:first-child{gap:.25rem .6rem}
+#t-attendance.v2 .att-summary{font-size:.8rem}
+#t-attendance.v2 .att-dirty{font-size:.75rem;padding:.1rem .5rem}
+#t-attendance.v2 .att-bottom-actions{width:100%;flex-wrap:nowrap;gap:.5rem}
+#t-attendance.v2 .att-refresh{padding:.7rem 1rem}
+#t-attendance.v2 .att-save{flex:1;padding:.7rem 1rem;white-space:nowrap}
+@media(min-width:640px){#t-attendance.v2 .att-bottom-actions{width:auto}#t-attendance.v2 .att-save{flex:none;padding:.7rem 2rem}}
+#t-attendance.v2 .att-mark:disabled{opacity:.6;cursor:not-allowed}
+
 /* ===== badges ===== */
 .badge{display:inline-block;padding:.15rem .55rem;border-radius:99px;font-size:.72rem;font-weight:700;margin-right:.25rem}
 .b-class{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe}

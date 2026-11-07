@@ -10,7 +10,7 @@ import {
   TEACHER_SESSIONS, MARK, isAdmin, personName, snapToSunday, pct, dateRange, rangeLabel,
 } from '../shared/common.js';
 import { SESSION_LABEL } from '../shared/labels.js';
-import { absenceTable, printDocument } from '../shared/ui.js';
+import { absenceTable, printDocument, setupViewToggle, sessionTabs, markCards, askUnsaved, shiftWeek } from '../shared/ui.js';
 
 await initCommon();
 await load('classes', 'groups');
@@ -68,9 +68,20 @@ function renderWeek() {
     + box(i, MARK.EXCUSED, marks[code] === MARK.EXCUSED)
     + '</tr>').join('') || '<tr><td colspan="5" class="p-4 text-center text-slate-400">Chưa có Huynh trưởng trong danh sách này.</td></tr>';
 
+  // Card view: the same data as a table row (email for Xứ đoàn, name, class, the two marks), with big buttons.
+  $('ta-tabs').innerHTML = sessionTabs(TEACHER_SESSIONS, code, rows);
+  $('ta-cards').innerHTML = markCards(rows.map(({ teacher, marks }) => ({
+    title: esc(personName(teacher)),
+    sub: [teacher.className ?? 'Xứ đoàn', ...(isAdmin() && teacher.email ? [teacher.email] : [])].map(esc).join(' · '),
+    mark: marks[code],
+  })), true, 'Chưa có Huynh trưởng trong danh sách này.');
+
   const present = rows.filter((r) => r.marks[code] === MARK.PRESENT).length;
   const excused = rows.filter((r) => r.marks[code] === MARK.EXCUSED).length;
-  $('ta-summary').textContent = `Tổng ${rows.length} · Hiện diện ${present} · Có phép ${excused} · Vắng ${rows.length - present - excused}`;
+  const absent = rows.length - present - excused;
+  $('ta-summary').textContent = cardView()
+    ? `Tổng ${rows.length} · ✓ ${present} · P ${excused} · Vắng ${absent}`
+    : `Tổng ${rows.length} · Hiện diện ${present} · Có phép ${excused} · Vắng ${absent}`;
   $('ta-dirty').style.display = dirtyRows().length ? 'inline-block' : 'none';
 }
 
@@ -91,6 +102,7 @@ async function saveWeek() {
     changed.forEach((row) => { row.base = { ...row.marks }; });
     renderWeek();
     toast(`Đã lưu điểm danh của ${changed.length} Huynh trưởng.`);
+    return true;
   } catch (e) {
     toast(e.message);
   } finally {
@@ -98,14 +110,20 @@ async function saveWeek() {
   }
 }
 
+// Changing list or week drops unsaved ticks, so ask first: save them (to the week still shown), drop them, or stay.
 async function changeWeek() {
-  if (dirtyRows().length && !confirm('Có thay đổi chưa lưu. Bỏ các thay đổi này?')) {
-    $('ta-sector').value = shown.sectorGroupId;
-    $('ta-week').value = shown.weekOf;
-    return;
+  if (dirtyRows().length) {
+    const choice = await askUnsaved();
+    if (choice === 'stay' || (choice === 'save' && !(await saveWeek()))) {
+      $('ta-sector').value = shown.sectorGroupId;
+      $('ta-week').value = shown.weekOf;
+      return;
+    }
   }
   await loadWeek();
 }
+
+const cardView = setupViewToggle($('ta-view'), renderWeek);
 
 /* ---------- Tab 2: absence lookup (exact match; every match shown) ---------- */
 async function renderAbsences() {
@@ -172,13 +190,28 @@ function printStats() {
 $('ta-sector').addEventListener('change', changeWeek);
 $('ta-week').addEventListener('change', changeWeek);
 $('ta-session').addEventListener('change', renderWeek);
-$('ta-markall').addEventListener('click', () => { rows.forEach((row) => { row.marks[session()] = MARK.PRESENT; }); renderWeek(); });
+// Sets every teacher's mark for the current session: PRESENT ticks all, NONE clears both boxes.
+const markAll = (mark) => { rows.forEach((row) => { row.marks[session()] = mark; }); renderWeek(); };
+$('ta-markall').addEventListener('click', () => markAll(MARK.PRESENT));
+$('ta-unmarkall').addEventListener('click', () => markAll(MARK.NONE));
 $('ta-save').addEventListener('click', saveWeek);
 $('ta-refresh').addEventListener('click', async () => { await loadWeek(); toast('Đã làm mới dữ liệu từ máy chủ.'); });
 $('ta-tbody').addEventListener('change', (e) => {
   const box = e.target.closest('.attendance-checkbox');
   if (box) toggle(Number(box.dataset.i), Number(box.dataset.which));
 });
+$('ta-cards').addEventListener('click', (e) => {
+  const button = e.target.closest('.att-mark');
+  if (button) toggle(Number(button.dataset.i), Number(button.dataset.which));
+});
+$('ta-tabs').addEventListener('click', (e) => {
+  const tab = e.target.closest('[data-session]');
+  if (!tab) return;
+  $('ta-session').value = tab.dataset.session;
+  renderWeek();
+});
+$('ta-prev').addEventListener('click', () => { if (shiftWeek($('ta-week'), -1)) changeWeek(); });
+$('ta-next').addEventListener('click', () => { if (shiftWeek($('ta-week'), 1)) changeWeek(); });
 window.addEventListener('beforeunload', (e) => { if (dirtyRows().length) e.preventDefault(); });
 
 $('tabs-search').addEventListener('click', renderAbsences);

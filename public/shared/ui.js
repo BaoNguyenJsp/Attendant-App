@@ -4,8 +4,8 @@
    ===================================================================== */
 'use strict';
 
-import { esc, fmtDate } from './common.js';
-import { TIER_LABEL, TIER_BADGE, SESSION_LABEL, MARK_LABEL } from './labels.js';
+import { $, esc, fmtDate, MARK } from './common.js';
+import { TIER_LABEL, TIER_BADGE, SESSION_LABEL, SESSION_SHORT_LABEL, MARK_LABEL } from './labels.js';
 
 const TONES = {
   green: 'bg-emerald-100 text-emerald-700',
@@ -60,5 +60,83 @@ export function printDocument({ title, subtitle, tableHtml, leftSignature, lands
   win.document.close();
   win.focus();
   setTimeout(() => { win.print(); win.close(); }, 250);
+  return true;
+}
+
+/* ---------- Attendance card view (student and teacher attendance tabs) ---------- */
+// Both pages keep the table/card choice under one key, so it holds per browser.
+const VIEW_KEY = 'attendanceView';
+
+// Switches #t-attendance between the table and the card view (.v2); onChange redraws the page after a click.
+// Returns a getter: true while the card view is on.
+export function setupViewToggle(button, onChange) {
+  let cards = false;
+  try { cards = localStorage.getItem(VIEW_KEY) === 'cards'; } catch { /* storage blocked: table view */ }
+  const apply = () => {
+    $('t-attendance').classList.toggle('v2', cards);
+    button.textContent = cards ? '🗂 Bảng' : '📱 Thẻ';
+    button.title = cards ? 'Đổi sang giao diện bảng' : 'Đổi sang giao diện thẻ (mới, dễ dùng trên điện thoại)';
+  };
+  button.addEventListener('click', () => {
+    cards = !cards;
+    try { localStorage.setItem(VIEW_KEY, cards ? 'cards' : 'table'); } catch { /* not kept: still switches now */ }
+    apply();
+    onChange();
+  });
+  apply();
+  return () => cards;
+}
+
+// One tab per session; a green dot marks a session that has any mark this week. rows: [{ marks }].
+export const sessionTabs = (codes, current, rows) => codes.map((c) => `<button type="button" data-session="${c}" title="${esc(SESSION_LABEL[c])}"`
+  + ` class="relative py-2 px-0.5 rounded-lg text-[11px] sm:text-xs font-bold whitespace-nowrap ${c === current ? 'bg-blue-900 text-white' : 'bg-slate-200 text-slate-700'}">${esc(SESSION_SHORT_LABEL[c])}`
+  + `${rows.some((r) => r.marks[c] !== MARK.NONE) ? '<span class="absolute top-1 right-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500"></span>' : ''}</button>`).join('');
+
+const markButton = (i, mark, on, sign, label, title, onClass, editable) => `<button type="button" title="${title}" class="att-mark w-12 h-11 rounded-lg flex flex-col items-center justify-center leading-none ${on ? onClass : 'bg-slate-200 text-slate-500'}"`
+  + ` data-i="${i}" data-which="${mark}" aria-pressed="${on}"${editable ? '' : ' disabled'}><span class="text-base font-extrabold">${sign}</span><span class="text-[10px] font-bold mt-0.5">${label}</span></button>`;
+
+// One card per person, with the data of its table row. items: [{ title, sub, mark }]; title and sub are HTML.
+export function markCards(items, editable, emptyText) {
+  return items.map(({ title, sub, mark }, i) => {
+    const present = mark === MARK.PRESENT;
+    const excused = mark === MARK.EXCUSED;
+    const tone = present ? 'border-emerald-500 bg-emerald-50' : excused ? 'border-amber-500 bg-amber-50' : 'border-slate-200 bg-white';
+    return `<div class="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl border-2 ${tone}"><div class="min-w-0">`
+      + `<div class="text-sm font-bold text-slate-800 leading-tight">${title}</div><div class="text-[11px] text-slate-500 truncate">${sub}</div></div>`
+      + `<div class="flex gap-1 flex-none">${markButton(i, MARK.PRESENT, present, '✓', 'Có mặt', 'Hiện diện', 'bg-emerald-500 text-white', editable)}`
+      + `${markButton(i, MARK.EXCUSED, excused, 'P', 'Phép', 'Có phép', 'bg-amber-500 text-white', editable)}</div></div>`;
+  }).join('') || `<p class="p-4 text-center text-slate-400">${esc(emptyText)}</p>`;
+}
+
+// Asked before leaving a week with unsaved marks. Resolves to 'save', 'drop' or 'stay'; a tap outside the box is 'stay'.
+let unsavedBox;
+export function askUnsaved() {
+  if (!unsavedBox) {
+    unsavedBox = document.createElement('div');
+    unsavedBox.className = 'modal';
+    unsavedBox.innerHTML = '<div class="modal-content"><h3>⚠ Có thay đổi chưa lưu</h3>'
+      + '<p class="text-sm text-slate-600 mb-4">Điểm danh tuần này chưa được lưu. Bạn muốn làm gì?</p><div class="flex flex-col gap-2">'
+      + '<button type="button" data-choice="save" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg">💾 Lưu rồi chuyển</button>'
+      + '<button type="button" data-choice="drop" class="bg-red-100 hover:bg-red-200 text-red-700 font-bold py-3 rounded-lg">Bỏ thay đổi</button>'
+      + '<button type="button" data-choice="stay" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 rounded-lg">Ở lại</button></div></div>';
+    document.body.appendChild(unsavedBox);
+  }
+  unsavedBox.classList.add('open');
+  return new Promise((resolve) => {
+    unsavedBox.onclick = (e) => {
+      const choice = e.target.closest('[data-choice]')?.dataset.choice ?? (e.target === unsavedBox ? 'stay' : null);
+      if (!choice) return;
+      unsavedBox.classList.remove('open');
+      resolve(choice);
+    };
+  });
+}
+
+// Moves a week input by whole weeks; false when it holds no date.
+export function shiftWeek(input, weeks) {
+  const day = new Date(`${input.value}T00:00:00Z`);
+  if (Number.isNaN(day.getTime())) return false;
+  day.setUTCDate(day.getUTCDate() + 7 * weeks);
+  input.value = day.toISOString().slice(0, 10);
   return true;
 }

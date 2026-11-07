@@ -26,35 +26,57 @@
 
     <!-- t-dd -->
     <div id="t-attendance" class="bg-white rounded-b-xl shadow-sm p-5" data-pane>
-      <div
-        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
-        <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
-          <select id="att-class"
-            class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></select>
+      <!-- Hai giao diện: bảng (cũ) và thẻ (mới, .v2 trên #t-attendance). Thẻ: khối này và thanh dưới dính màn hình. -->
+      <div id="att-top" class="att-top mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+        <div id="att-filters" class="att-filters grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div><label class="v1-only block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
+            <div class="flex gap-2">
+              <select id="att-class"
+                class="w-full min-w-0 border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></select>
+              <!-- Đổi giao diện bảng/thẻ; lựa chọn được nhớ trên trình duyệt này -->
+              <button id="att-view" type="button"
+                class="flex-none bg-white hover:bg-blue-50 border border-blue-300 text-blue-800 font-bold px-3 rounded-lg text-sm whitespace-nowrap"></button>
+            </div>
+          </div>
+          <div><label id="att-week-label" for="att-week" class="block text-xs font-bold text-slate-600 uppercase mb-1">Tuần (Chủ Nhật)</label>
+            <div class="flex gap-2">
+              <button id="att-prev" type="button" title="Tuần trước"
+                class="v2-only bg-slate-200 hover:bg-slate-300 text-slate-700 text-xl font-extrabold px-3 rounded-lg">‹</button>
+              <input type="date" id="att-week" data-week-label="att-week-label"
+                class="w-full min-w-0 border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold">
+              <button id="att-next" type="button" title="Tuần sau"
+                class="v2-only bg-slate-200 hover:bg-slate-300 text-slate-700 text-xl font-extrabold px-3 rounded-lg">›</button>
+            </div>
+          </div>
+          <div class="v1-only"><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Buổi Sinh Hoạt</label>
+            <select id="att-session"
+              class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></select>
+          </div>
         </div>
-        <div><label id="att-week-label" for="att-week" class="block text-xs font-bold text-slate-600 uppercase mb-1">Tuần (Chủ Nhật)</label>
-          <input type="date" id="att-week" data-week-label="att-week-label"
-            class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold">
-        </div>
-        <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Buổi Sinh Hoạt</label>
-          <select id="att-session"
-            class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"></select>
-        </div>
-        <div class="flex items-end">
-          <button id="att-markall"
-            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-lg whitespace-nowrap">✅
-            Chọn hiện diện tất cả</button>
-        </div>
-        <div class="flex items-end">
+
+        <!-- Thẻ: chọn buổi bằng một chạm; chấm xanh = buổi đã có điểm danh trong tuần -->
+        <div id="att-tabs" class="v2-only grid grid-cols-4 gap-1 mt-2"></div>
+
+        <!-- Thanh công cụ điểm danh: thêm nút mới vào đây.
+             Bảng: lưới 2 cột trên điện thoại, một hàng trên màn hình rộng. Thẻ: các nút chia đều một hàng, chữ ngắn
+             (.v1-only = chữ đầy đủ, .v2-only = chữ ngắn). -->
+        <div id="att-actions" class="att-actions grid grid-cols-2 gap-2 mt-4 sm:flex sm:flex-wrap">
+          <button id="att-markall" title="Chọn hiện diện tất cả"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-3 sm:py-2 rounded-lg text-sm">✅ <span
+              class="v1-only">Hiện diện tất cả</span><span class="v2-only">Tất cả</span></button>
+          <button id="att-unmarkall" title="Bỏ chọn tất cả"
+            class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-3 py-3 sm:py-2 rounded-lg text-sm">⬜ <span
+              class="v1-only">Bỏ chọn tất cả</span><span class="v2-only">Bỏ hết</span></button>
+          <span class="hidden sm:block w-px bg-slate-300 mx-1" aria-hidden="true"></span>
           <button id="att-facescan" title="Upload ảnh lớp để AI gợi ý điểm danh"
-            class="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2.5 rounded-lg whitespace-nowrap">📷
-            Quét khuôn mặt<span id="fs-status"></span></button>
+            class="col-span-2 bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-3 sm:py-2 rounded-lg text-sm">📷 <span
+              class="v1-only">Quét khuôn mặt</span><span class="v2-only">Quét</span><span id="fs-status"></span></button>
         </div>
       </div>
 
       <div id="att-holiday-note"></div>
 
-      <div class="tbl-scroll sticky">
+      <div class="v1-only tbl-scroll sticky">
         <table class="w-full text-sm border-collapse min-w-[820px]">
           <thead>
             <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
@@ -70,17 +92,19 @@
         </table>
       </div>
 
-      <div class="mt-5 flex justify-between items-center flex-wrap gap-3">
+      <div id="att-cards" class="v2-only grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2"></div>
+
+      <div id="att-bottom" class="att-bottom mt-5 flex justify-between items-center flex-wrap gap-3">
         <div class="flex gap-3 flex-wrap items-center">
-          <span class="font-bold text-slate-700" id="att-summary"></span>
+          <span class="att-summary font-bold text-slate-700" id="att-summary"></span>
           <span id="att-dirty"
-            class="bg-amber-100 border border-amber-400 text-amber-800 font-bold px-3 py-1.5 rounded-lg"
-            style="display:none">⚠ Có thay đổi chưa lưu</span>
+            class="att-dirty bg-amber-100 border border-amber-400 text-amber-800 font-bold px-3 py-1.5 rounded-lg"
+            style="display:none">⚠ <span class="v1-only">Có thay đổi chưa lưu</span><span class="v2-only">Chưa lưu</span></span>
         </div>
-        <div class="flex gap-3 flex-wrap">
-          <button id="att-refresh"
-            class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-5 py-3 rounded-lg">↻ Làm mới</button>
-          <button id="att-save" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3 rounded-lg">💾
+        <div id="att-bottom-actions" class="att-bottom-actions flex gap-3 flex-wrap">
+          <button id="att-refresh" title="Làm mới"
+            class="att-refresh bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-5 py-3 rounded-lg">↻<span class="v1-only"> Làm mới</span></button>
+          <button id="att-save" class="att-save bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3 rounded-lg">💾
             Lưu Điểm Danh</button>
         </div>
       </div>

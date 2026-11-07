@@ -9,6 +9,8 @@ export const SESSION_LABEL = {
   THURSDAY_MASS: 'Lễ Thứ Năm',
   TEACHER_MEETING: 'Họp Huynh Trưởng',
 };
+// Short form for narrow places (the session tabs of the attendance cards).
+export const SESSION_SHORT_LABEL = { SUNDAY_MASS: 'Lễ CN', CATECHISM: 'Giáo Lý', ADORATION: 'Chầu TT', THURSDAY_MASS: 'Lễ T5', TEACHER_MEETING: 'Họp HT' };
 
 export const TIER_LABEL = { CLASS: 'Lớp', SECTOR: 'Ngành', SECTOR_ADMIN: 'BQT ngành', ADMIN: 'Xứ đoàn' };
 export const TIER_BADGE = { CLASS: 'b-class', SECTOR: 'b-sector', SECTOR_ADMIN: 'b-exec', ADMIN: 'b-admin' };

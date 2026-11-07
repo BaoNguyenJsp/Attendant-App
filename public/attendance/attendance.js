@@ -11,7 +11,7 @@ import {
 } from '../shared/common.js';
 import { SESSION_LABEL, ATTENDANCE_RATING_LABEL } from '../shared/labels.js';
 import { matchesStudent } from '../shared/search.js';
-import { absenceTable } from '../shared/ui.js';
+import { absenceTable, setupViewToggle, sessionTabs, markCards, askUnsaved, shiftWeek } from '../shared/ui.js';
 import { initFaceScan, buildReferenceDescriptors, updateRefBadge } from './face-scan.js';
 
 await initCommon();
@@ -49,7 +49,7 @@ async function loadWeek() {
   });
   shown = { classId, weekOf };
   // Viewing is open to everyone; the buttons that change marks need the class in scope.
-  for (const id of ['att-save', 'att-markall', 'att-facescan']) $(id).style.display = canWriteClass(classId) ? '' : 'none';
+  for (const id of ['att-save', 'att-actions']) $(id).style.display = canWriteClass(classId) ? '' : 'none';
   renderWeek();
   // Reference faces for the scan are prepared in the background.
   const people = rows.map(({ student }) => ({ key: String(student.id), photo: student.hasPhoto ? photoUrl(student) : '', fullName: student.fullName }));
@@ -73,9 +73,20 @@ function renderWeek() {
     + box(i, MARK.EXCUSED, marks[code] === MARK.EXCUSED)
     + '</tr>').join('') || '<tr><td colspan="6" class="p-4 text-center text-slate-400">Lớp chưa có Thiếu nhi.</td></tr>';
 
+  // Card view: the same data as a table row (STT, name, saint name, CCCD, the two marks), with big buttons.
+  $('att-tabs').innerHTML = sessionTabs(SESSIONS, code, rows);
+  $('att-cards').innerHTML = markCards(rows.map(({ student, marks }, i) => ({
+    title: `${i + 1}. ${esc(student.fullName)}`,
+    sub: `${student.saintName ? `${esc(student.saintName)} · ` : ''}${esc(student.idNumber)}`,
+    mark: marks[code],
+  })), editable, 'Lớp chưa có Thiếu nhi.');
+
   const present = rows.filter((r) => r.marks[code] === MARK.PRESENT).length;
   const excused = rows.filter((r) => r.marks[code] === MARK.EXCUSED).length;
-  $('att-summary').textContent = `Sĩ số ${rows.length} · Hiện diện ${present} · Có phép ${excused} · Vắng ${rows.length - present - excused}`;
+  const absent = rows.length - present - excused;
+  $('att-summary').textContent = cardView()
+    ? `Sĩ số ${rows.length} · ✓ ${present} · P ${excused} · Vắng ${absent}`
+    : `Sĩ số ${rows.length} · Hiện diện ${present} · Có phép ${excused} · Vắng ${absent}`;
   $('att-dirty').style.display = dirtyRows().length ? 'inline-block' : 'none';
 }
 
@@ -86,8 +97,9 @@ function toggle(i, mark) {
   renderWeek();
 }
 
-function markAllPresent() {
-  rows.forEach((row) => { row.marks[session()] = MARK.PRESENT; });
+// Sets every student's mark for the current session: PRESENT ticks all, NONE clears both boxes.
+function markAll(mark) {
+  rows.forEach((row) => { row.marks[session()] = mark; });
   renderWeek();
 }
 
@@ -102,6 +114,7 @@ async function saveWeek() {
     changed.forEach((row) => { row.base = { ...row.marks }; });
     renderWeek();
     toast(`Đã lưu điểm danh của ${changed.length} Thiếu nhi.`);
+    return true;
   } catch (e) {
     toast(e.message);
   } finally {
@@ -109,15 +122,20 @@ async function saveWeek() {
   }
 }
 
-// Changing class or week drops unsaved ticks, so ask first.
+// Changing class or week drops unsaved ticks, so ask first: save them (to the week still shown), drop them, or stay.
 async function changeWeek() {
-  if (dirtyRows().length && !confirm('Có thay đổi chưa lưu. Bỏ các thay đổi này?')) {
-    $('att-class').value = shown.classId;
-    $('att-week').value = shown.weekOf;
-    return;
+  if (dirtyRows().length) {
+    const choice = await askUnsaved();
+    if (choice === 'stay' || (choice === 'save' && !(await saveWeek()))) {
+      $('att-class').value = shown.classId;
+      $('att-week').value = shown.weekOf;
+      return;
+    }
   }
   await loadWeek();
 }
+
+const cardView = setupViewToggle($('att-view'), renderWeek);
 
 initFaceScan({
   markOf: (key) => rows.find((r) => String(r.student.id) === key)?.marks[session()],
@@ -218,13 +236,26 @@ $('att-class').addEventListener('change', changeWeek);
 $('att-week').addEventListener('change', changeWeek);
 // Switching the session keeps what was ticked for the other sessions: all four live in `rows`.
 $('att-session').addEventListener('change', renderWeek);
-$('att-markall').addEventListener('click', markAllPresent);
+$('att-markall').addEventListener('click', () => markAll(MARK.PRESENT));
+$('att-unmarkall').addEventListener('click', () => markAll(MARK.NONE));
 $('att-save').addEventListener('click', saveWeek);
 $('att-refresh').addEventListener('click', async () => { await loadWeek(); toast('Đã làm mới dữ liệu từ máy chủ.'); });
 $('att-tbody').addEventListener('change', (e) => {
   const box = e.target.closest('.attendance-checkbox');
   if (box) toggle(Number(box.dataset.i), Number(box.dataset.which));
 });
+$('att-cards').addEventListener('click', (e) => {
+  const button = e.target.closest('.att-mark');
+  if (button) toggle(Number(button.dataset.i), Number(button.dataset.which));
+});
+$('att-tabs').addEventListener('click', (e) => {
+  const tab = e.target.closest('[data-session]');
+  if (!tab) return;
+  $('att-session').value = tab.dataset.session;
+  renderWeek();
+});
+$('att-prev').addEventListener('click', () => { if (shiftWeek($('att-week'), -1)) changeWeek(); });
+$('att-next').addEventListener('click', () => { if (shiftWeek($('att-week'), 1)) changeWeek(); });
 window.addEventListener('beforeunload', (e) => { if (dirtyRows().length) e.preventDefault(); });
 
 $('abs-search').addEventListener('click', renderAbsences);

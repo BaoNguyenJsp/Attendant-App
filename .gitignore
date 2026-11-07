@@ -19,3 +19,6 @@ dist/
 # local config with real IDs and secrets: tracked copy keeps placeholders
 # (tracked file, so also run: git update-index --skip-worktree wrangler.jsonc)
 wrangler.jsonc
+
+# brainstorming mockups (local only)
+.superpowers/
