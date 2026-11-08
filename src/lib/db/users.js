@@ -85,6 +85,41 @@ export async function saveUser(db, { user, groupIds }, actorId) {
   return db.prepare(`SELECT ${USER_COLUMNS} FROM Users WHERE Email = ?`).bind(email).first();
 }
 
+// The class groups of a sector, in the order of the tab Lớp: the only groups its BQT ngành may change.
+const sectorClassGroups = (db, sectorGroupId) => all(db, `SELECT g.Id AS id, g.Name AS name FROM Groups g
+  JOIN GroupClasses gc ON gc.GroupId = g.Id JOIN Classes c ON c.Id = gc.ClassId
+  WHERE g.Type = 'CLASS' AND gc.ClassId IN (SELECT ClassId FROM GroupClasses WHERE GroupId = ?)
+  GROUP BY g.Id ORDER BY MIN(c.SortOrder), g.Id`, sectorGroupId);
+
+// The members of a sector's class groups, locked ones too; members of Xứ đoàn are left to the admin page.
+export async function getSectorUsers(db, sectorGroupId) {
+  const groups = await sectorClassGroups(db, sectorGroupId);
+  if (!groups.length) return { users: [], groups };
+  const ids = groups.map((g) => g.id);
+  const marks = ids.map(() => '?').join(', ');
+  const users = await all(db, `SELECT ${USER_COLUMNS} FROM Users WHERE Id IN (SELECT UserId FROM Memberships WHERE GroupId IN (${marks}))
+    AND Id NOT IN (SELECT m.UserId FROM Memberships m JOIN Groups g ON g.Id = m.GroupId WHERE g.Type = 'ADMIN')`, ...ids);
+  const memberships = await all(db, `SELECT GroupId, UserId FROM Memberships WHERE GroupId IN (${marks})`, ...ids);
+  // By their first class (as on the statistics pages), then by first name; their groups in class order too.
+  const rank = new Map(ids.map((id, i) => [id, i]));
+  const listed = users.map((u) => ({ ...u, groupIds: memberships.filter((m) => m.UserId === u.id).map((m) => m.GroupId).sort((a, b) => rank.get(a) - rank.get(b)) }));
+  listed.sort((a, b) => rank.get(a.groupIds[0]) - rank.get(b.groupIds[0]) || a.firstName.localeCompare(b.firstName, 'vi'));
+  return { users: listed, groups };
+}
+
+// BQT ngành edits a member of the sector: never the email, and only the sector's class groups; other groups are kept.
+export async function saveSectorUser(db, sectorGroupId, { user, groupIds }, actorId) {
+  const { users, groups } = await getSectorUsers(db, sectorGroupId);
+  const target = users.find((u) => u.id === user?.id);
+  if (!target) fail(404, 'Không tìm thấy Huynh trưởng trong ngành này.');
+  const inSector = new Set(groups.map((g) => g.id));
+  const picked = [...new Set((groupIds ?? []).map(Number))];
+  if (picked.some((g) => !inSector.has(g))) fail(400, 'Nhóm không thuộc ngành này.');
+  if (!picked.length) fail(400, 'Chọn ít nhất một lớp trong ngành.');
+  const others = (await all(db, 'SELECT GroupId FROM Memberships WHERE UserId = ?', target.id)).map((m) => m.GroupId).filter((g) => !inSector.has(g));
+  return saveUser(db, { user: { ...user, id: target.id, email: target.email }, groupIds: [...others, ...picked] }, actorId);
+}
+
 // Memberships and teacher attendance go with the user (ON DELETE CASCADE); lessons keep their teacher, so such a user is locked instead.
 export async function deleteUser(db, id, actorId) {
   if (id === actorId) fail(400, 'Không thể tự xóa tài khoản của mình.');

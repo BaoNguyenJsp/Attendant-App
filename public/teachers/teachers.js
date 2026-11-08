@@ -10,8 +10,9 @@ import {
   TEACHER_SESSIONS, MARK, isAdmin, personName, snapToSunday, ratio, dateRange, rangeLabel,
   sessionPicker, pickedSessions, showSessionColumns, sumOf,
 } from '../shared/common.js';
-import { SESSION_LABEL } from '../shared/labels.js';
-import { absenceTable, printDocument, setupViewToggle, sessionTabs, lockHolidays, markCards, askUnsaved, shiftWeek } from '../shared/ui.js';
+import { SESSION_LABEL, USER_STATUS_LABEL } from '../shared/labels.js';
+import { matchesPerson } from '../shared/search.js';
+import { absenceTable, printDocument, setupViewToggle, sessionTabs, lockHolidays, markCards, askUnsaved, shiftWeek, badge, STATUS_TONE } from '../shared/ui.js';
 
 await initCommon();
 await load('classes', 'groups');
@@ -21,6 +22,8 @@ const sectors = state.groups.filter((g) => g.type === 'SECTOR' && state.session.
 const lists = [...sectors.map((g) => ({ v: g.id, t: g.name })), ...(isAdmin() ? [{ v: 'ADMIN', t: 'Xứ đoàn' }] : [])];
 fillSel('ta-sector', lists);
 fillSel('ts-sector', lists);
+fillSel('tu-sector', sectors.map((g) => ({ v: g.id, t: g.name })));
+fillSel('tu-status', Object.entries(USER_STATUS_LABEL).map(([v, t]) => ({ v, t })));
 fillSel('ta-session', TEACHER_SESSIONS.map((code) => ({ v: code, t: SESSION_LABEL[code] })));
 
 const listOf = (selectId) => ($(selectId).value === 'ADMIN' ? 'ADMIN' : Number($(selectId).value));
@@ -192,7 +195,68 @@ function printStats() {
   if (!opened) toast('Trình duyệt chặn cửa sổ pop-up. Vui lòng cho phép pop-up cho trang này rồi thử lại.');
 }
 
+/* ---------- Tab 4: the teachers of a sector (update only; new users are added on the admin page) ---------- */
+let sectorUsers = { users: [], groups: [] };
+let editingUser = null;
+
+async function loadSectorUsers() {
+  const sectorGroupId = listOf('tu-sector');
+  if (!sectorGroupId) return;
+  try { sectorUsers = await api('getSectorUsers', { sectorGroupId }); } catch (e) { return toast(e.message); }
+  renderSectorUsers();
+}
+
+function renderSectorUsers() {
+  const query = $('tu-query').value;
+  const users = query.trim() ? sectorUsers.users.filter((u) => matchesPerson(u, query, { byEmail: isAdmin() })) : sectorUsers.users;
+  const groupName = (id) => sectorUsers.groups.find((g) => g.id === id)?.name ?? '';
+  $('tu-tbody').innerHTML = users.length
+    ? users.map((u) => '<tr class="hover:bg-slate-50 bg-white">'
+      + (isAdmin() ? `<td class="p-2 border">${esc(u.email ?? '')}</td>` : '')
+      + `<td class="p-2 border font-medium">${esc(personName(u))}</td><td class="p-2 border text-center whitespace-nowrap">${esc(u.phone ?? '')}</td>`
+      + `<td class="p-2 border">${u.groupIds.map((id) => `<span class="whitespace-nowrap">${esc(groupName(id))}</span>`).join('<br>')}</td>`
+      + `<td class="p-2 border text-center">${badge(USER_STATUS_LABEL[u.status], STATUS_TONE[u.status])}</td>`
+      + `<td class="p-2 border text-center"><button class="edit-user bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs px-4 py-2 rounded-lg" data-id="${u.id}">Cập nhật</button></td></tr>`).join('')
+    : '<tr><td colspan="6" class="p-4 text-center text-slate-400">Không tìm thấy Huynh trưởng nào khớp.</td></tr>';
+}
+
+function openSectorUser(id) {
+  const u = sectorUsers.users.find((x) => x.id === Number(id));
+  if (!u) return;
+  editingUser = u;
+  $('tu-title').textContent = `Cập nhật Huynh trưởng — ${u.fullName}`;
+  $('tu-saint').value = u.saintName ?? '';
+  $('tu-fullname').value = u.fullName;
+  $('tu-phone').value = u.phone ?? '';
+  $('tu-status').value = u.status;
+  const mine = new Set(u.groupIds);
+  $('tu-groups').innerHTML = sectorUsers.groups.map((g) => `<label class="flex items-center gap-2 text-sm py-0.5"><input type="checkbox" class="tu-group" value="${g.id}"${mine.has(g.id) ? ' checked' : ''}> ${esc(g.name)}</label>`).join('');
+  $('tu-modal').classList.add('open');
+}
+
+async function saveSectorUser() {
+  const user = { id: editingUser.id, saintName: $('tu-saint').value.trim(), fullName: $('tu-fullname').value.trim(), phone: $('tu-phone').value.trim(), status: $('tu-status').value };
+  if (!user.fullName) return toast('Nhập Họ và tên.');
+  const groupIds = [...$('tu-groups').querySelectorAll('.tu-group:checked')].map((box) => Number(box.value));
+  if (!groupIds.length) return toast('Chọn ít nhất một lớp trong ngành.');
+  try { await api('saveSectorUser', { sectorGroupId: listOf('tu-sector'), user, groupIds }); } catch (e) { return toast(e.message); }
+  $('tu-modal').classList.remove('open');
+  toast('Đã lưu.');
+  await loadSectorUsers();
+}
+
 /* ---------- Events ---------- */
+$('tu-sector').addEventListener('change', loadSectorUsers);
+$('tu-query').addEventListener('input', renderSectorUsers);
+$('tu-tbody').addEventListener('click', (e) => {
+  const button = e.target.closest('.edit-user');
+  if (button) openSectorUser(button.dataset.id);
+});
+const userModal = $('tu-modal');
+userModal.addEventListener('click', (e) => { if (e.target === userModal) userModal.classList.remove('open'); });
+userModal.querySelector('.btn-cancel').addEventListener('click', () => userModal.classList.remove('open'));
+userModal.querySelector('.btn-save').addEventListener('click', saveSectorUser);
+
 $('ta-sector').addEventListener('change', changeWeek);
 $('ta-week').addEventListener('change', changeWeek);
 $('ta-session').addEventListener('change', renderWeek);
@@ -235,6 +299,6 @@ $('ts-print').addEventListener('click', printStats);
 
 /* ---------- Start ---------- */
 fillStatsClasses();
-const showTab = setupTabs({ 't-stats': renderStats });
+const showTab = setupTabs({ 't-stats': renderStats, 't-users': loadSectorUsers });
 showTab('t-attendance');
 await loadWeek();
