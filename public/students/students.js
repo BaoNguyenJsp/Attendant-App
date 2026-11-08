@@ -7,7 +7,7 @@
 
 import {
   initCommon, load, state, $, api, apiSend, esc, toast, fillSel, fillClasses, setupTabs, sortStudents,
-  isAdmin, className, personName, photoUrl, fmtDate, toIsoDate,
+  isAdmin, canWriteClass, className, personName, photoUrl, fmtDate, toIsoDate,
 } from '../shared/common.js';
 import { GENDER_LABEL, STUDENT_STATUS_LABEL } from '../shared/labels.js';
 import { matchesStudent } from '../shared/search.js';
@@ -39,6 +39,7 @@ const detailCells = (s) => `<td class="p-2 border text-center whitespace-nowrap"
   + `<td class="p-2 border text-center whitespace-nowrap">${esc(fmtDate(s.dateOfBirth))}</td>`
   + `<td class="p-2 border text-sm">${esc(s.father ?? '')}</td>`
   + `<td class="p-2 border text-sm">${esc(s.mother ?? '')}</td>`
+  + `<td class="p-2 border text-sm">${esc(s.address ?? '')}</td>`
   + `<td class="p-2 border text-center">${phoneCell(s)}</td>`
   + `<td class="p-2 border text-center">${siblingCell(s)}</td>`;
 
@@ -58,20 +59,22 @@ function renderClass() {
   const classId = Number($('st-class').value);
   const status = $('st-status').value;
   const rows = sortStudents(state.students.filter((s) => s.classId === classId && s.status === status));
+  // Xứ đoàn and the class's own teachers add, import and edit here; for others the buttons and the column are not drawn.
+  const canEdit = canWriteClass(classId);
+  document.querySelectorAll('.class-write').forEach((el) => el.classList.toggle('hidden', !canEdit));
   $('st-tbody').innerHTML = rows.length
     ? rows.map((s) => `<tr class="hover:bg-slate-50 transition-colors bg-white">${detailCells(s)}`
-      // Only Xứ đoàn adds and edits here; for others the column is not drawn (its header is .admin-only).
-      + (isAdmin() ? `<td class="p-2 border text-center sticky-col"><button data-id="${s.id}" class="edit-student bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs px-4 py-2 rounded-lg whitespace-nowrap">Cập nhật</button></td>` : '')
+      + (canEdit ? `<td class="p-2 border text-center sticky-col"><button data-id="${s.id}" class="edit-student bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs px-4 py-2 rounded-lg whitespace-nowrap">Cập nhật</button> <button data-id="${s.id}" class="delete-student bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs px-4 py-2 rounded-lg whitespace-nowrap">Xóa</button></td>` : '')
       + '</tr>').join('')
-    : `<tr><td colspan="9" class="p-4 text-center text-slate-400">Không có Thiếu nhi "${esc(STUDENT_STATUS_LABEL[status])}" trong lớp ${esc(className(classId))}.</td></tr>`;
+    : `<tr><td colspan="10" class="p-4 text-center text-slate-400">Không có Thiếu nhi "${esc(STUDENT_STATUS_LABEL[status])}" trong lớp ${esc(className(classId))}.</td></tr>`;
 }
 
-/* ---------- Tab 3: whole-parish search (exact match, every match shown) ---------- */
+/* ---------- Tab 3: whole-parish search (part of the name or exact CCCD, every match shown) ---------- */
 function renderSearch() {
   const query = $('st-search').value;
   const body = $('st-search-tbody');
   if (!query.trim()) {
-    body.innerHTML = '<tr><td colspan="11" class="p-4 text-center text-slate-400">Nhập đúng họ tên hoặc số CCCD để tìm kiếm...</td></tr>';
+    body.innerHTML = '<tr><td colspan="12" class="p-4 text-center text-slate-400">Nhập họ tên (một phần, có dấu) hoặc số CCCD để tìm kiếm...</td></tr>';
     return;
   }
   const hits = state.students.filter((s) => matchesStudent(s, query));
@@ -82,7 +85,7 @@ function renderSearch() {
       + `<td class="p-2 border text-center font-bold text-blue-900">${esc(className(s.classId))}</td>`
       + `<td class="p-2 border text-center">${badge(STUDENT_STATUS_LABEL[s.status], STATUS_TONE[s.status])}</td>`
       + `${detailCells(s)}</tr>`).join('')
-    : '<tr><td colspan="11" class="p-4 text-center text-slate-400">Không tìm thấy Thiếu nhi nào khớp chính xác.</td></tr>';
+    : '<tr><td colspan="12" class="p-4 text-center text-slate-400">Không tìm thấy Thiếu nhi nào khớp.</td></tr>';
 }
 
 function showPhoto(id) {
@@ -99,19 +102,19 @@ function photoCard(s) {
   const caption = `<div class="text-xs font-bold text-center w-full truncate text-slate-800" title="${esc(name)}">${esc(name)}</div>`
     + `<div class="text-[10px] text-slate-500 text-center font-mono">${esc(s.idNumber)}</div>`;
   if (!s.hasPhoto) {
-    const box = isAdmin()
+    const box = canWriteClass(s.classId)
       ? `<button type="button" class="photo-upload w-full aspect-[3/4] bg-slate-50 border-2 border-dashed border-slate-300 rounded-md mb-2 flex flex-col items-center justify-center hover:bg-blue-50 hover:border-blue-400 text-slate-400 transition-colors" data-id="${s.id}" title="Nhấn để tải ảnh lên"><span class="text-3xl mb-1">+</span><span class="text-[10px] font-medium">Tải ảnh</span></button>`
       : '<div class="w-full aspect-[3/4] bg-slate-50 border border-slate-200 rounded-md mb-2 flex items-center justify-center text-slate-300 text-[10px]">Chưa có ảnh</div>';
     return `<div class="border rounded-lg p-2 flex flex-col items-center bg-white shadow-sm">${box}${caption}</div>`;
   }
   const corner = 'absolute text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-md';
   // To replace a photo: remove it, then upload the new one.
-  const adminButtons = isAdmin()
+  const photoButtons = canWriteClass(s.classId)
     ? `<button type="button" class="photo-remove ${corner} -top-1 -right-1 bg-red-500 hover:bg-red-600" data-id="${s.id}" title="Xóa ảnh">✕</button>`
     : '';
   return '<div class="border rounded-lg p-2 flex flex-col items-center bg-white shadow-sm relative hover:border-blue-300 transition-colors">'
     + `<img src="${photoUrl(s)}" loading="lazy" decoding="async" alt="" class="w-full aspect-[3/4] object-cover rounded-md mb-2 bg-slate-100">`
-    + adminButtons
+    + photoButtons
     + `${caption}</div>`;
 }
 
@@ -197,7 +200,7 @@ function renderSiblingTags() {
     + `<button type="button" class="remove-sibling text-blue-500 hover:text-blue-900 font-bold px-1" data-id="${s.id}">×</button></span>`).join('');
 }
 
-// Exact match (search rule); everyone who matches is offered.
+// Search rule (shared/search.js); everyone who matches is offered.
 function searchSiblings() {
   const query = $('m-sibling-search').value;
   const drop = $('m-sibling-dropdown');
@@ -207,7 +210,7 @@ function searchSiblings() {
     ? hits.map((s) => `<div class="sibling-option p-2 hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-0" data-id="${s.id}">`
       + `<div class="text-sm font-bold text-blue-900">${esc(personName(s))}</div>`
       + `<div class="text-xs text-slate-500">${esc(s.idNumber)} — ${esc(className(s.classId))}</div></div>`).join('')
-    : '<div class="p-2 text-sm text-slate-500 text-center">Không tìm thấy (cần nhập đúng họ tên hoặc số CCCD)</div>';
+    : '<div class="p-2 text-sm text-slate-500 text-center">Không tìm thấy (nhập họ tên có dấu hoặc số CCCD)</div>';
   drop.classList.remove('hidden');
 }
 
@@ -223,6 +226,7 @@ function openForm(id) {
   $('m-gender').value = s?.gender ?? '';
   $('m-father').value = s?.father ?? '';
   $('m-mother').value = s?.mother ?? '';
+  $('m-address').value = s?.address ?? '';
   // Status is asked only for an existing student; a new one is always "Hoạt động".
   $('m-status-row').style.display = s ? '' : 'none';
   $('m-status').value = s?.status ?? 'ACTIVE';
@@ -233,6 +237,7 @@ function openForm(id) {
   $('m-sibling-dropdown').classList.add('hidden');
 
   fillSel('m-class', state.classes.map((c) => ({ v: c.id, t: c.name })), s ? s.classId : Number($('st-class').value));
+  $('m-class').disabled = !isAdmin(); // only Xứ đoàn picks or changes the class; a teacher adds to the class in view
 
   $('st-modal').classList.add('open');
   setTimeout(() => $('m-fullname').focus(), 50);
@@ -254,6 +259,7 @@ async function saveForm() {
     classId: Number($('m-class').value),
     father: $('m-father').value.trim(),
     mother: $('m-mother').value.trim(),
+    address: $('m-address').value.trim(),
     phones: readPhones(),
   };
   if (!body.idNumber || !body.fullName || !body.classId) return toast('Nhập Số CCCD, Họ và tên và chọn Lớp.');
@@ -276,11 +282,24 @@ async function saveForm() {
   renderSearch();
 }
 
-/* ---------- Excel import (Xứ đoàn) ---------- */
-const TEMPLATE_HEADER = ['Số CCCD', 'Tên Thánh', 'Họ Và Tên', 'Giới Tính', 'Ngày Sinh', 'Cha', 'Mẹ', 'Số Điện Thoại'];
+// Attendance, scores and photo go with the student; "Ngưng hoạt động" keeps them.
+async function deleteStudent(id) {
+  const s = byId(id);
+  if (!s || !confirm(`Xóa vĩnh viễn ${personName(s)}? Điểm danh, điểm và ảnh của Thiếu nhi này cũng bị xóa. Không thể hoàn tác.\nNếu chỉ nghỉ học, hãy chuyển sang "Ngưng hoạt động".`)) return;
+  try {
+    await api('deleteStudent', { id: s.id });
+    await load('students', 'classes'); // siblings of the student change too
+  } catch (e) { return toast(e.message); }
+  toast('Đã xóa.');
+  renderClass();
+  renderSearch();
+}
+
+/* ---------- Excel import (Xứ đoàn and the class's teachers) ---------- */
+const TEMPLATE_HEADER = ['Số CCCD', 'Tên Thánh', 'Họ Và Tên', 'Giới Tính', 'Ngày Sinh', 'Cha', 'Mẹ', 'Địa Chỉ', 'Số Điện Thoại'];
 
 function downloadTemplate() {
-  const rows = [TEMPLATE_HEADER, ['079212300101', 'Maria', 'Nguyễn Thị A', 'Nữ', '15/05/2015', 'Nguyễn Văn B', 'Trần Thị C', '0901234567 / 0912345678']];
+  const rows = [TEMPLATE_HEADER, ['079212300101', 'Maria', 'Nguyễn Thị A', 'Nữ', '15/05/2015', 'Nguyễn Văn B', 'Trần Thị C', '123 Lê Lợi, P. Bến Thành, Q.1', '0901234567 / 0912345678']];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'DanhSach');
   XLSX.writeFile(wb, 'Danh_sach_thieu_nhi_mau.xlsx');
@@ -313,6 +332,7 @@ async function importFile() {
       gender: GENDER_CODE[String(r['Giới Tính'] ?? '').normalize('NFC').trim().toLowerCase()] ?? null,
       father: String(r['Cha'] ?? '').trim(),
       mother: String(r['Mẹ'] ?? '').trim(),
+      address: String(r['Địa Chỉ'] ?? '').trim(),
       phones: String(r['Số Điện Thoại'] ?? '').split('/').map((p) => p.trim()).filter(Boolean),
     });
   }
@@ -339,6 +359,8 @@ $('st-file').addEventListener('change', importFile);
 $('st-tbody').addEventListener('click', (e) => {
   const edit = e.target.closest('.edit-student');
   if (edit) openForm(edit.dataset.id);
+  const remove = e.target.closest('.delete-student');
+  if (remove) deleteStudent(remove.dataset.id);
   copyPhone(e);
 });
 $('st-search-tbody').addEventListener('click', (e) => {

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import * as server from '../src/lib/text.js';
 import * as page from '../public/shared/search.js';
-import { SESSION_LABEL, MARK_LABEL, TIER_LABEL, STUDENT_STATUS_LABEL, USER_STATUS_LABEL, GENDER_LABEL, RATING_LABEL, ATTENDANCE_RATING_LABEL, SLOT_LABEL } from '../public/shared/labels.js';
+import { SESSION_LABEL, MARK_LABEL, TIER_LABEL, STUDENT_STATUS_LABEL, USER_STATUS_LABEL, GENDER_LABEL, RATING_LABEL, ATTENDANCE_RATING_LABEL, SLOT_LABEL, attendanceRating } from '../public/shared/labels.js';
 import * as codes from '../src/lib/codes.js';
 import { parseScore } from '../public/shared/scores.js';
 import { sortKey, compareValues } from '../public/shared/sort.js';
@@ -116,4 +116,8 @@ test('table sorting reads dates, decimal commas and percents, and keeps blanks l
   assert.deepEqual(sorted(['8,3', '', '10', '8,25']), [8.25, 8.3, 10, '']);
   assert.deepEqual(sorted(['Ấu 10', 'Ấu 2', 'Chiên Con']), ['Ấu 2', 'Ấu 10', 'Chiên Con']);
   assert.deepEqual(sorted(['01/02/2026', '15/01/2026']), ['2026-01-15', '2026-02-01']);
+});
+
+test('attendanceRating thresholds', () => {
+  assert.deepEqual([80, 79, 65, 64, 50, 49].map(attendanceRating), ['EXCELLENT', 'GOOD', 'GOOD', 'FAIR', 'FAIR', 'NEEDS_WORK']);
 });

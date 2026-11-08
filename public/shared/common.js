@@ -5,6 +5,7 @@
 'use strict';
 
 import { sortableTables } from './sort.js';
+import { SESSION_LABEL } from './labels.js';
 
 /* ---------- Codes ---------- */
 export const SESSIONS = ['SUNDAY_MASS', 'CATECHISM', 'ADORATION', 'THURSDAY_MASS'];
@@ -83,7 +84,7 @@ export function setupTabs(handlers = {}) {
 export function exportExcel(tableId, filename) {
   const table = $(tableId);
   if (!table) return;
-  const wb = XLSX.utils.table_to_book(table, { sheet: 'Sheet1', raw: true });
+  const wb = XLSX.utils.table_to_book(table, { sheet: 'Sheet1', raw: true, display: true });
   const ws = wb.Sheets.Sheet1;
   // Numbers shown with a decimal comma or as plain digits become numbers in the file.
   Object.keys(ws).filter((k) => k[0] !== '!').forEach((addr) => {
@@ -98,6 +99,20 @@ export function exportExcel(tableId, filename) {
 /* ---------- Numbers ---------- */
 export const fmt1 = (v) => (v == null || v === '' ? '—' : (Math.round(+v * 100) / 100).toLocaleString('vi-VN'));
 export const pct = (part, whole) => (whole > 0 ? Math.min(100, Math.round((part / whole) * 100)) : 0);
+// "53%" with "10/19" under it, for the statistics tables; the space keeps "53% 10/19" apart in the Excel export.
+export const ratio = (part, whole) => `${pct(part, whole)}% <span class="block text-xs font-normal text-slate-500">${part}/${whole}</span>`;
+
+/* ---------- Session filter of the statistics tables: tick boxes, all ticked at the start ---------- */
+export function sessionPicker(id, codes, onChange) {
+  $(id).innerHTML = codes.map((code) => `<label class="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-700"><input type="checkbox" value="${code}" checked> ${esc(SESSION_LABEL[code])}</label>`).join('');
+  $(id).addEventListener('change', onChange);
+}
+export const pickedSessions = (id) => [...$(id).querySelectorAll('input:checked')].map((box) => box.value);
+// Hides the header of the sessions not picked; the rows draw only the picked ones. Hidden cells stay out of print and Excel.
+export function showSessionColumns(tableId, codes) {
+  $(tableId).querySelectorAll('th[data-session]').forEach((th) => { th.hidden = !codes.includes(th.dataset.session); });
+}
+export const sumOf = (counts, codes) => codes.reduce((n, code) => n + (counts[code] ?? 0), 0);
 
 /* ---------- Dates: 'YYYY-MM-DD' strings, computed in UTC so the browser time zone never shifts a day ---------- */
 const DAY = 86400000;

@@ -46,7 +46,7 @@ test('unknown actions are 404; actions above the tier of the user are 403', asyn
   const env = await testEnv();
   assert.equal((await call(env, TEACHER, 'dropEverything'))[0], 404);
   assert.equal((await call(env, TEACHER, 'constructor'))[0], 404);
-  for (const action of ['getDirectory', 'saveUser', 'saveConfig', 'saveHolidays', 'importStudents', 'startSchoolYear', 'importSheet', 'clearCache', 'saveClass', 'deleteClass', 'reorderClasses', 'saveGroup', 'deleteGroup']) {
+  for (const action of ['getDirectory', 'saveUser', 'saveConfig', 'saveHolidays', 'deleteUser', 'startSchoolYear', 'importSheet', 'clearCache', 'saveClass', 'deleteClass', 'reorderClasses', 'saveGroup', 'deleteGroup']) {
     assert.equal((await call(env, TEACHER, action))[0], 403, action);
   }
   for (const action of ['getTeacherAttendance', 'saveTeacherAttendance', 'getTeacherAttendanceStats', 'searchTeachers', 'getTeacherAbsences']) {
@@ -180,11 +180,11 @@ test('lessons: read by anyone, saved within scope, upload link needs a connected
   assert.match(error.message, /Google Drive chưa được kết nối/);
 });
 
-test('photos: an admin uploads, everyone signed in views and downloads, an admin removes', async () => {
+test('photos: a teacher of the class or an admin uploads and removes, everyone signed in views and downloads', async () => {
   const env = await testEnv();
   assert.equal((await photo(env, TEACHER, 'GET', 1)).status, 404);
-  assert.equal((await photo(env, TEACHER, 'PUT', 1, JPEG)).status, 403);
-  assert.equal((await photo(env, TEACHER, 'DELETE', 1)).status, 403);
+  assert.equal((await photo(env, TEACHER, 'PUT', 51, JPEG)).status, 403); // class 2
+  assert.equal((await photo(env, TEACHER, 'DELETE', 51)).status, 403);
 
   const put = await photo(env, ADMIN, 'PUT', 1, JPEG);
   const { photoVersion } = await put.json();
@@ -205,7 +205,7 @@ test('photos: an admin uploads, everyone signed in views and downloads, an admin
   const again = await (await photo(env, ADMIN, 'PUT', 1, JPEG)).json();
   assert.ok(again.photoVersion > photoVersion);
 
-  assert.equal((await photo(env, ADMIN, 'DELETE', 1)).status, 200);
+  assert.equal((await photo(env, TEACHER, 'DELETE', 1)).status, 200);
   assert.equal((await photo(env, TEACHER, 'GET', 1)).status, 404);
   assert.equal(env.PHOTOS.has('students/1'), false);
   assert.equal((await call(env, TEACHER, 'getStudents'))[1].students.find((s) => s.id === 1).hasPhoto, false);

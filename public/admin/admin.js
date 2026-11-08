@@ -33,15 +33,18 @@ async function loadDirectory() {
 /* ---------- Users ---------- */
 function renderUsers() {
   const query = $('user-query').value;
-  // Exact match on the full name or the email; an empty box shows everyone.
+  // Part of the name or the exact email; an empty box shows everyone.
   const users = query.trim() ? directory.users.filter((u) => matchesPerson(u, query, { byEmail: true })) : directory.users;
   $('user-tbody').innerHTML = users.length
     ? users.map((u) => `<tr class="hover:bg-slate-50 bg-white"><td class="p-2 border">${esc(u.email)}</td>`
       + `<td class="p-2 border font-medium">${esc(personName(u))}</td><td class="p-2 border text-center whitespace-nowrap">${esc(u.phone ?? '')}</td>`
       + `<td class="p-2 border">${groupsOf(u.id).map((g) => `<span class="whitespace-nowrap">${tierBadge(g.type)} ${esc(g.name)}</span>`).join('<br>')}</td>`
       + `<td class="p-2 border text-center">${badge(USER_STATUS_LABEL[u.status], STATUS_TONE[u.status])}</td>`
-      + `<td class="p-2 border text-center"><button class="edit-user bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs px-4 py-2 rounded-lg" data-id="${u.id}">Cập nhật</button></td></tr>`).join('')
-    : '<tr><td colspan="6" class="p-4 text-center text-slate-400">Không tìm thấy Huynh trưởng nào khớp chính xác.</td></tr>';
+      + `<td class="p-2 border text-center whitespace-nowrap"><button class="edit-user bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs px-4 py-2 rounded-lg" data-id="${u.id}">Cập nhật</button>`
+      // No delete button on your own row: the server refuses it.
+      + (u.id === state.session.userId ? '' : ` <button class="delete-user bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs px-4 py-2 rounded-lg" data-id="${u.id}">Xóa</button>`)
+      + '</td></tr>').join('')
+    : '<tr><td colspan="6" class="p-4 text-center text-slate-400">Không tìm thấy Huynh trưởng nào khớp.</td></tr>';
 }
 
 let editingUser = null;
@@ -83,6 +86,17 @@ async function saveUser() {
   } catch (e) { return toast(e.message); }
   $('user-modal').classList.remove('open');
   toast('Đã lưu.');
+  renderUsers();
+}
+
+async function deleteUser(id) {
+  const u = directory.users.find((x) => x.id === Number(id));
+  if (!u || !confirm(`Xóa vĩnh viễn ${personName(u)} (${u.email})? Nhóm và điểm danh Huynh trưởng của người này cũng bị xóa. Không thể hoàn tác.\nNếu chỉ tạm ngưng, hãy chuyển sang "Ngưng hoạt động".`)) return;
+  try {
+    await api('deleteUser', { id: u.id });
+    await loadDirectory();
+  } catch (e) { return toast(e.message); }
+  toast('Đã xóa.');
   renderUsers();
 }
 
@@ -358,6 +372,8 @@ $('user-add').addEventListener('click', () => openUser());
 $('user-tbody').addEventListener('click', (e) => {
   const button = e.target.closest('.edit-user');
   if (button) openUser(button.dataset.id);
+  const remove = e.target.closest('.delete-user');
+  if (remove) deleteUser(remove.dataset.id);
 });
 
 for (const id of ['user-modal', 'year-modal', 'class-modal', 'group-modal']) {

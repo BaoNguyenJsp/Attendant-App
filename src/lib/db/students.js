@@ -10,7 +10,7 @@ const thisYear = () => Number(todayVN().slice(0, 4));
 export async function listStudents(db) {
   const rows = await all(db, `
     SELECT s.Id AS id, s.IdNumber AS idNumber, s.SaintName AS saintName, s.FullName AS fullName, s.FirstName AS firstName,
-           s.DateOfBirth AS dateOfBirth, s.Gender AS gender, s.Father AS father, s.Mother AS mother, s.Phone AS phone,
+           s.DateOfBirth AS dateOfBirth, s.Gender AS gender, s.Father AS father, s.Mother AS mother, s.Address AS address, s.Phone AS phone,
            s.ClassId AS classId, s.EnrollYear AS enrollYear, s.Status AS status, s.PhotoVersion AS photoVersion, m.FamilyId AS familyId
     FROM Students s LEFT JOIN SiblingMembers m ON m.StudentId = s.Id ORDER BY s.Id`);
   const families = new Map();
@@ -44,7 +44,7 @@ function readFields(input) {
   if (dateOfBirth !== null && !isDate(dateOfBirth)) fail(400, `Ngày sinh không hợp lệ: ${fullName}`);
   return {
     idNumber, key: idKey(idNumber), fullName, gender, dateOfBirth,
-    saintName: textOrNull(input.saintName), father: textOrNull(input.father), mother: textOrNull(input.mother),
+    saintName: textOrNull(input.saintName), father: textOrNull(input.father), mother: textOrNull(input.mother), address: textOrNull(input.address),
     phone: joinPhones(input.phones),
   };
 }
@@ -74,14 +74,14 @@ export async function saveStudent(db, actor, input, { year = thisYear() } = {}) 
   const holder = await db.prepare('SELECT s.Id, s.FullName, c.Name FROM Students s JOIN Classes c ON c.Id = s.ClassId WHERE s.IdKey = ?').bind(f.key).first();
   if (holder && holder.Id !== id) fail(409, `Số CCCD này đã thuộc về ${holder.FullName} (${holder.Name})`);
 
-  const values = [f.idNumber, f.key, f.saintName, f.fullName, firstName(f.fullName), f.dateOfBirth, f.gender, f.father, f.mother, f.phone, classId, enrollYear, status];
+  const values = [f.idNumber, f.key, f.saintName, f.fullName, firstName(f.fullName), f.dateOfBirth, f.gender, f.father, f.mother, f.address, f.phone, classId, enrollYear, status];
   let studentId = id;
   if (old) {
     await db.prepare(`UPDATE Students SET IdNumber = ?, IdKey = ?, SaintName = ?, FullName = ?, FirstName = ?, DateOfBirth = ?, Gender = ?, Father = ?, Mother = ?,
-      Phone = ?, ClassId = ?, EnrollYear = ?, Status = ?, UpdatedAt = ?, UpdatedBy = ? WHERE Id = ?`).bind(...values, now(), actor.userId, id).run();
+      Address = ?, Phone = ?, ClassId = ?, EnrollYear = ?, Status = ?, UpdatedAt = ?, UpdatedBy = ? WHERE Id = ?`).bind(...values, now(), actor.userId, id).run();
   } else {
-    const r = await db.prepare(`INSERT INTO Students (IdNumber, IdKey, SaintName, FullName, FirstName, DateOfBirth, Gender, Father, Mother, Phone, ClassId, EnrollYear, Status, UpdatedBy)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(...values, actor.userId).run();
+    const r = await db.prepare(`INSERT INTO Students (IdNumber, IdKey, SaintName, FullName, FirstName, DateOfBirth, Gender, Father, Mother, Address, Phone, ClassId, EnrollYear, Status, UpdatedBy)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(...values, actor.userId).run();
     studentId = r.meta.last_row_id;
   }
   // ponytail: the student row and the family rows are two writes; a failure between them leaves the student saved without the new siblings. One batch if that ever shows.
@@ -122,21 +122,41 @@ async function setSiblings(db, me, siblingIds) {
 }
 
 // One request, any number of rows, all or nothing. Rows without CCCD or full name are skipped. Returns the number of rows written.
-export async function importStudents(db, { classId, students }, actorId, { year = thisYear() } = {}) {
+export async function importStudents(db, actor, { classId, students }, { year = thisYear() } = {}) {
   await requireClassExists(db, Number(classId));
+  requireClass(actor, Number(classId));
+  // A teacher's file must not pull a student out of another class (same rule as saveStudent).
+  const elsewhere = isAdmin(actor) ? new Map() : new Map((await all(db,
+    'SELECT s.IdKey, s.FullName, c.Name FROM Students s JOIN Classes c ON c.Id = s.ClassId WHERE s.ClassId <> ?', Number(classId)))
+    .map((r) => [r.IdKey, r]));
   const statements = [];
   for (const input of students ?? []) {
     if (!idKey(input.idNumber) || !String(input.fullName ?? '').trim()) continue;
     const f = readFields(input);
-    // An existing student keeps enroll year, status, photo and siblings; a blank phone keeps the stored phone.
+    const holder = elsewhere.get(f.key);
+    if (holder) fail(403, `Số CCCD ${f.idNumber} đã thuộc về ${holder.FullName} (${holder.Name}). Chỉ Xứ đoàn được chuyển Thiếu nhi sang lớp khác.`);
+    // An existing student keeps enroll year, status, photo and siblings; a blank phone or address keeps the stored one.
     statements.push(db.prepare(`
-      INSERT INTO Students (IdNumber, IdKey, SaintName, FullName, FirstName, DateOfBirth, Gender, Father, Mother, Phone, ClassId, EnrollYear, UpdatedBy)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO Students (IdNumber, IdKey, SaintName, FullName, FirstName, DateOfBirth, Gender, Father, Mother, Address, Phone, ClassId, EnrollYear, UpdatedBy)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (IdKey) DO UPDATE SET SaintName = excluded.SaintName, FullName = excluded.FullName, FirstName = excluded.FirstName,
         DateOfBirth = excluded.DateOfBirth, Gender = excluded.Gender, Father = excluded.Father, Mother = excluded.Mother,
-        Phone = COALESCE(excluded.Phone, Students.Phone), ClassId = excluded.ClassId, UpdatedAt = ?, UpdatedBy = excluded.UpdatedBy`)
-      .bind(f.idNumber, f.key, f.saintName, f.fullName, firstName(f.fullName), f.dateOfBirth, f.gender, f.father, f.mother, f.phone, Number(classId), year, actorId, now()));
+        Address = COALESCE(excluded.Address, Students.Address), Phone = COALESCE(excluded.Phone, Students.Phone), ClassId = excluded.ClassId, UpdatedAt = ?, UpdatedBy = excluded.UpdatedBy`)
+      .bind(f.idNumber, f.key, f.saintName, f.fullName, firstName(f.fullName), f.dateOfBirth, f.gender, f.father, f.mother, f.address, f.phone, Number(classId), year, actor.userId, now()));
   }
   if (statements.length) await db.batch(statements);
   return statements.length;
+}
+
+// Attendance, scores, photo row and family row go with the student (ON DELETE CASCADE).
+export async function deleteStudent(db, actor, id) {
+  const classId = await db.prepare('SELECT ClassId FROM Students WHERE Id = ?').bind(id).first('ClassId');
+  if (classId === null) fail(404, 'Không tìm thấy Thiếu nhi.');
+  requireClass(actor, classId);
+  const { familyId } = await familyOf(db, id);
+  await db.batch([
+    db.prepare('DELETE FROM Students WHERE Id = ?').bind(id),
+    // A family of one is not a family.
+    db.prepare('DELETE FROM SiblingMembers WHERE FamilyId = ? AND (SELECT COUNT(*) FROM SiblingMembers WHERE FamilyId = ?) < 2').bind(familyId, familyId),
+  ]);
 }

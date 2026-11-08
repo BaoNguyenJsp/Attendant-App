@@ -7,16 +7,17 @@ export const idKey = (idNumber) => String(idNumber ?? '').trim().replace(/^'+/, 
 // Only case, spaces at the ends and the accent encoding are ignored. Accents must be typed.
 export const searchKey = (text) => String(text ?? '').normalize('NFC').trim().toLocaleLowerCase('vi');
 
-const matchesName = (person, q) => searchKey(person.fullName) === q || searchKey(`${person.saintName ?? ''} ${person.fullName}`) === q;
+// Any part of the saint name + full name ("an", "thị an", "maria nguyễn").
+const matchesName = (person, q) => searchKey(`${person.saintName ?? ''} ${person.fullName}`).includes(q);
 
-// Exact match on the full name, the saint name + full name, or the CCCD.
+// Part of the name, or the exact CCCD.
 export function matchesStudent(student, query) {
   const q = searchKey(query);
   if (!q) return false;
   return matchesName(student, q) || (idKey(q) !== '' && idKey(q) === idKey(student.idNumber));
 }
 
-// Exact match on the full name, the saint name + full name, or (when allowed) the email.
+// Part of the name, or (when allowed) the exact email.
 export function matchesPerson(person, query, { byEmail = false } = {}) {
   const q = searchKey(query);
   if (!q) return false;

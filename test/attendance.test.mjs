@@ -103,15 +103,23 @@ test('the overview gives one line per class from one grouped count', async () =>
   assert.equal(year.totalStudents, 600);
   assert.equal(year.classes.length, 12);
   // class 1: 75 present Sunday Masses of 6 weeks x 50 students
-  assert.deepEqual(year.classes[0], { classId: 1, name: 'Chiên Con', size: 50, pct: { SUNDAY_MASS: 25, CATECHISM: 0, ADORATION: 0, THURSDAY_MASS: 0 }, pctTotal: 6, rating: 'NEEDS_WORK' });
-  assert.equal(year.sundayMassPct, 2); // 75 of 6 x 600
-  assert.equal(year.thursdayMassPct, 0);
+  assert.deepEqual(year.classes[0], {
+    classId: 1, name: 'Chiên Con', size: 50,
+    present: { SUNDAY_MASS: 75, CATECHISM: 0, ADORATION: 0, THURSDAY_MASS: 0 },
+    possible: { SUNDAY_MASS: 300, CATECHISM: 300, ADORATION: 300, THURSDAY_MASS: 300 },
+  });
+  assert.deepEqual(year.sundayMass, { present: 75, possible: 3600 }); // 6 weeks x 600
+  assert.deepEqual(year.thursdayMass, { present: 0, possible: 3600 });
 
   // "Từ ngày … đến ngày": only the weeks inside, and only when both ends are set
+  const sundayMass = async (range) => {
+    const c = (await getAttendanceOverview(db, { ...range, today: TODAY })).classes[0];
+    return [c.present.SUNDAY_MASS, c.possible.SUNDAY_MASS];
+  };
   // September has 4 Sundays: 50 of 4 x 50
-  assert.equal((await getAttendanceOverview(db, { from: '2026-09-01', to: '2026-09-30', today: TODAY })).classes[0].pct.SUNDAY_MASS, 25);
-  assert.equal((await getAttendanceOverview(db, { from: '2026-10-04', to: '2026-10-04', today: TODAY })).classes[0].pct.SUNDAY_MASS, 50);
-  assert.equal((await getAttendanceOverview(db, { from: '2026-10-04', today: TODAY })).classes[0].pct.SUNDAY_MASS, 25);
+  assert.deepEqual(await sundayMass({ from: '2026-09-01', to: '2026-09-30' }), [50, 200]);
+  assert.deepEqual(await sundayMass({ from: '2026-10-04', to: '2026-10-04' }), [25, 50]);
+  assert.deepEqual(await sundayMass({ from: '2026-10-04' }), [75, 300]);
   await assert.rejects(getAttendanceOverview(db, { from: '2026-10-05', to: '2026-10-04', today: TODAY }), status(400));
   await assert.rejects(getAttendanceOverview(db, { from: 'x', to: '2026-10-04', today: TODAY }), status(400));
   const sept = await getStudentAttendanceStats(db, { classId: 1, from: '2026-09-06', to: '2026-09-06', today: TODAY });
@@ -119,7 +127,7 @@ test('the overview gives one line per class from one grouped count', async () =>
   assert.equal(sept.stats[1].total, 1);
 
   // a range with no week so far
-  assert.equal((await getAttendanceOverview(db, { from: '2027-01-01', to: '2027-03-31', today: TODAY })).classes[0].pctTotal, 0);
+  assert.equal((await getAttendanceOverview(db, { from: '2027-01-01', to: '2027-03-31', today: TODAY })).classes[0].present.SUNDAY_MASS, 0);
 
   // classes without active students are left out
   await db.prepare("UPDATE Students SET Status = 'INACTIVE' WHERE ClassId = 12").run();
@@ -201,7 +209,7 @@ test('teacher attendance: changed rows only, five sessions, roster checked', asy
   assert.equal(mineLater.taught, await db.prepare("SELECT COUNT(*) AS n FROM Lessons WHERE TeacherId = ? AND SchoolYear = '2026-2027' AND WeekOf BETWEEN '2026-09-13' AND '2026-10-11'").bind(first.userId).first('n'));
 });
 
-test('teacher search is exact and limited to the sectors of the user; only Xứ đoàn searches by email', async () => {
+test('teacher search matches part of the name and is limited to the sectors of the user; only Xứ đoàn searches by email', async () => {
   const db = await emptyYear();
   const sectorAdmin = await loadSession(db, 'teacher02@example.com'); // BQT ngành Ấu
   const a = await admin(db);
@@ -212,7 +220,8 @@ test('teacher search is exact and limited to the sectors of the user; only Xứ 
   await db.prepare("UPDATE Users SET FullName = 'Lê Thị Khác', FirstName = 'Khác' WHERE Id = ?").bind(theirs.userId).run();
 
   assert.deepEqual((await searchTeachers(db, sectorAdmin, ' trần văn riêng ')).map((t) => t.userId), [mine.userId]);
-  assert.deepEqual(await searchTeachers(db, sectorAdmin, 'Riêng'), []);
+  assert.deepEqual((await searchTeachers(db, sectorAdmin, 'Riêng')).map((t) => t.userId), [mine.userId]);
+  assert.deepEqual(await searchTeachers(db, sectorAdmin, 'Khác'), []); // another sector
   assert.deepEqual(await searchTeachers(db, sectorAdmin, 'Lê Thị Khác'), []);
   assert.deepEqual(await searchTeachers(db, sectorAdmin, mine.email), []);
   assert.deepEqual((await searchTeachers(db, a, mine.email)).map((t) => t.userId), [mine.userId]);

@@ -14,23 +14,21 @@ export function splitPhones(value) {
 // Stored form: numbers joined with " / "; null when there is none.
 export const joinPhones = (value) => splitPhones(value).join(' / ') || null;
 
-// Search rule (plan section 5): exact match; only case and spaces at the ends are ignored.
+// Search rule (plan section 5): any part of the name; the CCCD and the email match exactly. Case and spaces at the ends are ignored.
 // NFC so that the same accented letter typed on different keyboards compares equal.
 export const searchKey = (text) => String(text ?? '').normalize('NFC').trim().toLocaleLowerCase('vi');
 
 export function matchesStudent(student, query) {
   const q = searchKey(query);
   if (!q) return false;
-  return searchKey(student.fullName) === q
-    || searchKey(`${student.saintName ?? ''} ${student.fullName}`) === q
+  return searchKey(`${student.saintName ?? ''} ${student.fullName}`).includes(q)
     || (idKey(q) !== '' && idKey(q) === student.idKey);
 }
 
 export function matchesTeacher(user, query, { byEmail = false } = {}) {
   const q = searchKey(query);
   if (!q) return false;
-  return searchKey(user.fullName) === q
-    || searchKey(`${user.saintName ?? ''} ${user.fullName}`) === q
+  return searchKey(`${user.saintName ?? ''} ${user.fullName}`).includes(q)
     || (byEmail && searchKey(user.email) === q);
 }
 

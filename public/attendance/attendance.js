@@ -7,11 +7,12 @@
 
 import {
   initCommon, load, state, $, api, esc, toast, fillSel, fillClasses, setupTabs, sortStudents, exportExcel,
-  SESSIONS, MARK, canWriteClass, className, personName, photoUrl, snapToSunday, pct, dateRange, rangeLabel,
+  SESSIONS, MARK, canWriteClass, className, personName, photoUrl, snapToSunday, pct, ratio, dateRange, rangeLabel,
+  sessionPicker, pickedSessions, showSessionColumns, sumOf,
 } from '../shared/common.js';
-import { SESSION_LABEL, ATTENDANCE_RATING_LABEL } from '../shared/labels.js';
+import { SESSION_LABEL, ATTENDANCE_RATING_LABEL, attendanceRating } from '../shared/labels.js';
 import { matchesStudent } from '../shared/search.js';
-import { absenceTable, setupViewToggle, sessionTabs, markCards, askUnsaved, shiftWeek } from '../shared/ui.js';
+import { absenceTable, setupViewToggle, sessionTabs, lockHolidays, markCards, askUnsaved, shiftWeek } from '../shared/ui.js';
 import { initFaceScan, buildReferenceDescriptors, updateRefBadge } from './face-scan.js';
 
 await initCommon();
@@ -31,6 +32,8 @@ let shown = { classId: 0, weekOf: '' };
 
 const BLANK = Object.fromEntries(SESSIONS.map((code) => [code, MARK.NONE]));
 const session = () => $('att-session').value;
+// A holiday session is not marked; only a week whose sessions are all holidays leaves one selected.
+const isHoliday = () => holidays.some((h) => h.session === session());
 const isDirty = (row) => SESSIONS.some((code) => row.marks[code] !== row.base[code]);
 const dirtyRows = () => rows.filter(isDirty);
 
@@ -43,6 +46,7 @@ async function loadWeek() {
   try { r = await api('getStudentAttendance', { classId, weekOf }); } catch (e) { return toast(e.message); }
   const saved = new Map(r.records.map((x) => [x.studentId, x.marks]));
   holidays = r.holidays;
+  lockHolidays($('att-session'), holidays);
   rows = activeOf(classId).map((student) => {
     const marks = { ...BLANK, ...(saved.get(student.id) ?? {}) };
     return { student, base: { ...marks }, marks };
@@ -58,9 +62,9 @@ async function loadWeek() {
 
 function renderWeek() {
   const code = session();
-  const editable = canWriteClass(shown.classId);
   const note = $('att-holiday-note');
   const off = holidays.find((h) => h.session === code);
+  const editable = canWriteClass(shown.classId) && !off; // a holiday session is not marked
   note.style.display = off ? 'block' : 'none';
   note.textContent = off ? `⚠ Buổi này được nghỉ phép${off.reason ? ` (${off.reason})` : ''}.` : '';
 
@@ -74,7 +78,7 @@ function renderWeek() {
     + '</tr>').join('') || '<tr><td colspan="6" class="p-4 text-center text-slate-400">Lớp chưa có Thiếu nhi.</td></tr>';
 
   // Card view: the same data as a table row (STT, name, saint name, CCCD, the two marks), with big buttons.
-  $('att-tabs').innerHTML = sessionTabs(SESSIONS, code, rows);
+  $('att-tabs').innerHTML = sessionTabs(SESSIONS, code, rows, holidays);
   $('att-cards').innerHTML = markCards(rows.map(({ student, marks }, i) => ({
     title: `${i + 1}. ${esc(student.fullName)}`,
     sub: `${student.saintName ? `${esc(student.saintName)} · ` : ''}${esc(student.idNumber)}`,
@@ -92,6 +96,7 @@ function renderWeek() {
 
 // Hiện diện and Có phép exclude each other; unticking both leaves the student unmarked.
 function toggle(i, mark) {
+  if (isHoliday()) return;
   const row = rows[i];
   row.marks[session()] = row.marks[session()] === mark ? MARK.NONE : mark;
   renderWeek();
@@ -99,6 +104,7 @@ function toggle(i, mark) {
 
 // Sets every student's mark for the current session: PRESENT ticks all, NONE clears both boxes.
 function markAll(mark) {
+  if (isHoliday()) return toast('Buổi này được nghỉ, không điểm danh.');
   rows.forEach((row) => { row.marks[session()] = mark; });
   renderWeek();
 }
@@ -139,17 +145,17 @@ const cardView = setupViewToggle($('att-view'), renderWeek);
 
 initFaceScan({
   markOf: (key) => rows.find((r) => String(r.student.id) === key)?.marks[session()],
-  markPresent: (key) => { rows.find((r) => String(r.student.id) === key).marks[session()] = MARK.PRESENT; },
+  markPresent: (key) => { if (isHoliday()) return; rows.find((r) => String(r.student.id) === key).marks[session()] = MARK.PRESENT; },
   refresh: renderWeek,
 });
 
-/* ---------- Tab 2: absence lookup (exact match, every match shown) ---------- */
+/* ---------- Tab 2: absence lookup (part of the name or exact CCCD, every match shown) ---------- */
 async function renderAbsences() {
   const query = $('abs-query').value;
   const out = $('abs-out');
-  if (!query.trim()) { out.innerHTML = '<p class="text-amber-600 font-medium">Nhập đúng họ tên (có dấu) hoặc số CCCD của Thiếu nhi.</p>'; return; }
+  if (!query.trim()) { out.innerHTML = '<p class="text-amber-600 font-medium">Nhập họ tên (một phần, có dấu) hoặc số CCCD của Thiếu nhi.</p>'; return; }
   const hits = state.students.filter((s) => matchesStudent(s, query));
-  if (!hits.length) { out.innerHTML = '<p class="text-amber-600 font-medium">Không tìm thấy Thiếu nhi nào khớp chính xác.</p>'; return; }
+  if (!hits.length) { out.innerHTML = '<p class="text-amber-600 font-medium">Không tìm thấy Thiếu nhi nào khớp.</p>'; return; }
 
   const cards = await Promise.all(hits.map(async (s) => {
     let r;
@@ -174,12 +180,14 @@ async function renderStats() {
   let r;
   try { r = await api('getStudentAttendanceStats', { classId, ...dateRange('stats-from', 'stats-to') }); } catch (e) { return toast(e.message); }
   const students = activeOf(classId);
+  const codes = pickedSessions('stats-sessions');
+  showSessionColumns('stats-table', codes);
   $('stats-tbody').innerHTML = students.length
     ? students.map((s, i) => {
       const present = r.stats[s.id] ?? {};
       return `<tr><td class="p-2 border text-center">${i + 1}</td><td class="p-2 border font-medium">${esc(personName(s))}</td>`
-        + SESSIONS.map((code) => `<td class="p-2 border text-center">${pct(present[code] ?? 0, r.max[code])}%</td>`).join('')
-        + `<td class="p-2 border text-center font-bold">${pct(present.total ?? 0, r.maxTotal)}%</td></tr>`;
+        + codes.map((code) => `<td class="p-2 border text-center">${ratio(present[code] ?? 0, r.max[code])}</td>`).join('')
+        + `<td class="p-2 border text-center font-bold">${ratio(sumOf(present, codes), sumOf(r.max, codes))}</td></tr>`;
     }).join('')
     : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Chưa có dữ liệu.</td></tr>';
 }
@@ -189,14 +197,20 @@ async function renderOverview() {
   let r;
   try { r = await api('getAttendanceOverview', dateRange('ov-from', 'ov-to')); } catch (e) { return toast(e.message); }
   $('ov-total').textContent = r.totalStudents;
-  $('ov-sunday').textContent = `${r.sundayMassPct}%`;
-  $('ov-thursday').textContent = `${r.thursdayMassPct}%`;
+  $('ov-sunday').innerHTML = ratio(r.sundayMass.present, r.sundayMass.possible);
+  $('ov-thursday').innerHTML = ratio(r.thursdayMass.present, r.thursdayMass.possible);
+  const codes = pickedSessions('ov-sessions');
+  showSessionColumns('ov-table', codes);
   $('ov-tbody').innerHTML = r.classes.length
-    ? r.classes.map((c) => `<tr><td class="p-3 border font-extrabold text-center text-blue-900">${esc(c.name)}</td>`
-      + `<td class="p-3 border text-center font-bold">${c.size}</td>`
-      + SESSIONS.map((code) => `<td class="p-3 border text-center">${c.pct[code]}%</td>`).join('')
-      + `<td class="p-3 border text-center font-bold text-emerald-700">${c.pctTotal}%</td>`
-      + `<td class="p-3 border text-center font-semibold ${c.rating === 'EXCELLENT' ? 'text-pink-600' : 'text-slate-700'}">${esc(ATTENDANCE_RATING_LABEL[c.rating])}</td></tr>`).join('')
+    ? r.classes.map((c) => {
+      const [present, possible] = [sumOf(c.present, codes), sumOf(c.possible, codes)];
+      const rating = attendanceRating(pct(present, possible));
+      return `<tr><td class="p-3 border font-extrabold text-center text-blue-900">${esc(c.name)}</td>`
+        + `<td class="p-3 border text-center font-bold">${c.size}</td>`
+        + codes.map((code) => `<td class="p-3 border text-center">${ratio(c.present[code], c.possible[code])}</td>`).join('')
+        + `<td class="p-3 border text-center font-bold text-emerald-700">${ratio(present, possible)}</td>`
+        + `<td class="p-3 border text-center font-semibold ${rating === 'EXCELLENT' ? 'text-pink-600' : 'text-slate-700'}">${esc(ATTENDANCE_RATING_LABEL[rating])}</td></tr>`;
+    }).join('')
     : '<tr><td colspan="8" class="p-4 text-center text-slate-400">Chưa có dữ liệu.</td></tr>';
 }
 
@@ -266,6 +280,8 @@ $('abs-out').addEventListener('click', (e) => {
 });
 
 for (const id of ['stats-class', 'stats-from', 'stats-to']) $(id).addEventListener('change', renderStats);
+sessionPicker('stats-sessions', SESSIONS, renderStats);
+sessionPicker('ov-sessions', SESSIONS, renderOverview);
 $('stats-excel').addEventListener('click', () => exportExcel('stats-table', 'Thống kê chuyên cần lớp'));
 $('stats-print').addEventListener('click', () => printTable('stats-table', 'BẢNG THỐNG KÊ CHUYÊN CẦN THIẾU NHI', `Lớp: <b>${esc(className($('stats-class').value))}</b> &nbsp;|&nbsp; ${rangeLabel(dateRange('stats-from', 'stats-to'))}`, 'Giáo lý viên phụ trách'));
 

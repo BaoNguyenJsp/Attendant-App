@@ -95,6 +95,7 @@ CREATE TABLE Students (
   Gender       TEXT CHECK (Gender IN ('F', 'M')),
   Father       TEXT,
   Mother       TEXT,
+  Address      TEXT,
   Phone        TEXT,
   ClassId      INTEGER NOT NULL REFERENCES Classes (Id),
   EnrollYear   INTEGER,

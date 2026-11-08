@@ -21,5 +21,7 @@ export const GENDER_LABEL = { F: 'Nữ', M: 'Nam' };
 
 export const RATING_LABEL = { EXCELLENT: 'Giỏi', GOOD: 'Tiên tiến', AVERAGE: 'Trung bình' };
 export const ATTENDANCE_RATING_LABEL = { EXCELLENT: 'Xuất sắc', GOOD: 'Tốt', FAIR: 'Khá', NEEDS_WORK: 'Cần cố gắng' };
+// Rating of an attendance percentage (whole parish statistics), from the sessions picked in the filter.
+export const attendanceRating = (pct) => (pct >= 80 ? 'EXCELLENT' : pct >= 65 ? 'GOOD' : pct >= 50 ? 'FAIR' : 'NEEDS_WORK');
 
 export const SLOT_LABEL = { PLAN: 'Giáo án (GLV)', REVISED: 'Giáo án đã chỉnh sửa (TBM)' };

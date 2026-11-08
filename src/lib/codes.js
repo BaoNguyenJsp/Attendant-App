@@ -42,7 +42,6 @@ const round1 = (n) => Math.round(n * 10) / 10;
 export const semesterAvg = (quiz, exam) => (quiz === null || exam === null ? null : (quiz + 2 * exam) / 3);
 export const yearAvg = (s1, s2) => (s1 !== null && s2 !== null ? (s1 + 2 * s2) / 3 : s1 ?? s2);
 export const academicRating = (avg) => (avg === null ? null : avg >= 8 ? 'EXCELLENT' : avg >= 6.5 ? 'GOOD' : 'AVERAGE');
-export const attendanceRating = (pct) => (pct >= 80 ? 'EXCELLENT' : pct >= 65 ? 'GOOD' : pct >= 50 ? 'FAIR' : 'NEEDS_WORK');
 
 // One student's year result from the four raw scores. Averages are rounded to one decimal for display
 // and storage; the year average and rating are computed from the unrounded semester averages.

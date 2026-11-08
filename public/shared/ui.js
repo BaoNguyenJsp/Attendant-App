@@ -87,9 +87,21 @@ export function setupViewToggle(button, onChange) {
   return () => cards;
 }
 
-// One tab per session; a green dot marks a session that has any mark this week. rows: [{ marks }].
-export const sessionTabs = (codes, current, rows) => codes.map((c) => `<button type="button" data-session="${c}" title="${esc(SESSION_LABEL[c])}"`
-  + ` class="relative py-2 px-0.5 rounded-lg text-[11px] sm:text-xs font-bold whitespace-nowrap ${c === current ? 'bg-blue-900 text-white' : 'bg-slate-200 text-slate-700'}">${esc(SESSION_SHORT_LABEL[c])}`
+// The holiday sessions of the week cannot be picked; when the picked one is a holiday, the first open session is picked instead.
+// When every session is a holiday the pick stays, and the page locks the marks.
+export function lockHolidays(select, holidays) {
+  const off = new Set(holidays.map((h) => h.session));
+  for (const option of select.options) {
+    option.disabled = off.has(option.value);
+    option.textContent = `${SESSION_LABEL[option.value]}${option.disabled ? ' (nghỉ)' : ''}`;
+  }
+  if (select.selectedOptions[0]?.disabled) select.value = [...select.options].find((o) => !o.disabled)?.value ?? select.value;
+}
+
+// One tab per session; a green dot marks a session that has any mark this week; holiday tabs are disabled. rows: [{ marks }].
+export const sessionTabs = (codes, current, rows, holidays = []) => codes.map((c) => `<button type="button" data-session="${c}" title="${esc(SESSION_LABEL[c])}"`
+  + `${holidays.some((h) => h.session === c) ? ' disabled' : ''}`
+  + ` class="relative py-2 px-0.5 rounded-lg text-[11px] sm:text-xs font-bold whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed ${c === current ? 'bg-blue-900 text-white' : 'bg-slate-200 text-slate-700'}">${esc(SESSION_SHORT_LABEL[c])}`
   + `${rows.some((r) => r.marks[c] !== MARK.NONE) ? '<span class="absolute top-1 right-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500"></span>' : ''}</button>`).join('');
 
 const markButton = (i, mark, on, sign, label, title, onClass, editable) => `<button type="button" title="${title}" class="att-mark w-12 h-11 rounded-lg flex flex-col items-center justify-center leading-none ${on ? onClass : 'bg-slate-200 text-slate-500'}"`

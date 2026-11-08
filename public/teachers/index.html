@@ -137,6 +137,7 @@
             class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-6 py-2.5 rounded-lg whitespace-nowrap">⬇ Excel</button>
           <button id="ts-print" class="bg-slate-700 hover:bg-slate-800 text-white font-bold px-6 py-2.5 rounded-lg whitespace-nowrap">🖨 PDF</button>
         </div>
+        <div id="ts-sessions" class="col-span-full flex flex-wrap gap-x-5 gap-y-1"></div>
       </div>
       <div class="tbl-scroll sticky">
         <table class="w-full text-sm border-collapse min-w-[960px]" id="ts-table">
@@ -145,11 +146,11 @@
               <th class="p-3">Họ Tên</th>
               <th class="p-3">Lớp</th>
               <th class="p-3">Buổi dạy</th>
-              <th class="p-3">Lễ CN</th>
-              <th class="p-3">Học GL</th>
-              <th class="p-3">Chầu TT</th>
-              <th class="p-3">Lễ T5</th>
-              <th class="p-3">Họp HT</th>
+              <th class="p-3" data-session="SUNDAY_MASS">Lễ CN</th>
+              <th class="p-3" data-session="CATECHISM">Học GL</th>
+              <th class="p-3" data-session="ADORATION">Chầu TT</th>
+              <th class="p-3" data-session="THURSDAY_MASS">Lễ T5</th>
+              <th class="p-3" data-session="TEACHER_MEETING">Họp HT</th>
               <th class="p-3">Tỉ lệ hiện diện</th>
             </tr>
           </thead>

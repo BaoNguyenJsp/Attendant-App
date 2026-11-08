@@ -7,10 +7,11 @@
 
 import {
   initCommon, load, state, $, api, esc, toast, fillSel, setupTabs, exportExcel,
-  TEACHER_SESSIONS, MARK, isAdmin, personName, snapToSunday, pct, dateRange, rangeLabel,
+  TEACHER_SESSIONS, MARK, isAdmin, personName, snapToSunday, ratio, dateRange, rangeLabel,
+  sessionPicker, pickedSessions, showSessionColumns, sumOf,
 } from '../shared/common.js';
 import { SESSION_LABEL } from '../shared/labels.js';
-import { absenceTable, printDocument, setupViewToggle, sessionTabs, markCards, askUnsaved, shiftWeek } from '../shared/ui.js';
+import { absenceTable, printDocument, setupViewToggle, sessionTabs, lockHolidays, markCards, askUnsaved, shiftWeek } from '../shared/ui.js';
 
 await initCommon();
 await load('classes', 'groups');
@@ -32,6 +33,8 @@ let shown = { sectorGroupId: 0, weekOf: '' };
 
 const BLANK = Object.fromEntries(TEACHER_SESSIONS.map((code) => [code, MARK.NONE]));
 const session = () => $('ta-session').value;
+// A holiday session is not marked; only a week whose sessions are all holidays leaves one selected.
+const isHoliday = () => holidays.some((h) => h.session === session());
 const dirtyRows = () => rows.filter((row) => TEACHER_SESSIONS.some((code) => row.marks[code] !== row.base[code]));
 
 // The list of teachers comes with the attendance; the page never loads the directory (R8).
@@ -44,6 +47,7 @@ async function loadWeek() {
   try { r = await api('getTeacherAttendance', { sectorGroupId, weekOf }); } catch (e) { return toast(e.message); }
   const saved = new Map(r.records.map((x) => [x.userId, x.marks]));
   holidays = r.holidays;
+  lockHolidays($('ta-session'), holidays);
   rows = r.teachers.map((teacher) => {
     const marks = { ...BLANK, ...(saved.get(teacher.userId) ?? {}) };
     return { teacher, base: { ...marks }, marks };
@@ -59,7 +63,7 @@ function renderWeek() {
   note.style.display = off ? 'block' : 'none';
   note.textContent = off ? `⚠ Buổi này được nghỉ phép${off.reason ? ` (${off.reason})` : ''}.` : '';
 
-  const box = (i, which, checked) => `<td class="p-2 border text-center"><input type="checkbox" class="attendance-checkbox" data-i="${i}" data-which="${which}"${checked ? ' checked' : ''}></td>`;
+  const box = (i, which, checked) => `<td class="p-2 border text-center"><input type="checkbox" class="attendance-checkbox" data-i="${i}" data-which="${which}"${checked ? ' checked' : ''}${off ? ' disabled' : ''}></td>`;
   $('ta-tbody').innerHTML = rows.map(({ teacher, marks }, i) => '<tr>'
     + (isAdmin() ? `<td class="p-2 border">${esc(teacher.email ?? '')}</td>` : '')
     + `<td class="p-2 border font-medium">${esc(personName(teacher))}</td>`
@@ -69,12 +73,12 @@ function renderWeek() {
     + '</tr>').join('') || '<tr><td colspan="5" class="p-4 text-center text-slate-400">Chưa có Huynh trưởng trong danh sách này.</td></tr>';
 
   // Card view: the same data as a table row (email for Xứ đoàn, name, class, the two marks), with big buttons.
-  $('ta-tabs').innerHTML = sessionTabs(TEACHER_SESSIONS, code, rows);
+  $('ta-tabs').innerHTML = sessionTabs(TEACHER_SESSIONS, code, rows, holidays);
   $('ta-cards').innerHTML = markCards(rows.map(({ teacher, marks }) => ({
     title: esc(personName(teacher)),
     sub: [teacher.className ?? 'Xứ đoàn', ...(isAdmin() && teacher.email ? [teacher.email] : [])].map(esc).join(' · '),
     mark: marks[code],
-  })), true, 'Chưa có Huynh trưởng trong danh sách này.');
+  })), !off, 'Chưa có Huynh trưởng trong danh sách này.');
 
   const present = rows.filter((r) => r.marks[code] === MARK.PRESENT).length;
   const excused = rows.filter((r) => r.marks[code] === MARK.EXCUSED).length;
@@ -86,6 +90,7 @@ function renderWeek() {
 }
 
 function toggle(i, mark) {
+  if (isHoliday()) return;
   const row = rows[i];
   row.marks[session()] = row.marks[session()] === mark ? MARK.NONE : mark;
   renderWeek();
@@ -125,14 +130,14 @@ async function changeWeek() {
 
 const cardView = setupViewToggle($('ta-view'), renderWeek);
 
-/* ---------- Tab 2: absence lookup (exact match; every match shown) ---------- */
+/* ---------- Tab 2: absence lookup (part of the name, every match shown) ---------- */
 async function renderAbsences() {
   const query = $('tabs-query').value;
   const out = $('tabs-out');
-  if (!query.trim()) { out.innerHTML = '<p class="text-amber-600 font-medium">Nhập đúng họ tên (có dấu) của Huynh trưởng.</p>'; return; }
+  if (!query.trim()) { out.innerHTML = '<p class="text-amber-600 font-medium">Nhập họ tên (một phần, có dấu) của Huynh trưởng.</p>'; return; }
   let teachers;
   try { teachers = (await api('searchTeachers', { query })).teachers; } catch (e) { return toast(e.message); }
-  if (!teachers.length) { out.innerHTML = '<p class="text-amber-600 font-medium">Không tìm thấy Huynh trưởng nào khớp chính xác trong các ngành bạn quản lý.</p>'; return; }
+  if (!teachers.length) { out.innerHTML = '<p class="text-amber-600 font-medium">Không tìm thấy Huynh trưởng nào khớp trong các ngành bạn quản lý.</p>'; return; }
 
   const cards = await Promise.all(teachers.map(async (t) => {
     let r;
@@ -160,13 +165,14 @@ async function renderStats() {
   if (!sectorGroupId) return;
   let r;
   try { r = await api('getTeacherAttendanceStats', { sectorGroupId, classId: $('ts-class').value || undefined, ...dateRange('ts-from', 'ts-to') }); } catch (e) { return toast(e.message); }
+  const codes = pickedSessions('ts-sessions');
+  showSessionColumns('ts-table', codes);
   $('ts-tbody').innerHTML = r.stats.length
     ? r.stats.map((t) => {
-      const total = TEACHER_SESSIONS.reduce((sum, code) => sum + t.present[code], 0);
       return `<tr><td class="p-2 border font-medium">${esc(personName(t))}</td><td class="p-2 border text-center">${esc(t.className ?? 'Xứ đoàn')}</td>`
         + `<td class="p-2 border text-center">${t.taught}</td>`
-        + TEACHER_SESSIONS.map((code) => `<td class="p-2 border text-center">${pct(t.present[code], r.max[code])}%</td>`).join('')
-        + `<td class="p-2 border text-center font-bold">${pct(total, r.maxTotal)}%</td></tr>`;
+        + codes.map((code) => `<td class="p-2 border text-center">${ratio(t.present[code], r.max[code])}</td>`).join('')
+        + `<td class="p-2 border text-center font-bold">${ratio(sumOf(t.present, codes), sumOf(r.max, codes))}</td></tr>`;
     }).join('')
     : '<tr><td colspan="9" class="p-4 text-center text-slate-400">Chưa có dữ liệu.</td></tr>';
 }
@@ -191,7 +197,7 @@ $('ta-sector').addEventListener('change', changeWeek);
 $('ta-week').addEventListener('change', changeWeek);
 $('ta-session').addEventListener('change', renderWeek);
 // Sets every teacher's mark for the current session: PRESENT ticks all, NONE clears both boxes.
-const markAll = (mark) => { rows.forEach((row) => { row.marks[session()] = mark; }); renderWeek(); };
+const markAll = (mark) => { if (isHoliday()) return toast('Buổi này được nghỉ, không điểm danh.'); rows.forEach((row) => { row.marks[session()] = mark; }); renderWeek(); };
 $('ta-markall').addEventListener('click', () => markAll(MARK.PRESENT));
 $('ta-unmarkall').addEventListener('click', () => markAll(MARK.NONE));
 $('ta-save').addEventListener('click', saveWeek);
@@ -223,6 +229,7 @@ $('tabs-out').addEventListener('click', (e) => {
 
 $('ts-sector').addEventListener('change', () => { fillStatsClasses(); renderStats(); });
 for (const id of ['ts-class', 'ts-from', 'ts-to']) $(id).addEventListener('change', renderStats);
+sessionPicker('ts-sessions', TEACHER_SESSIONS, renderStats);
 $('ts-excel').addEventListener('click', () => exportExcel('ts-table', 'Thống kê Huynh trưởng'));
 $('ts-print').addEventListener('click', printStats);
 

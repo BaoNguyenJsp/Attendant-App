@@ -84,3 +84,12 @@ export async function saveUser(db, { user, groupIds }, actorId) {
   await db.batch(statements);
   return db.prepare(`SELECT ${USER_COLUMNS} FROM Users WHERE Email = ?`).bind(email).first();
 }
+
+// Memberships and teacher attendance go with the user (ON DELETE CASCADE); lessons keep their teacher, so such a user is locked instead.
+export async function deleteUser(db, id, actorId) {
+  if (id === actorId) fail(400, 'Không thể tự xóa tài khoản của mình.');
+  const u = await db.prepare('SELECT (SELECT COUNT(*) FROM Users WHERE Id = ?) AS found, (SELECT COUNT(*) FROM Lessons WHERE TeacherId = ?) AS lessons').bind(id, id).first();
+  if (!u.found) fail(404, 'Không tìm thấy Huynh trưởng.');
+  if (u.lessons) fail(409, `Không xóa được: Huynh trưởng còn ${u.lessons} giáo án. Hãy chuyển sang "Ngưng hoạt động".`);
+  await db.prepare('DELETE FROM Users WHERE Id = ?').bind(id).run();
+}

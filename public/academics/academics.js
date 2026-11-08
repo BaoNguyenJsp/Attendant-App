@@ -134,7 +134,7 @@ async function importScores() {
   if (skipped) toast(`Đã nhập ${fills.length} dòng; bỏ qua ${skipped} dòng không thuộc lớp.`);
 }
 
-/* ---------- Tab 2: academic record (exact match, every match shown) ---------- */
+/* ---------- Tab 2: academic record (part of the name or exact CCCD, every match shown) ---------- */
 const recordRow = (r) => `<tr><td class="p-2 border text-center">${esc(r.schoolYear)}</td><td class="p-2 border text-center">${esc(r.className)}</td>`
   + `<td class="p-2 border text-center">${fmt1(r.semester1Avg)}</td><td class="p-2 border text-center">${fmt1(r.semester2Avg)}</td>`
   + `<td class="p-2 border text-center font-bold">${fmt1(r.yearAvg)}</td><td class="p-2 border text-center">${percentCell(r.attendancePct)}</td>`
@@ -143,9 +143,9 @@ const recordRow = (r) => `<tr><td class="p-2 border text-center">${esc(r.schoolY
 async function renderRecord() {
   const query = $('rec-query').value;
   const out = $('rec-out');
-  if (!query.trim()) { out.innerHTML = '<p class="text-amber-600 font-medium">Nhập đúng họ tên (có dấu) hoặc số CCCD của Thiếu nhi.</p>'; return; }
+  if (!query.trim()) { out.innerHTML = '<p class="text-amber-600 font-medium">Nhập họ tên (một phần, có dấu) hoặc số CCCD của Thiếu nhi.</p>'; return; }
   const hits = state.students.filter((s) => matchesStudent(s, query));
-  if (!hits.length) { out.innerHTML = '<p class="text-amber-600 font-medium">Không tìm thấy Thiếu nhi nào khớp chính xác.</p>'; return; }
+  if (!hits.length) { out.innerHTML = '<p class="text-amber-600 font-medium">Không tìm thấy Thiếu nhi nào khớp.</p>'; return; }
 
   const cards = await Promise.all(hits.map(async (s) => {
     let r;

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isMark, parseScore, yearResult, attendanceRating, TIER_RANK } from '../src/lib/codes.js';
+import { isMark, parseScore, yearResult, TIER_RANK } from '../src/lib/codes.js';
 import {
   idKey, firstName, splitPhones, joinPhones, searchKey, matchesStudent, matchesTeacher,
   isDate, toSunday, upcomingSunday, sundaysBetween,
@@ -41,10 +41,6 @@ test('yearResult follows the formulas of section 6.5', () => {
   assert.deepEqual(yearResult({ quizS1: 0, examS1: 0, quizS2: null, examS2: null }), { semester1Avg: 0, semester2Avg: null, yearAvg: 0, rating: 'AVERAGE' });
 });
 
-test('attendanceRating thresholds', () => {
-  assert.deepEqual([80, 79, 65, 64, 50, 49].map(attendanceRating), ['EXCELLENT', 'GOOD', 'GOOD', 'FAIR', 'FAIR', 'NEEDS_WORK']);
-});
-
 test('TIER_RANK orders the four group types', () => {
   assert.ok(TIER_RANK.CLASS < TIER_RANK.SECTOR && TIER_RANK.SECTOR < TIER_RANK.SECTOR_ADMIN && TIER_RANK.SECTOR_ADMIN < TIER_RANK.ADMIN);
 });
@@ -77,14 +73,16 @@ test('searchKey ignores case, end spaces and accent encoding, nothing else', () 
   assert.notEqual(searchKey('Nguyen'), searchKey('Nguyễn'));
 });
 
-test('matchesStudent: exact full name, saint + full name, or CCCD', () => {
+test('matchesStudent: any part of saint + full name, or exact CCCD', () => {
   const s = { fullName: 'Nguyễn Thị An', saintName: 'Maria', idKey: '79300000001' };
   assert.equal(matchesStudent(s, 'nguyễn thị an'), true);
   assert.equal(matchesStudent(s, 'Maria Nguyễn Thị An'), true);
   assert.equal(matchesStudent(s, '079300000001'), true);
   assert.equal(matchesStudent(s, "'79300000001"), true);
-  assert.equal(matchesStudent(s, 'An'), false);
-  assert.equal(matchesStudent(s, 'Nguyễn Thị'), false);
+  assert.equal(matchesStudent(s, 'An'), true);
+  assert.equal(matchesStudent(s, 'Nguyễn Thị'), true);
+  assert.equal(matchesStudent(s, 'maria nguyễn'), true);
+  assert.equal(matchesStudent(s, 'Bình'), false);
   assert.equal(matchesStudent(s, 'Nguyen Thi An'), false);
   assert.equal(matchesStudent(s, '7930000000'), false);
   assert.equal(matchesStudent(s, ''), false);
@@ -95,7 +93,9 @@ test('matchesTeacher: email only when allowed', () => {
   const u = { fullName: 'Trần Văn Bình', saintName: 'Giuse', email: 'binh@example.com' };
   assert.equal(matchesTeacher(u, 'trần văn bình'), true);
   assert.equal(matchesTeacher(u, 'Giuse Trần Văn Bình'), true);
-  assert.equal(matchesTeacher(u, 'Bình'), false);
+  assert.equal(matchesTeacher(u, 'Bình'), true);
+  assert.equal(matchesTeacher(u, 'An'), false);
+  assert.equal(matchesTeacher(u, 'binh@', { byEmail: true }), false);
   assert.equal(matchesTeacher(u, 'BINH@example.com'), false);
   assert.equal(matchesTeacher(u, 'BINH@example.com', { byEmail: true }), true);
 });

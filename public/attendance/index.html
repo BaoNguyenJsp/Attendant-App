@@ -207,6 +207,7 @@
             class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-6 py-2.5 rounded-lg">⬇ Excel</button>
           <button id="stats-print" class="bg-slate-700 hover:bg-slate-800 text-white font-bold px-6 py-2.5 rounded-lg">🖨 PDF</button>
         </div>
+        <div id="stats-sessions" class="col-span-full flex flex-wrap gap-x-5 gap-y-1"></div>
       </div>
       <div class="tbl-scroll sticky">
         <table class="w-full text-sm border-collapse min-w-[700px]" id="stats-table">
@@ -214,10 +215,10 @@
             <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
               <th class="p-3">STT</th>
               <th class="p-3">Họ Tên</th>
-              <th class="p-3">Lễ Chúa Nhật</th>
-              <th class="p-3">Học Giáo Lý</th>
-              <th class="p-3">Chầu Thánh Thể</th>
-              <th class="p-3">Lễ Thứ Năm</th>
+              <th class="p-3" data-session="SUNDAY_MASS">Lễ Chúa Nhật</th>
+              <th class="p-3" data-session="CATECHISM">Học Giáo Lý</th>
+              <th class="p-3" data-session="ADORATION">Chầu Thánh Thể</th>
+              <th class="p-3" data-session="THURSDAY_MASS">Lễ Thứ Năm</th>
               <th class="p-3">Tỉ lệ hiện diện</th>
             </tr>
           </thead>
@@ -238,6 +239,7 @@
           <button id="ov-excel" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-6 py-2.5 rounded-lg">⬇ Excel</button>
           <button id="ov-print" class="bg-slate-700 hover:bg-slate-800 text-white font-bold px-6 py-2.5 rounded-lg">🖨 PDF</button>
         </div>
+        <div id="ov-sessions" class="col-span-full flex flex-wrap gap-x-5 gap-y-1"></div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
         <div class="bg-blue-50 border border-blue-200 p-4 rounded-xl text-center">
@@ -259,10 +261,10 @@
             <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
               <th class="p-3">Lớp</th>
               <th class="p-3">Sĩ Số</th>
-              <th class="p-3">Lễ CN</th>
-              <th class="p-3">Giáo Lý</th>
-              <th class="p-3">Chầu TT</th>
-              <th class="p-3">Lễ T5</th>
+              <th class="p-3" data-session="SUNDAY_MASS">Lễ CN</th>
+              <th class="p-3" data-session="CATECHISM">Giáo Lý</th>
+              <th class="p-3" data-session="ADORATION">Chầu TT</th>
+              <th class="p-3" data-session="THURSDAY_MASS">Lễ T5</th>
               <th class="p-3">Tỉ lệ</th>
               <th class="p-3">Xếp Loại</th>
             </tr>

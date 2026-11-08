@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { seededD1 } from './helpers/seeded.mjs';
 import { AppError } from '../src/lib/errors.js';
 import { loadSession } from '../src/lib/db/users.js';
-import { listStudents, saveStudent, importStudents, getStudent, setPhotoVersion } from '../src/lib/db/students.js';
+import { listStudents, saveStudent, importStudents, deleteStudent, getStudent, setPhotoVersion } from '../src/lib/db/students.js';
 
 const status = (code) => (e) => e instanceof AppError && e.status === code;
 const admin = (db) => loadSession(db, 'doruoora@gmail.com');
@@ -114,7 +114,7 @@ test('siblings: adding merges families, removing takes one out, a family of one 
 test('import: updates by CCCD into the selected class, creates the rest, keeps what the file does not hold', async () => {
   const db = await seededD1();
   const existing = await row(db, 51); // class 2, to be pulled into class 1
-  const count = await importStudents(db, {
+  const count = await importStudents(db, await admin(db), {
     classId: 1,
     students: [
       { idNumber: `'${existing.IdNumber}`, fullName: 'Tên Đã Sửa', gender: 'M', phones: [] },
@@ -122,7 +122,7 @@ test('import: updates by CCCD into the selected class, creates the rest, keeps w
       { idNumber: '', fullName: 'Thiếu CCCD' },
       { idNumber: '079366666666', fullName: ' ' },
     ],
-  }, 1, { year: 2030 });
+  }, { year: 2030 });
   assert.equal(count, 2);
   const updated = await row(db, 51);
   assert.deepEqual([updated.FullName, updated.FirstName, updated.ClassId, updated.Phone, updated.EnrollYear, updated.Status, updated.IdNumber],
@@ -135,9 +135,9 @@ test('import: updates by CCCD into the selected class, creates the rest, keeps w
 test('import refuses a file with a bad date or gender and changes nothing', async () => {
   const db = await seededD1();
   const good = { idNumber: '079377777777', fullName: 'Lê Văn Mới' };
-  await assert.rejects(importStudents(db, { classId: 1, students: [good, { ...good, idNumber: '079377777778', dateOfBirth: '31/12/2019' }] }, 1), status(400));
-  await assert.rejects(importStudents(db, { classId: 1, students: [{ ...good, gender: 'Nam' }] }, 1), status(400));
-  await assert.rejects(importStudents(db, { classId: 99, students: [good] }, 1), status(400));
+  await assert.rejects(importStudents(db, await admin(db), { classId: 1, students: [good, { ...good, idNumber: '079377777778', dateOfBirth: '31/12/2019' }] }), status(400));
+  await assert.rejects(importStudents(db, await admin(db), { classId: 1, students: [{ ...good, gender: 'Nam' }] }), status(400));
+  await assert.rejects(importStudents(db, await admin(db), { classId: 99, students: [good] }), status(400));
   assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM Students').first('n'), 600);
 });
 
@@ -150,4 +150,43 @@ test('photo version marks whether a student has a photo', async () => {
   assert.equal((await getStudent(db, 1)).photoVersion, 0);
   assert.equal(await getStudent(db, 9999), null);
   await assert.rejects(setPhotoVersion(db, 9999, 1, 1), status(404));
+});
+
+test('a teacher imports into their own class only, and cannot pull a student from another class', async () => {
+  const db = await seededD1();
+  const t = await teacher(db);
+  const good = { idNumber: '079377777777', fullName: 'Lê Văn Mới' };
+  await assert.rejects(importStudents(db, t, { classId: 2, students: [good] }), status(403));
+  const other = await row(db, 51); // class 2
+  await assert.rejects(importStudents(db, t, { classId: 1, students: [good, { idNumber: other.IdNumber, fullName: 'X' }] }), status(403));
+  assert.equal((await row(db, 51)).ClassId, 2);
+  const mine = await row(db, 1); // class 1
+  assert.equal(await importStudents(db, t, { classId: 1, students: [good, { idNumber: mine.IdNumber, fullName: 'Tên Mới' }] }), 2);
+  assert.equal((await row(db, 1)).FullName, 'Tên Mới');
+});
+
+test('deleting a student: their class only, attendance goes with them, a family of two ends', async () => {
+  const db = await noFamilies(await seededD1());
+  const s1 = await row(db, 1);
+  await saveStudent(db, await admin(db), { id: 1, idNumber: s1.IdNumber, fullName: s1.FullName, classId: 1, siblingIds: [2] });
+  await db.prepare("INSERT OR REPLACE INTO Attendance (StudentId, ClassId, WeekOf, SundayMass) VALUES (1, 1, '2026-09-06', 1)").run();
+  await assert.rejects(deleteStudent(db, await teacher(db), 51), status(403)); // class 2
+  await assert.rejects(deleteStudent(db, await teacher(db), 9999), status(404));
+  await deleteStudent(db, await teacher(db), 1);
+  assert.equal(await row(db, 1), null);
+  assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM Attendance WHERE StudentId = 1').first('n'), 0);
+  assert.deepEqual(await family(db, 2), []);
+  assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM SiblingMembers').first('n'), 0);
+});
+
+test('address: saved by the form, listed, and kept by an import row that leaves it blank', async () => {
+  const db = await seededD1();
+  const { id } = await saveStudent(db, await admin(db), { ...fresh, address: ' 12 Lê Lợi, Q.1 ' });
+  assert.equal((await listStudents(db)).find((s) => s.id === id).address, '12 Lê Lợi, Q.1');
+  await importStudents(db, await admin(db), { classId: 1, students: [{ ...fresh, address: '' }] });
+  assert.equal((await row(db, id)).Address, '12 Lê Lợi, Q.1');
+  await importStudents(db, await admin(db), { classId: 1, students: [{ ...fresh, address: '34 Hai Bà Trưng' }] });
+  assert.equal((await row(db, id)).Address, '34 Hai Bà Trưng');
+  await saveStudent(db, await admin(db), { ...fresh, id, address: '' });
+  assert.equal((await row(db, id)).Address, null);
 });

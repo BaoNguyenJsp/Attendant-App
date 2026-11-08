@@ -3,8 +3,9 @@
 import { fail } from '../lib/errors.js';
 import { requireTier, canManageSector, isAdmin } from '../lib/access.js';
 import { saveConfig, saveHolidays, saveClass, deleteClass, reorderClasses, saveGroup, deleteGroup } from '../lib/db/org.js';
-import { saveUser } from '../lib/db/users.js';
-import { saveStudent, importStudents } from '../lib/db/students.js';
+import { saveUser, deleteUser } from '../lib/db/users.js';
+import { saveStudent, importStudents, deleteStudent } from '../lib/db/students.js';
+import { removePhoto } from './photos.js';
 import {
   getStudentAttendance, saveStudentAttendance, getStudentAttendanceStats, getAttendanceOverview, getStudentAbsences,
   getTeacherAttendance, saveTeacherAttendance, getTeacherAttendanceStats, searchTeachers, getTeacherAbsences,
@@ -67,12 +68,21 @@ export const ACTIONS = {
     },
   },
   importStudents: {
-    tier: 'ADMIN',
     run: async ({ db, actor, lists }, b) => {
-      const count = await importStudents(db, { classId: id(b.classId, 'Lớp'), students: b.students }, actor.userId);
+      const count = await importStudents(db, actor, { classId: id(b.classId, 'Lớp'), students: b.students });
       await lists.refresh('students');
       await lists.refresh('classes');
       return { count };
+    },
+  },
+  deleteStudent: {
+    run: async ({ db, env, actor, lists }, b) => {
+      const studentId = id(b.id);
+      await deleteStudent(db, actor, studentId);
+      await removePhoto(env, studentId); // the R2 copy has no cascade
+      await lists.refresh('students');
+      await lists.refresh('classes');
+      return {};
     },
   },
   getStudentAbsences: { run: ({ db, today }, b) => getStudentAbsences(db, { studentId: id(b.studentId), today }) },
@@ -143,6 +153,14 @@ export const ACTIONS = {
       const user = await saveUser(db, { user: b.user, groupIds: b.groupIds }, actor.userId);
       await lists.refresh('directory');
       return { user };
+    },
+  },
+  deleteUser: {
+    tier: 'ADMIN',
+    run: async ({ db, actor, lists }, b) => {
+      await deleteUser(db, id(b.id), actor.userId);
+      await lists.refresh('directory');
+      return {};
     },
   },
   saveClass: manage((db, b) => saveClass(db, { id: optionalId(b.id), name: b.name, grade: b.grade })),

@@ -34,17 +34,17 @@
         </div>
         <div class="md:col-span-2 flex flex-wrap sm:flex-nowrap items-end gap-2">
           <button id="st-add"
-            class="admin-only w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg whitespace-nowrap">＋
+            class="class-write w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg whitespace-nowrap">＋
             Thêm thiếu nhi</button>
           <label
-            class="admin-only w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-lg text-center cursor-pointer whitespace-nowrap"
+            class="class-write w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-lg text-center cursor-pointer whitespace-nowrap"
             title="Nhập danh sách từ Excel vào lớp đang chọn">
             📤 Nhập Excel
             <input type="file" id="st-file" accept=".xlsx, .xls" class="hidden">
           </label>
         </div>
       </div>
-      <div class="admin-only mt-3 mb-5">
+      <div class="class-write mt-3 mb-5">
         <a id="st-template"
           class="text-blue-600 hover:text-blue-800 hover:underline text-sm font-medium cursor-pointer inline-flex items-center gap-1">
           ⬇️ Tải file mẫu (.xlsx)
@@ -60,9 +60,10 @@
               <th class="p-3">Ngày Sinh</th>
               <th class="p-3">Cha</th>
               <th class="p-3">Mẹ</th>
+              <th class="p-3">Địa Chỉ</th>
               <th class="p-3">SĐT</th>
               <th class="p-3">Anh/Chị/Em</th>
-              <th class="admin-only p-3 sticky-col">Thao Tác</th>
+              <th class="class-write p-3 sticky-col">Thao Tác</th>
             </tr>
           </thead>
           <tbody id="st-tbody"></tbody>
@@ -88,7 +89,7 @@
         <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Tìm kiếm Thiếu nhi</label>
         <input type="text" id="st-search"
           class="w-full border border-slate-300 p-2.5 rounded-lg font-semibold outline-none focus:border-blue-500"
-          placeholder="Nhập đúng họ tên (có dấu) hoặc số CCCD...">
+          placeholder="Nhập họ tên (một phần, có dấu) hoặc số CCCD...">
         <p class="text-xs text-slate-500 mt-1">Phải nhập đầy đủ và đúng: họ tên, tên thánh + họ tên, hoặc số CCCD.</p>
       </div>
       <div class="tbl-scroll sticky">
@@ -104,6 +105,7 @@
               <th class="p-3">Ngày Sinh</th>
               <th class="p-3">Cha</th>
               <th class="p-3">Mẹ</th>
+              <th class="p-3">Địa Chỉ</th>
               <th class="p-3">SĐT</th>
               <th class="p-3">Anh/Chị/Em</th>
             </tr>
@@ -129,6 +131,7 @@
         <div class="form-group" id="m-status-row"><label>Trạng Thái</label><select id="m-status"></select></div>
         <div class="form-group"><label>Họ Tên Cha</label><input id="m-father" type="text"></div>
         <div class="form-group"><label>Họ Tên Mẹ</label><input id="m-mother" type="text"></div>
+        <div class="form-group full"><label>Địa Chỉ</label><input id="m-address" type="text"></div>
         <div class="form-group full">
           <label>Số Điện Thoại</label>
           <div id="m-phones" class="flex flex-col gap-2"></div>
@@ -138,7 +141,7 @@
           <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Anh/Chị/Em</label>
           <div id="m-sibling-tags" class="flex flex-wrap gap-1 mb-2"></div>
           <input type="text" id="m-sibling-search" class="w-full border p-2.5 rounded-lg"
-            placeholder="Nhập đúng họ tên hoặc số CCCD..." autocomplete="off">
+            placeholder="Nhập họ tên (một phần, có dấu) hoặc số CCCD..." autocomplete="off">
           <div id="m-sibling-dropdown"
             class="absolute z-10 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto hidden mt-1">
           </div>

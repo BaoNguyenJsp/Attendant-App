@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { seededD1 } from './helpers/seeded.mjs';
 import { AppError } from '../src/lib/errors.js';
-import { loadSession, isSessionValid, getDirectory, saveUser } from '../src/lib/db/users.js';
+import { loadSession, isSessionValid, getDirectory, saveUser, deleteUser } from '../src/lib/db/users.js';
 
 const status = (code) => (e) => e instanceof AppError && e.status === code;
 const groupsOf = async (db, userId) => (await db.prepare('SELECT GroupId FROM Memberships WHERE UserId = ? ORDER BY GroupId').bind(userId).all()).results.map((r) => r.GroupId);
@@ -82,4 +82,19 @@ test('getDirectory lists users, groups and memberships', async () => {
   const d = await getDirectory(db);
   assert.deepEqual([d.users.length, d.groups.length, d.memberships.length], [60, 23, 60]);
   assert.deepEqual(Object.keys(d.users[0]).sort(), ['email', 'firstName', 'fullName', 'id', 'phone', 'saintName', 'status']);
+});
+
+test('deleteUser removes the user and their groups; refuses self and users with lessons', async () => {
+  const db = await seededD1();
+  const t = await loadSession(db, 'teacher08@example.com');
+  const admin = await loadSession(db, 'doruoora@gmail.com');
+  await assert.rejects(deleteUser(db, admin.userId, admin.userId), status(400));
+  await assert.rejects(deleteUser(db, 99999, admin.userId), status(404));
+  await db.prepare("INSERT OR REPLACE INTO Lessons (SchoolYear, WeekOf, ClassId, TeacherId) VALUES ('2026-2027', '2026-09-06', 1, ?)").bind(t.userId).run();
+  await assert.rejects(deleteUser(db, t.userId, admin.userId), status(409));
+  await db.prepare('DELETE FROM Lessons').run();
+  await deleteUser(db, t.userId, admin.userId);
+  assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM Users WHERE Id = ?').bind(t.userId).first('n'), 0);
+  assert.deepEqual(await groupsOf(db, t.userId), []);
+  assert.equal(await isSessionValid(db, t), false);
 });

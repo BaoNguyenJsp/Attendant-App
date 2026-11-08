@@ -2,7 +2,7 @@
 // The bytes live in the StudentPhotos table of D1. To move to R2, add the PHOTOS binding in wrangler.jsonc and
 // deploy: new photos then go to R2 under students/<Id>, and photos saved before stay readable from D1.
 import { fail } from '../lib/errors.js';
-import { requireTier } from '../lib/access.js';
+import { requireClass } from '../lib/access.js';
 import { getStudent, setPhotoVersion } from '../lib/db/students.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
@@ -37,7 +37,7 @@ async function writePhoto(env, studentId, bytes, contentType) {
     : env.DB.prepare('INSERT OR REPLACE INTO StudentPhotos (StudentId, ContentType, Bytes) VALUES (?, ?, ?)').bind(studentId, contentType, bytes)).run();
 }
 
-async function removePhoto(env, studentId) {
+export async function removePhoto(env, studentId) {
   if (env.PHOTOS) await env.PHOTOS.delete(keyOf(studentId));
   await env.DB.prepare('DELETE FROM StudentPhotos WHERE StudentId = ?').bind(studentId).run();
 }
@@ -59,8 +59,8 @@ export function registerPhotos(app, context) {
   // Upload and replace are the same call: the new bytes overwrite the old ones.
   app.put('/api/students/:id/photo', async (c) => {
     const ctx = context(c);
-    requireTier(ctx.actor, 'ADMIN');
     const student = await studentOf(c);
+    requireClass(ctx.actor, student.classId);
     const bytes = new Uint8Array(await c.req.arrayBuffer());
     const contentType = imageType(bytes);
     if (!contentType) fail(400, 'Ảnh phải là JPEG hoặc PNG.');
@@ -75,8 +75,8 @@ export function registerPhotos(app, context) {
 
   app.delete('/api/students/:id/photo', async (c) => {
     const ctx = context(c);
-    requireTier(ctx.actor, 'ADMIN');
     const student = await studentOf(c);
+    requireClass(ctx.actor, student.classId);
     await removePhoto(c.env, student.id);
     await setPhotoVersion(ctx.db, student.id, 0, ctx.actor.userId);
     await ctx.lists.refresh('students');

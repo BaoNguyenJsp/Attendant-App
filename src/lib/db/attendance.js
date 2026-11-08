@@ -3,7 +3,7 @@ import { all, now } from './sql.js';
 import { configMap, listHolidays, listClasses } from './org.js';
 import { fail } from '../errors.js';
 import { requireClass, isAdmin } from '../access.js';
-import { MARK, STUDENT_SESSIONS, TEACHER_SESSIONS, isMark, attendanceRating } from '../codes.js';
+import { MARK, STUDENT_SESSIONS, TEACHER_SESSIONS, isMark } from '../codes.js';
 import { isDate, toSunday, sundaysBetween, matchesTeacher } from '../text.js';
 
 export function requireWeek(weekOf) {
@@ -130,7 +130,7 @@ export async function presentTotals(db, today) {
 // UC-T5: the database counts the present marks per class; the Worker only divides.
 export async function getAttendanceOverview(db, { from, to, today }) {
   const weeks = inRange(await yearWeeks(db, today), from, to);
-  const { max, maxTotal } = possibleSessions(weeks, await listHolidays(db), STUDENT_SESSIONS);
+  const { max } = possibleSessions(weeks, await listHolidays(db), STUDENT_SESSIONS);
   const rows = weeks.length
     ? await all(db, `SELECT s.ClassId AS classId, ${presentSums(STUDENT_SESSIONS)} FROM Attendance a JOIN Students s ON s.Id = a.StudentId
         WHERE s.Status = 'ACTIVE' AND a.WeekOf IN (${weeks.map(() => '?').join(', ')}) GROUP BY s.ClassId`, ...weeks)
@@ -140,16 +140,16 @@ export async function getAttendanceOverview(db, { from, to, today }) {
 
   const classes = (await listClasses(db)).filter((c) => c.size > 0).map((c) => {
     const p = present.get(c.id) ?? {};
-    const pctTotal = percent(sumCodes(p, STUDENT_SESSIONS), maxTotal * c.size);
     return {
       classId: c.id, name: c.name, size: c.size,
-      pct: Object.fromEntries(codes.map((code) => [code, percent(p[code] ?? 0, max[code] * c.size)])),
-      pctTotal, rating: attendanceRating(pctTotal),
+      // Present sessions out of possible ones, per session; the page adds up the sessions picked in its filter and rates the class.
+      present: Object.fromEntries(codes.map((code) => [code, p[code] ?? 0])),
+      possible: Object.fromEntries(codes.map((code) => [code, max[code] * c.size])),
     };
   });
   const totalStudents = classes.reduce((sum, c) => sum + c.size, 0);
-  const whole = (code) => percent(rows.reduce((sum, r) => sum + r[code], 0), max[code] * totalStudents);
-  return { totalStudents, sundayMassPct: whole('SUNDAY_MASS'), thursdayMassPct: whole('THURSDAY_MASS'), classes };
+  const whole = (code) => ({ present: rows.reduce((sum, r) => sum + r[code], 0), possible: max[code] * totalStudents });
+  return { totalStudents, sundayMass: whole('SUNDAY_MASS'), thursdayMass: whole('THURSDAY_MASS'), classes };
 }
 
 export async function getStudentAbsences(db, { studentId, today }) {
