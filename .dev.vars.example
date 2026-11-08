@@ -1,0 +1,5 @@
+# Copy to .dev.vars for `wrangler dev`. In production each value is a Worker secret (wrangler secret put NAME).
+SESSION_SECRET=a-long-random-string
+OAUTH_CLIENT_ID=xxxxxxxx.apps.googleusercontent.com
+OAUTH_CLIENT_SECRET=xxxxxxxx
+OAUTH_REDIRECT_URI=http://localhost:8787/auth/callback

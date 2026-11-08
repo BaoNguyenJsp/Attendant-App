@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chuẩn bị Sheet cũ</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="prep.js"></script>
+</head>
+<body class="bg-slate-100 min-h-screen">
+<div class="max-w-4xl mx-auto p-4 space-y-4">
+  <div class="bg-white rounded-xl shadow-sm p-4">
+    <h1 class="font-bold text-lg mb-1">📥 Chuẩn bị Sheet cũ</h1>
+    <p class="text-sm text-slate-600">Gộp các tệp xuất thô vào Sheet cũ, rồi tải tệp đã chuẩn bị lên <b>Quản lý › Nhập sheet cũ</b>. Không gửi dữ liệu đi đâu.</p>
+  </div>
+
+  <div class="bg-white rounded-xl shadow-sm p-4 grid gap-3 text-sm">
+    <label class="grid gap-1"><b>Sheet cũ (bắt buộc)</b><span class="text-slate-500">Google Sheet cũ tải về dạng .xlsx</span><input id="f-base" type="file" accept=".xlsx"></label>
+    <label class="grid gap-1"><b>Huynh trưởng mới</b><span class="text-slate-500">Cột HoTen, TenLop (tên lớp hoặc tên nhóm)</span><input id="f-teachers" type="file" accept=".xlsx,.csv"></label>
+    <label class="grid gap-1"><b>Điểm danh Thiếu nhi</b><span class="text-slate-500">Cột Ngay, Buoi, TenLop, SoCCCD, TrangThai</span><input id="f-attendance" type="file" accept=".xlsx,.csv"></label>
+    <label class="grid gap-1"><b>Điểm danh Huynh trưởng</b><span class="text-slate-500">Cột Ngay, Buoi, HoTen, TrangThai (Buoi có thêm CN_HopHT / HopHuynhTruong)</span><input id="f-teacher-attendance" type="file" accept=".xlsx,.csv"></label>
+    <label class="grid gap-1"><b>Giáo án</b><span class="text-slate-500">Cột Ngày Chủ Nhật, Tên Lớp, Giáo Lý Viên, Nội dung bài học, Link Giáo Án, Giáo án duyệt</span><input id="f-teaching" type="file" accept=".xlsx,.csv"></label>
+    <div class="flex flex-wrap gap-2 pt-2">
+      <button id="run" class="bg-blue-600 text-white rounded-lg px-4 py-2 font-bold disabled:opacity-50">Xử lý</button>
+      <button id="dl-prepared" class="bg-green-600 text-white rounded-lg px-4 py-2 font-bold disabled:opacity-50" disabled>Tải xuống</button>
+      <button id="dl-report" class="bg-slate-600 text-white rounded-lg px-4 py-2 font-bold disabled:opacity-50" disabled>Tải báo cáo</button>
+    </div>
+    <p id="error" class="text-red-600 font-bold"></p>
+  </div>
+
+  <div id="summary" class="bg-white rounded-xl shadow-sm p-4 text-sm hidden"></div>
+</div>
+
+<dialog id="names" class="rounded-xl shadow-xl p-0 w-full max-w-2xl">
+  <form method="dialog" class="p-4 grid gap-3 text-sm">
+    <h2 class="font-bold text-lg">Chọn huynh trưởng</h2>
+    <p class="text-slate-600">Các tên dưới đây không khớp đúng một người dùng (so 2 chữ cuối). Chọn người đúng, hoặc Bỏ qua.</p>
+    <div id="names-list" class="grid gap-2 max-h-[60vh] overflow-y-auto"></div>
+    <div class="flex gap-2 justify-end">
+      <button value="cancel" class="rounded-lg px-4 py-2 border">Hủy</button>
+      <button value="ok" class="bg-blue-600 text-white rounded-lg px-4 py-2 font-bold">Xác nhận</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="ui.js"></script>
+</body>
+</html>

@@ -1,176 +1,154 @@
 /* =====================================================================
    SỔ THIẾU NHI — shared/ui.js
-   Helpers render/build dùng chung: công thức điểm, tra cứu người, badges,
-   trích lục (điểm). common.js và ui.js import chéo nhau nhưng
-   chỉ dùng bên trong thân hàm nên không có vòng lặp khởi tạo.
+   Small rendering helpers used by more than one page.
    ===================================================================== */
 'use strict';
 
-import {
-  num, fmt1, esc, $, api, sortStudents,
-  TSTUDENTS, USERS_ROWS, GROUP_MEMBERS, GROUPS_LIST, TCLASSES,
-  RANK, TYPES, TYPE_LABEL, ADMIN, BQT
-} from './common.js';
+import { $, esc, fmtDate, MARK } from './common.js';
+import { TIER_LABEL, TIER_BADGE, SESSION_LABEL, SESSION_SHORT_LABEL, MARK_LABEL } from './labels.js';
 
-/* ---------- Pre-Indexed Caches for Fast Lookups ---------- */
-let userEmailMap = null;
-let groupMembersMap = null;
-
-function ensureUserMap() {
-  if (!userEmailMap || userEmailMap.size !== USERS_ROWS.length) {
-    userEmailMap = new Map();
-    USERS_ROWS.forEach(u => {
-      if (u.Email) userEmailMap.set(String(u.Email).toLowerCase(), u.FullName || u.Email);
-    });
-  }
-}
-
-function ensureGroupMembersMap() {
-  if (!groupMembersMap) {
-    groupMembersMap = new Map();
-    GROUP_MEMBERS.forEach(m => {
-      const grp = m.GroupName;
-      if (!groupMembersMap.has(grp)) groupMembersMap.set(grp, []);
-      if (m.Email) groupMembersMap.get(grp).push(String(m.Email).toLowerCase());
-    });
-  }
-}
-
-/* ---------- Công thức điểm ---------- */
-export const dtbHK = (q, e) => { const a = num(q), b = num(e); return (a != null && b != null) ? (a + 2*b) / 3 : null; };
-export const dtbNam = (h1, h2) => { const a = num(h1), b = num(h2); if (a != null && b != null) return (a + 2*b) / 3; if (a != null) return a; if (b != null) return b; return null; };
-export const xepLoai = n => n == null ? '' : (n >= 8 ? 'Giỏi' : (n >= 6.5 ? 'Tiên tiến' : 'Trung bình'));
-
-export function normSummary(r) {
-  const h1 = num(r.avgH1), h2 = num(r.avgH2);
-  const avgYear = num(r.avgYear) != null ? num(r.avgYear) : dtbNam(h1, h2);
-  const cc = r.attendancePct != null && r.attendancePct !== '' ? +r.attendancePct : null;
-  return {idNumber:r.idNumber, fullName:r.fullName, className:r.className, h1, h2, avgYear, cc, rating: r.rating || xepLoai(avgYear)};
-}
-
-/* ---------- Dữ liệu dùng chung ---------- */
-export const userFull = em => {
-  if (!em) return '—';
-  ensureUserMap();
-  const e = String(em).toLowerCase();
-  return userEmailMap.get(e) || em || '—';
+const TONES = {
+  green: 'bg-emerald-100 text-emerald-700',
+  amber: 'bg-amber-100 text-amber-700',
+  red: 'bg-red-100 text-red-700',
+  blue: 'bg-blue-100 text-blue-700',
+  grey: 'bg-slate-200 text-slate-600',
 };
 
-export const teachersOf = grp => {
-  ensureGroupMembersMap();
-  return groupMembersMap.get(grp) || [];
-};
+export const badge = (text, tone = 'grey') => `<span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${TONES[tone] ?? TONES.grey}">${esc(text || '—')}</span>`;
 
-export function activeStudents(className) {
-  const targetClass = String(className || '').normalize('NFC').trim();
-  return sortStudents(TSTUDENTS.filter(s => String(s.CurrentClass || '').normalize('NFC').trim() === targetClass));
+export const STATUS_TONE = { ACTIVE: 'blue', INACTIVE: 'red', GRADUATED: 'grey' };
+
+// The badge of a group type or of a user's tier.
+export const tierBadge = (type) => `<span class="badge ${TIER_BADGE[type] ?? 'b-class'}">${esc(TIER_LABEL[type] ?? '—')}</span>`;
+
+// The table of missed sessions used by the two absence lookups. absences: [{ weekOf, session, mark }].
+export function absenceTable(tableId, absences) {
+  const rows = absences.length
+    ? absences.map((a) => `<tr><td class="p-2 border text-center">${esc(fmtDate(a.weekOf))}</td><td class="p-2 border text-center">${esc(SESSION_LABEL[a.session])}</td><td class="p-2 border text-center">${esc(MARK_LABEL[a.mark])}</td></tr>`).join('')
+    : '<tr><td colspan="3" class="p-4 text-center text-slate-400">Không có buổi vắng trong năm học này.</td></tr>';
+  return `<div style="overflow-x:auto"><table id="${esc(tableId)}" class="w-full text-sm border-collapse min-w-[560px]"><thead>`
+    + '<tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center"><th class="p-3 border">Tuần</th><th class="p-3 border">Buổi</th><th class="p-3 border">Tình trạng</th></tr>'
+    + `</thead><tbody>${rows}</tbody></table></div>`;
 }
 
-const STATUS_MAP = {
-  'Hiện diện': 'bg-emerald-100 text-emerald-700',
-  'Có phép': 'bg-amber-100 text-amber-700',
-  'Vắng': 'bg-red-100 text-red-700',
-  'Hoạt động': 'bg-blue-100 text-blue-700',
-  'Tốt nghiệp': 'bg-slate-200 text-slate-600',
-  'Ngưng hoạt động': 'bg-red-100 text-red-700'
-};
-
-export function badgeStatus(st) {
-  const s = String(st || '').trim();
-  const c = STATUS_MAP[s] || 'bg-slate-100 text-slate-500';
-  return '<span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold ' + c + '">' + esc(s || '—') + '</span>';
+// Opens a print window with a title, a subtitle (HTML), one table (HTML) and the two signature blocks.
+// Returns false when the browser blocked the window.
+export function printDocument({ title, subtitle, tableHtml, leftSignature, landscape = false, leftColumn = 2 }) {
+  const win = window.open('', '_blank');
+  if (!win) return false;
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(title)}</title><style>
+    body{font-family:'Times New Roman',Times,serif;padding:20px;color:#000}
+    .header{text-align:center;margin-bottom:20px}
+    .header h2{margin:0;font-size:20px;text-transform:uppercase}
+    .header h3{margin:5px 0 0;font-size:16px;font-weight:normal}
+    table{width:100%;border-collapse:collapse;margin-top:15px;font-size:13px}
+    th,td{border:1px solid #000;padding:6px;text-align:center}
+    th{background:#f4f4f4;font-weight:bold}
+    td:nth-child(${leftColumn}){text-align:left}
+    .footer{margin-top:40px;display:flex;justify-content:space-between;font-size:15px}
+    .signature{text-align:center;width:40%}
+    @media print{@page{size:A4 ${landscape ? 'landscape' : 'portrait'};margin:15mm}}
+  </style></head><body>
+    <div class="header"><h2>${esc(title)}</h2><h3>${subtitle}</h3></div>
+    ${tableHtml}
+    <div class="footer">
+      <div class="signature"><p><b>${esc(leftSignature)}</b></p><br><br><br></div>
+      <div class="signature"><p><b>Xứ đoàn trưởng</b></p><br><br><br></div>
+    </div>
+  </body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); win.close(); }, 250);
+  return true;
 }
 
-export function fileLink(url, names, rev) {
-  if (!url) return '';
-  const ns = String(names || '').split('\n');
-  const urls = String(url).split(',');
-  const result = [];
+/* ---------- Attendance card view (student and teacher attendance tabs) ---------- */
+// Both pages keep the table/card choice under one key, so it holds per browser.
+const VIEW_KEY = 'attendanceView';
 
-  for (let i = 0; i < urls.length; i++) {
-    const f = urls[i].trim();
-    if (/^https?:\/\//i.test(f)) {
-      const name = (ns[i] || '').trim();
-      const label = name || (rev ? '✏️ Bản sửa' : '📄 Giáo án');
-      result.push('<a class="file-link' + (rev ? ' reviewed' : '') + '" href="' + esc(f) + '" target="_blank" rel="noopener">' + esc(label) + '</a>');
-    }
-  }
-  return result.join(' ');
-}
-
-export function groupBadge(g) {
-  const t = (g && (g.Type || g.type)) || '';
-  return '<span class="badge ' + (TYPES[t] || 'b-class') + '">' + esc(TYPE_LABEL[t] || t || '—') + '</span>';
-}
-
-export function highestGroup(gs) {
-  let best = null, rank = 0;
-  (gs || []).forEach(g => { const r = RANK[g.Type || g.type] || 0; if (r > rank) { rank = r; best = g; } });
-  return best;
-}
-
-export const highestType = gs => { const g = highestGroup(gs); return g ? (g.Type || g.type) : null; };
-
-export function expandLocal(gs) {
-  if (!gs || !gs.length) return [];
-  if (gs.some(g => (g.Type || g.type) === ADMIN)) return TCLASSES.map(c => c.ClassName);
-  const out = new Set();
-  gs.forEach(g => {
-    const t = g.Type || g.type, sc = String(g.Scope || g.scope || '');
-    const cs = sc.split(',').map(x => x.trim()).filter(Boolean);
-    if (t === 'Lớp' || t === 'Ngành') cs.forEach(c => out.add(c));
-    else if (t === BQT) {
-      GROUPS_LIST.filter(gr => gr.Type === 'Ngành' && cs.includes(gr.GroupName))
-        .forEach(gr => String(gr.Scope || '').split(',').map(x => x.trim()).filter(Boolean).forEach(c => out.add(c)));
-    }
+// Switches #t-attendance between the table and the card view (.v2); onChange redraws the page after a click.
+// Returns a getter: true while the card view is on.
+export function setupViewToggle(button, onChange) {
+  let cards = false;
+  try { cards = localStorage.getItem(VIEW_KEY) === 'cards'; } catch { /* storage blocked: table view */ }
+  const apply = () => {
+    $('t-attendance').classList.toggle('v2', cards);
+    button.textContent = cards ? '🗂 Bảng' : '📱 Thẻ';
+    button.title = cards ? 'Đổi sang giao diện bảng' : 'Đổi sang giao diện thẻ (mới, dễ dùng trên điện thoại)';
+  };
+  button.addEventListener('click', () => {
+    cards = !cards;
+    try { localStorage.setItem(VIEW_KEY, cards ? 'cards' : 'table'); } catch { /* not kept: still switches now */ }
+    apply();
+    onChange();
   });
-  return [...out];
+  apply();
+  return () => cards;
 }
 
-export const rankBadge = avg => avg == null ? '—' : (avg >= 85 ? '<span class="badge b-admin">Tốt</span>' : (avg >= 70 ? '<span class="badge b-sector">Khá</span>' : '<span class="badge b-class">Cần cải thiện</span>'));
-
-/* ---------- Trích lục ---------- */
-export async function searchCard(id, outId) {
-  const out = $(outId);
-  if (!id) { out.innerHTML = ''; return; }
-  let r;
-  try { r = await api('searchStudentById', {idNumber: id}); }
-  catch (e) { out.innerHTML = '<div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">' + esc(e.message) + '</div>'; return; }
-  const st = (r.students || [])[0];
-  if (!st) { out.innerHTML = '<div class="p-4 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-sm">Không tìm thấy thiếu nhi có Số CCCD này.</div>'; return; }
-  out.innerHTML = '<div class="p-4 bg-slate-50 border border-slate-200 rounded-lg">' +
-    '<div class="font-bold text-lg">' + esc([st.SaintName, st.FullName].filter(Boolean).join(' ')) + ' ' + badgeStatus(st.Status) + '</div>' +
-    '<div class="text-sm text-slate-600 mt-1">' + esc(st.IdNumber) + ' · ' + esc(st.CurrentClass || '') + '</div>' +
-    (r.academic ? academicBlock(r.academic) : scoresBlock(r.scores)) + '</div>';
+// The holiday sessions of the week cannot be picked; when the picked one is a holiday, the first open session is picked instead.
+// When every session is a holiday the pick stays, and the page locks the marks.
+export function lockHolidays(select, holidays) {
+  const off = new Set(holidays.map((h) => h.session));
+  for (const option of select.options) {
+    option.disabled = off.has(option.value);
+    option.textContent = `${SESSION_LABEL[option.value]}${option.disabled ? ' (nghỉ)' : ''}`;
+  }
+  if (select.selectedOptions[0]?.disabled) select.value = [...select.options].find((o) => !o.disabled)?.value ?? select.value;
 }
 
-export function scoresBlock(scores) {
-  const list = (scores || []).slice().sort((a, b) => String(b.SchoolYear).localeCompare(String(a.SchoolYear)));
-  if (!list.length) return '';
-  return '<h4 class="font-bold text-sm mt-3 mb-1">Điểm & Xếp loại theo năm</h4>' +
-    '<table class="w-full text-sm border-collapse"><thead><tr class="bg-slate-100">' +
-    ['Năm học', "15' HK1", 'KT HK1', "15' HK2", 'KT HK2', 'ĐTB Năm', 'Xếp loại'].map(h => '<th class="border p-1 text-left">' + h + '</th>').join('') +
-    '</tr></thead><tbody>' + list.map(s => {
-      const h1 = dtbHK(s.Quiz15_S1, s.Exam_S1), h2 = dtbHK(s.Quiz15_S2, s.Exam_S2), n = dtbNam(h1, h2);
-      return '<tr><td class="border p-1">' + esc(s.SchoolYear) + '</td>' +
-        '<td class="border p-1 text-center">' + fmt1(s.Quiz15_S1) + '</td><td class="border p-1 text-center">' + fmt1(s.Exam_S1) + '</td>' +
-        '<td class="border p-1 text-center">' + fmt1(s.Quiz15_S2) + '</td><td class="border p-1 text-center">' + fmt1(s.Exam_S2) + '</td>' +
-        '<td class="border p-1 text-center font-bold">' + fmt1(n) + '</td><td class="border p-1 text-center">' + (xepLoai(n) || '—') + '</td></tr>';
-    }).join('') + '</tbody></table>';
+// One tab per session; a green dot marks a session that has any mark this week; holiday tabs are disabled. rows: [{ marks }].
+export const sessionTabs = (codes, current, rows, holidays = []) => codes.map((c) => `<button type="button" data-session="${c}" title="${esc(SESSION_LABEL[c])}"`
+  + `${holidays.some((h) => h.session === c) ? ' disabled' : ''}`
+  + ` class="relative py-2 px-0.5 rounded-lg text-[11px] sm:text-xs font-bold whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed ${c === current ? 'bg-blue-900 text-white' : 'bg-slate-200 text-slate-700'}">${esc(SESSION_SHORT_LABEL[c])}`
+  + `${rows.some((r) => r.marks[c] !== MARK.NONE) ? '<span class="absolute top-1 right-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500"></span>' : ''}</button>`).join('');
+
+const markButton = (i, mark, on, sign, label, title, onClass, editable) => `<button type="button" title="${title}" class="att-mark w-12 h-11 rounded-lg flex flex-col items-center justify-center leading-none ${on ? onClass : 'bg-slate-200 text-slate-500'}"`
+  + ` data-i="${i}" data-which="${mark}" aria-pressed="${on}"${editable ? '' : ' disabled'}><span class="text-base font-extrabold">${sign}</span><span class="text-[10px] font-bold mt-0.5">${label}</span></button>`;
+
+// One card per person, with the data of its table row. items: [{ title, sub, mark }]; title and sub are HTML.
+export function markCards(items, editable, emptyText) {
+  return items.map(({ title, sub, mark }, i) => {
+    const present = mark === MARK.PRESENT;
+    const excused = mark === MARK.EXCUSED;
+    const tone = present ? 'border-emerald-500 bg-emerald-50' : excused ? 'border-amber-500 bg-amber-50' : 'border-slate-200 bg-white';
+    return `<div class="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl border-2 ${tone}"><div class="min-w-0">`
+      + `<div class="text-sm font-bold text-slate-800 leading-tight">${title}</div><div class="text-[11px] text-slate-500 truncate">${sub}</div></div>`
+      + `<div class="flex gap-1 flex-none">${markButton(i, MARK.PRESENT, present, '✓', 'Có mặt', 'Hiện diện', 'bg-emerald-500 text-white', editable)}`
+      + `${markButton(i, MARK.EXCUSED, excused, 'P', 'Phép', 'Có phép', 'bg-amber-500 text-white', editable)}</div></div>`;
+  }).join('') || `<p class="p-4 text-center text-slate-400">${esc(emptyText)}</p>`;
 }
 
-export function academicBlock(rows) {
-  const list = (rows || []).slice().sort((a, b) => String(b.SchoolYear).localeCompare(String(a.SchoolYear)));
-  if (!list.length) return '';
-  return '<h4 class="font-bold text-sm mt-3 mb-1">Học bạ theo năm</h4>' +
-    '<table class="w-full text-sm border-collapse"><thead><tr class="bg-slate-100">' +
-    ['Năm học', 'Lớp', 'ĐTB HK1', 'ĐTB HK2', 'ĐTB Năm', '% Chuyên Cần', 'Xếp loại'].map(h => '<th class="border p-1 text-left">' + h + '</th>').join('') +
-    '</tr></thead><tbody>' + list.map(x => {
-      const s = normSummary(x);
-      return '<tr><td class="border p-1">' + esc(x.SchoolYear) + '</td><td class="border p-1">' + esc(s.className) + '</td>' +
-        '<td class="border p-1 text-center">' + fmt1(s.h1) + '</td><td class="border p-1 text-center">' + fmt1(s.h2) + '</td>' +
-        '<td class="border p-1 text-center font-bold">' + fmt1(s.avgYear) + '</td>' +
-        '<td class="border p-1 text-center">' + (s.cc == null ? '—' : s.cc + '%') + '</td>' +
-        '<td class="border p-1 text-center">' + esc(s.rating || '—') + '</td></tr>';
-    }).join('') + '</tbody></table>';
+// Asked before leaving a week with unsaved marks. Resolves to 'save', 'drop' or 'stay'; a tap outside the box is 'stay'.
+let unsavedBox;
+export function askUnsaved() {
+  if (!unsavedBox) {
+    unsavedBox = document.createElement('div');
+    unsavedBox.className = 'modal';
+    unsavedBox.innerHTML = '<div class="modal-content"><h3>⚠ Có thay đổi chưa lưu</h3>'
+      + '<p class="text-sm text-slate-600 mb-4">Điểm danh tuần này chưa được lưu. Bạn muốn làm gì?</p><div class="flex flex-col gap-2">'
+      + '<button type="button" data-choice="save" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg">💾 Lưu rồi chuyển</button>'
+      + '<button type="button" data-choice="drop" class="bg-red-100 hover:bg-red-200 text-red-700 font-bold py-3 rounded-lg">Bỏ thay đổi</button>'
+      + '<button type="button" data-choice="stay" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 rounded-lg">Ở lại</button></div></div>';
+    document.body.appendChild(unsavedBox);
+  }
+  unsavedBox.classList.add('open');
+  return new Promise((resolve) => {
+    unsavedBox.onclick = (e) => {
+      const choice = e.target.closest('[data-choice]')?.dataset.choice ?? (e.target === unsavedBox ? 'stay' : null);
+      if (!choice) return;
+      unsavedBox.classList.remove('open');
+      resolve(choice);
+    };
+  });
+}
+
+// Moves a week input by whole weeks; false when it holds no date.
+export function shiftWeek(input, weeks) {
+  const day = new Date(`${input.value}T00:00:00Z`);
+  if (Number.isNaN(day.getTime())) return false;
+  day.setUTCDate(day.getUTCDate() + 7 * weeks);
+  input.value = day.toISOString().slice(0, 10);
+  return true;
 }

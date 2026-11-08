@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Thiếu nhi — Sổ Thiếu Nhi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <link rel="stylesheet" href="/shared/style.css">
+</head>
+
+<body class="bg-slate-100 min-h-screen" data-title="👥 Quản Lý Thiếu nhi"
+  data-sub="Danh sách theo lớp · thư viện ảnh · tra cứu toàn đoàn" data-role="any">
+
+  <div id="shell"></div>
+
+  <div class="max-w-7xl mx-auto px-4 pb-6">
+
+    <div class="bg-white rounded-t-xl border-b border-slate-300 shadow-sm px-4 pt-2 flex flex-wrap gap-2">
+      <button class="tab-btn active" data-tab="t-class">🏫 Theo Lớp</button>
+      <button class="tab-btn" data-tab="t-gallery">Thư viện ảnh</button>
+      <button class="tab-btn" data-tab="t-search">🔍 Tra Cứu Toàn Đoàn</button>
+    </div>
+
+    <!-- TAB 1: class list -->
+    <div id="t-class" class="bg-white rounded-b-xl shadow-sm p-5" data-pane>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+        <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp</label>
+          <select id="st-class" class="w-full border p-2.5 rounded-lg font-semibold"></select>
+        </div>
+        <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Trạng thái</label>
+          <select id="st-status" class="w-full border p-2.5 rounded-lg font-semibold"></select>
+        </div>
+        <div class="md:col-span-2 flex flex-wrap sm:flex-nowrap items-end gap-2">
+          <button id="st-add"
+            class="class-write w-full bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-lg whitespace-nowrap">＋
+            Thêm thiếu nhi</button>
+          <label
+            class="class-write w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-lg text-center cursor-pointer whitespace-nowrap"
+            title="Nhập danh sách từ Excel vào lớp đang chọn">
+            📤 Nhập Excel
+            <input type="file" id="st-file" accept=".xlsx, .xls" class="hidden">
+          </label>
+        </div>
+      </div>
+      <div class="class-write mt-3 mb-5">
+        <a id="st-template"
+          class="text-blue-600 hover:text-blue-800 hover:underline text-sm font-medium cursor-pointer inline-flex items-center gap-1">
+          ⬇️ Tải file mẫu (.xlsx)
+        </a>
+      </div>
+      <div class="tbl-scroll sticky">
+        <table class="w-full text-sm border-collapse">
+          <thead>
+            <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+              <th class="p-3">Số CCCD</th>
+              <th class="p-3">Họ Và Tên</th>
+              <th class="p-3">Giới Tính</th>
+              <th class="p-3">Ngày Sinh</th>
+              <th class="p-3">Cha</th>
+              <th class="p-3">Mẹ</th>
+              <th class="p-3">Địa Chỉ</th>
+              <th class="p-3">SĐT</th>
+              <th class="p-3">Anh/Chị/Em</th>
+              <th class="class-write p-3 sticky-col">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="st-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB 2: photo gallery -->
+    <div id="t-gallery" class="bg-white rounded-b-xl shadow-sm p-5" data-pane style="display: none;">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Lớp (Thư viện ảnh)</label>
+          <select id="gallery-class" class="w-full border p-2.5 rounded-lg font-semibold"></select>
+        </div>
+      </div>
+      <div id="gallery-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 mt-4">
+      </div>
+    </div>
+
+    <!-- TAB 3: whole-parish search -->
+    <div id="t-search" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+      <div class="mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Tìm kiếm Thiếu nhi</label>
+        <input type="text" id="st-search"
+          class="w-full border border-slate-300 p-2.5 rounded-lg font-semibold outline-none focus:border-blue-500"
+          placeholder="Nhập họ tên (một phần, có dấu) hoặc số CCCD...">
+        <p class="text-xs text-slate-500 mt-1">Phải nhập đầy đủ và đúng: họ tên, tên thánh + họ tên, hoặc số CCCD.</p>
+      </div>
+      <div class="tbl-scroll sticky">
+        <table class="w-full text-sm border-collapse">
+          <thead>
+            <tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+              <th class="p-3">Ảnh</th>
+              <th class="p-3">Lớp</th>
+              <th class="p-3">Trạng Thái</th>
+              <th class="p-3">Số CCCD</th>
+              <th class="p-3">Họ Và Tên</th>
+              <th class="p-3">Giới Tính</th>
+              <th class="p-3">Ngày Sinh</th>
+              <th class="p-3">Cha</th>
+              <th class="p-3">Mẹ</th>
+              <th class="p-3">Địa Chỉ</th>
+              <th class="p-3">SĐT</th>
+              <th class="p-3">Anh/Chị/Em</th>
+            </tr>
+          </thead>
+          <tbody id="st-search-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Add / edit form -->
+  <div id="st-modal" class="modal">
+    <div class="modal-content">
+      <h3 id="m-title">Thêm Thiếu nhi</h3>
+      <div class="form-grid">
+        <div class="form-group full"><label>Họ Và Tên *</label><input id="m-fullname" type="text"></div>
+        <div class="form-group"><label>Số CCCD *</label><input id="m-idnumber" type="text"></div>
+        <div class="form-group"><label>Tên Thánh</label><input id="m-saint" type="text"></div>
+        <div class="form-group"><label>Ngày Sinh</label><input id="m-dob" type="date"></div>
+        <div class="form-group"><label>Giới Tính</label><select id="m-gender"></select></div>
+        <div class="form-group"><label>Lớp *</label><select id="m-class"></select></div>
+        <div class="form-group" id="m-status-row"><label>Trạng Thái</label><select id="m-status"></select></div>
+        <div class="form-group"><label>Họ Tên Cha</label><input id="m-father" type="text"></div>
+        <div class="form-group"><label>Họ Tên Mẹ</label><input id="m-mother" type="text"></div>
+        <div class="form-group full"><label>Địa Chỉ</label><input id="m-address" type="text"></div>
+        <div class="form-group full">
+          <label>Số Điện Thoại</label>
+          <div id="m-phones" class="flex flex-col gap-2"></div>
+          <button type="button" id="m-phone-add" class="mt-2 text-sm font-bold text-blue-700 hover:text-blue-900">＋ Thêm số</button>
+        </div>
+        <div class="form-group full relative">
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Anh/Chị/Em</label>
+          <div id="m-sibling-tags" class="flex flex-wrap gap-1 mb-2"></div>
+          <input type="text" id="m-sibling-search" class="w-full border p-2.5 rounded-lg"
+            placeholder="Nhập họ tên (một phần, có dấu) hoặc số CCCD..." autocomplete="off">
+          <div id="m-sibling-dropdown"
+            class="absolute z-10 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto hidden mt-1">
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel">Hủy</button>
+        <button type="button" class="btn-save">Lưu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Photo viewer of the whole-parish search -->
+  <div id="photo-modal" class="modal">
+    <div class="modal-content" style="max-width:320px;text-align:center">
+      <h3 id="photo-modal-title"></h3>
+      <img id="photo-modal-img" alt="" class="mx-auto rounded-lg bg-slate-100" style="width:210px;height:280px;object-fit:cover">
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="students.js"></script>
+</body>
+
+</html>
