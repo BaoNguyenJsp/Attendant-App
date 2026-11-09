@@ -11,7 +11,7 @@ import {
   getTeacherAttendance, saveTeacherAttendance, getTeacherAttendanceStats, searchTeachers, getTeacherAbsences,
 } from '../lib/db/attendance.js';
 import { getScores, saveScores, getClassReport, getStudentRecord, startSchoolYear } from '../lib/db/academics.js';
-import { getLessons, saveLesson, createUploadUrls, trashYearFolders } from '../lib/db/lessons.js';
+import { getLessons, lessonTeacherOptions, saveLesson, createUploadUrls, trashYearFolders } from '../lib/db/lessons.js';
 import { importSheet } from '../lib/db/sheet-import.js';
 
 // Ids arrive as numbers or as text from a <select>; anything else is a bad request.
@@ -154,7 +154,7 @@ export const ACTIONS = {
   },
 
   /* ---------- lessons ---------- */
-  getLessons: { run: async ({ db }, b) => ({ lessons: await getLessons(db, { schoolYear: b.schoolYear }) }) },
+  getLessons: { run: async ({ db }, b) => ({ lessons: await getLessons(db, { schoolYear: b.schoolYear }), teachers: await lessonTeacherOptions(db) }) },
   saveLesson: { run: async ({ db, actor }, b) => ({ lesson: await saveLesson(db, actor, { ...b, classId: id(b.classId, 'Lớp') }) }) },
   createUploadUrls: {
     run: async ({ db, drive, actor, origin }, b) => ({

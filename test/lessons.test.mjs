@@ -4,7 +4,7 @@ import { seededD1 } from './helpers/seeded.mjs';
 import { AppError } from '../src/lib/errors.js';
 import { loadSession } from '../src/lib/db/users.js';
 import { makeDrive, NOT_CONNECTED } from '../src/lib/drive.js';
-import { getLessons, saveLesson, createUploadUrls, emptyDriveTrash, trashYearFolders } from '../src/lib/db/lessons.js';
+import { getLessons, lessonTeacherOptions, saveLesson, createUploadUrls, emptyDriveTrash, trashYearFolders } from '../src/lib/db/lessons.js';
 
 const status = (code) => (e) => e instanceof AppError && e.status === code;
 const WEEK = '2026-10-11'; // no lesson yet in the demo data
@@ -152,4 +152,22 @@ test('the year folders of removed lessons are trashed under the root, every copy
   const { drive } = await connected(db, google);
   await trashYearFolders(db, drive, ['2024-2025', '2023-2024']);
   assert.deepEqual(google.calls.filter((c) => c.method === 'PATCH').map((c) => c.url.split('/').pop()), ['Y24', 'Y24b']);
+});
+
+test('extra teachers are saved, replaced, never the teacher itself, and offered in class order', async () => {
+  const db = await seededD1();
+  const t = await teacher(db);
+  const options = await lessonTeacherOptions(db);
+  const sortOf = new Map((await db.prepare('SELECT Name, SortOrder FROM Classes').all()).results.map((c) => [c.Name, c.SortOrder]));
+  const orders = options.map((o) => sortOf.get(o.className) ?? Infinity);
+  assert.deepEqual(orders, [...orders].sort((a, b) => a - b));
+  const [a, b] = options.filter((o) => o.userId !== 13).map((o) => o.userId);
+
+  await assert.rejects(saveLesson(db, t, { weekOf: WEEK, classId: 1, content: 'Bài 6', extraTeacherIds: [99999] }), status(400));
+  let saved = await saveLesson(db, t, { weekOf: WEEK, classId: 1, content: 'Bài 6', extraTeacherIds: [a, b, a, 13] });
+  assert.deepEqual(saved.extraTeachers.map((x) => x.userId).sort(), [a, b].sort());
+  saved = await saveLesson(db, t, { weekOf: WEEK, classId: 1, content: 'Bài 6', extraTeacherIds: [b] });
+  assert.deepEqual(saved.extraTeachers.map((x) => x.userId), [b]);
+  saved = await saveLesson(db, t, { weekOf: WEEK, classId: 1, content: 'Bài 6' });
+  assert.deepEqual(saved.extraTeachers, []);
 });

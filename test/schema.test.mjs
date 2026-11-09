@@ -4,7 +4,7 @@ import { createD1 } from './helpers/d1.mjs';
 
 const TABLES = [
   'AcademicYear', 'Attendance', 'Classes', 'Config', 'ConfigHistory', 'DriveFolders', 'DriveTrash',
-  'GroupClasses', 'Groups', 'Holidays', 'LessonFiles', 'Lessons', 'Memberships', 'Scores', 'Secrets',
+  'GroupClasses', 'Groups', 'Holidays', 'LessonFiles', 'LessonTeachers', 'Lessons', 'Memberships', 'Scores', 'Secrets',
   'SiblingMembers', 'StudentPhotos', 'Students', 'TeacherAttendance', 'Users',
 ];
 

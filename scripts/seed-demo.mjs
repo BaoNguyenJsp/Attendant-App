@@ -194,7 +194,7 @@ const literal = (v) => (v === null || v === undefined ? 'NULL' : typeof v === 'n
 export function toSql(data) {
   const names = Object.keys(data);
   const lines = [
-    ...['LessonFiles', 'DriveFolders', 'DriveTrash', ...[...names].reverse()].map((t) => `DELETE FROM ${t};`),
+    ...['LessonTeachers', 'LessonFiles', 'DriveFolders', 'DriveTrash', ...[...names].reverse()].map((t) => `DELETE FROM ${t};`),
   ];
   for (const table of names) {
     const rows = data[table];

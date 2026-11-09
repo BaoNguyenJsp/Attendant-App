@@ -162,7 +162,7 @@ export async function getStudentAbsences(db, { studentId, today }) {
 
 /* ---------- Teachers ---------- */
 
-const byClassThenName = (a, b) => a.sortOrder - b.sortOrder || a.firstName.localeCompare(b.firstName, 'vi');
+export const byClassThenName = (a, b) => a.sortOrder - b.sortOrder || a.firstName.localeCompare(b.firstName, 'vi');
 const PERSON = 'u.Id AS userId, u.Email AS email, u.SaintName AS saintName, u.FullName AS fullName, u.FirstName AS firstName';
 
 // UC-H1: a sector lists the active teachers of its classes, except members of Xứ đoàn; 'ADMIN' lists those members.

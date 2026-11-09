@@ -1,7 +1,7 @@
 // Lessons and their files (UC-L1 to L4), upload links, the Drive trash queue (UC-X1).
 import { all, now } from './sql.js';
 import { configMap } from './org.js';
-import { requireWeek } from './attendance.js';
+import { requireWeek, byClassThenName } from './attendance.js';
 import { fail } from '../errors.js';
 import { requireClass } from '../access.js';
 import { FILE_SLOTS, FILE_TYPES, DEFAULT_LOCATION } from '../codes.js';
@@ -20,8 +20,25 @@ export async function getLessons(db, { schoolYear } = {}) {
   const files = await all(db, `
     SELECT f.LessonId, f.Slot, f.Url AS url, f.Name AS name, f.Type AS type, f.DriveFileId AS driveFileId
     FROM LessonFiles f JOIN Lessons l ON l.Id = f.LessonId WHERE l.SchoolYear = ? ORDER BY f.LessonId, f.Slot, f.Position`, year);
+  const helpers = await all(db, `
+    SELECT lt.LessonId, lt.UserId AS userId, TRIM(COALESCE(u.SaintName, '') || ' ' || u.FullName) AS name
+    FROM LessonTeachers lt JOIN Lessons l ON l.Id = lt.LessonId JOIN Users u ON u.Id = lt.UserId WHERE l.SchoolYear = ? ORDER BY u.FirstName`, year);
   const slot = (lessonId, name) => files.filter((f) => f.LessonId === lessonId && f.Slot === name).map(({ LessonId, Slot, ...f }) => f);
-  return lessons.map((l) => ({ ...l, planFiles: slot(l.id, 'PLAN'), revisedFiles: slot(l.id, 'REVISED') }));
+  return lessons.map((l) => ({
+    ...l, planFiles: slot(l.id, 'PLAN'), revisedFiles: slot(l.id, 'REVISED'),
+    extraTeachers: helpers.filter((h) => h.LessonId === l.id).map(({ LessonId, ...h }) => h),
+  }));
+}
+
+// The teachers who can be picked as extra teachers: every active user, by their first class in the order of the tab Lớp,
+// then by first name; users without a class (Xứ đoàn) come last. Names only (R8).
+export async function lessonTeacherOptions(db) {
+  const rows = await all(db, `SELECT u.Id AS userId, TRIM(COALESCE(u.SaintName, '') || ' ' || u.FullName) AS name, u.FirstName AS firstName,
+      c.Name AS className, MIN(COALESCE(c.SortOrder, 1e9)) AS sortOrder
+    FROM Users u LEFT JOIN Memberships m ON m.UserId = u.Id LEFT JOIN Groups g ON g.Id = m.GroupId AND g.Type = 'CLASS'
+      LEFT JOIN GroupClasses gc ON gc.GroupId = g.Id LEFT JOIN Classes c ON c.Id = gc.ClassId
+    WHERE u.Status = 'ACTIVE' GROUP BY u.Id`);
+  return rows.sort(byClassThenName).map(({ firstName, sortOrder, ...t }) => t);
 }
 
 function readFiles(list, slot) {
@@ -44,11 +61,19 @@ export async function saveLesson(db, actor, input) {
   requireWeek(weekOf);
   const schoolYear = input.schoolYear || (await configMap(db)).CurrentSchoolYear;
   const key = [schoolYear, weekOf, classId];
-  const old = await db.prepare('SELECT Id FROM Lessons WHERE SchoolYear = ? AND WeekOf = ? AND ClassId = ?').bind(...key).first();
+  const old = await db.prepare('SELECT Id, TeacherId FROM Lessons WHERE SchoolYear = ? AND WeekOf = ? AND ClassId = ?').bind(...key).first();
   const content = String(input.content ?? '').trim();
   if (!old && !content) fail(400, 'Nhập nội dung bài học trước khi lưu.');
   const location = String(input.location ?? '').trim() || DEFAULT_LOCATION;
   const files = [...readFiles(input.planFiles, 'PLAN'), ...readFiles(input.revisedFiles, 'REVISED')];
+  // The lesson's own teacher is never listed again as an extra teacher.
+  const teacherId = old ? old.TeacherId : actor.userId;
+  const extraIds = [...new Set((input.extraTeacherIds ?? []).map(Number))].filter((id) => id !== teacherId);
+  if (extraIds.some((id) => !Number.isInteger(id))) fail(400, 'Giáo lý viên hỗ trợ không hợp lệ.');
+  if (extraIds.length) {
+    const found = await all(db, `SELECT Id FROM Users WHERE Id IN (${extraIds.map(() => '?').join(', ')})`, ...extraIds);
+    if (found.length !== extraIds.length) fail(400, 'Giáo lý viên hỗ trợ không tồn tại.');
+  }
 
   const statements = [];
   if (old) {
@@ -62,10 +87,13 @@ export async function saveLesson(db, actor, input) {
   } else {
     statements.push(db.prepare('INSERT INTO Lessons (SchoolYear, WeekOf, ClassId, TeacherId, Content, Location, UpdatedBy) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(...key, actor.userId, content, location, actor.userId));
   }
-  // A new lesson has no id yet inside the batch, so its files find it by its unique key.
+  // A new lesson has no id yet inside the batch, so its files and extra teachers find it by its unique key.
+  const lessonId = '(SELECT Id FROM Lessons WHERE SchoolYear = ? AND WeekOf = ? AND ClassId = ?)';
+  statements.push(db.prepare(`DELETE FROM LessonTeachers WHERE LessonId = ${lessonId}`).bind(...key));
+  for (const id of extraIds) statements.push(db.prepare(`INSERT INTO LessonTeachers (LessonId, UserId) VALUES (${lessonId}, ?)`).bind(...key, id));
   for (const f of files) {
     statements.push(db.prepare(`INSERT INTO LessonFiles (LessonId, Slot, Position, Url, Name, Type, DriveFileId)
-      VALUES ((SELECT Id FROM Lessons WHERE SchoolYear = ? AND WeekOf = ? AND ClassId = ?), ?, ?, ?, ?, ?, ?)`).bind(...key, f.Slot, f.Position, f.Url, f.Name, f.Type, f.DriveFileId));
+      VALUES (${lessonId}, ?, ?, ?, ?, ?, ?)`).bind(...key, f.Slot, f.Position, f.Url, f.Name, f.Type, f.DriveFileId));
   }
   await db.batch(statements);
   return (await getLessons(db, { schoolYear })).find((l) => l.weekOf === weekOf && l.classId === classId);
