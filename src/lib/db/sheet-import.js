@@ -280,7 +280,7 @@ export async function importSheet(db, actor, { tabs, confirm = false }) {
   const full = { ...data, ConfigHistory: data.Config.map((c) => ({ Key: c.Key, Value: c.Value, Action: 'ADDED', ChangedBy: me.Id })) };
   const tables = Object.keys(full);
   await db.batch([
-    ...['LessonFiles', 'Lessons', 'AcademicYear', 'Scores', 'TeacherAttendance', 'Attendance', 'SiblingMembers', 'Students', 'Holidays', 'ConfigHistory', 'Config', 'Memberships', 'GroupClasses', 'Groups', 'Classes', 'Users']
+    ...['LessonTeachers', 'LessonFiles', 'Lessons', 'AcademicYear', 'Scores', 'TeacherAttendance', 'Attendance', 'SiblingMembers', 'Students', 'Holidays', 'ConfigHistory', 'Config', 'Memberships', 'GroupClasses', 'Groups', 'Classes', 'Users']
       .map((table) => db.prepare(`DELETE FROM ${table}`)),
     ...tables.filter((table) => full[table].length).flatMap((table) => insertJson(db, table, Object.keys(full[table][0]), full[table])),
   ]);

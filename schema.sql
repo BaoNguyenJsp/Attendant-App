@@ -1,5 +1,6 @@
 -- Sổ Thiếu Nhi — D1 schema. Re-runnable: drops everything first.
 -- Dates are TEXT 'YYYY-MM-DD'; WeekOf is always a Sunday. Timestamps are UTC ISO text.
+DROP TABLE IF EXISTS LessonTeachers;
 DROP TABLE IF EXISTS LessonFiles;
 DROP TABLE IF EXISTS Lessons;
 DROP TABLE IF EXISTS AcademicYear;
@@ -197,6 +198,14 @@ CREATE TABLE LessonFiles (
   DriveFileId TEXT,
   PRIMARY KEY (LessonId, Slot, Position)
 ) WITHOUT ROWID;
+
+-- Teachers who helped with a lesson besides its teacher.
+CREATE TABLE LessonTeachers (
+  LessonId INTEGER NOT NULL REFERENCES Lessons (Id) ON DELETE CASCADE,
+  UserId   INTEGER NOT NULL REFERENCES Users (Id) ON DELETE CASCADE,
+  PRIMARY KEY (LessonId, UserId)
+) WITHOUT ROWID;
+CREATE INDEX LessonTeachers_UserId ON LessonTeachers (UserId);
 
 CREATE TABLE DriveFolders (
   PathKey  TEXT PRIMARY KEY,

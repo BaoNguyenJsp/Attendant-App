@@ -18,6 +18,7 @@ const MAX_BYTES = 10 * 1024 * 1024;
 const PAGE_SIZE = 8;
 
 let lessons = []; // every lesson of the current school year, newest week first
+let teachers = []; // who can be picked as an extra teacher, in class order: { userId, name, className }
 let historyPage = 1;
 let saving = false;
 let editing = null; // { classId, lesson } while the form is open
@@ -30,7 +31,7 @@ const slots = {
 
 async function loadLessons() {
   try {
-    lessons = (await api('getLessons', { schoolYear: state.year })).lessons;
+    ({ lessons, teachers } = await api('getLessons', { schoolYear: state.year }));
   } catch (e) {
     lessons = [];
     toast(`Lỗi khi tải dữ liệu giảng dạy: ${e.message}`);
@@ -43,6 +44,8 @@ const stripExtension = (name) => String(name ?? '').replace(/\.[a-z0-9]{1,6}$/i,
 const fileBadges = (files, revised) => files
   .map((f) => `<a class="file-badge${revised ? ' reviewed' : ''}" href="${esc(f.url)}" target="_blank" rel="noopener" title="${esc(f.name || (revised ? 'Bản sửa' : 'Giáo án'))}">${esc(extensionOf(f.name).toUpperCase() || 'Url')}</a>`)
   .join(' ');
+
+const extraNames = (l) => l.extraTeachers.map((t) => t.name).join(', ');
 
 /* ---------- Tab 1: weekly board ---------- */
 function renderCards() {
@@ -57,6 +60,7 @@ function renderCards() {
     return `<div class="card${l ? ' updated' : ''}"><div>`
       + `<h3><b>${esc(c.name)}</b>${l ? '<span class="status-badge updated">Đã cập nhật</span>' : '<span class="status-badge">Chưa nhập</span>'}</h3>`
       + group('Giáo lý viên:', `<strong>${l ? esc(l.teacherName) : 'Chưa phân công'}</strong>`)
+      + (l && l.extraTeachers.length ? group('Giáo lý viên hỗ trợ:', esc(extraNames(l))) : '')
       + group('Địa điểm:', l ? esc(l.location) : '—')
       + group('Nội dung bài học:', l && l.content ? esc(l.content) : 'Chưa có nội dung')
       + group('Giáo án (GLV):', l && l.planFiles.length ? fileBadges(l.planFiles, false) : none('Chưa đính kèm'))
@@ -92,7 +96,7 @@ function renderHistory() {
   const rows = list.slice(from, from + PAGE_SIZE);
   $('ls-total').textContent = `Tổng số buổi đã cập nhật: ${list.length}`;
   $('ls-history').innerHTML = rows.length
-    ? rows.map((l) => `<tr><td>${esc(fmtDate(l.weekOf))}</td><td>${esc(className(l.classId))}</td><td>${esc(l.teacherName)}</td>`
+    ? rows.map((l) => `<tr><td>${esc(fmtDate(l.weekOf))}</td><td>${esc(className(l.classId))}</td><td>${esc(l.teacherName)}${l.extraTeachers.length ? `<span class="block text-xs text-slate-500">+ ${esc(extraNames(l))}</span>` : ''}</td>`
       + `<td>${esc(l.location)}</td><td class="max-w-xs truncate">${esc(l.content)}</td><td>${esc(l.updatedByName ?? '')}</td>`
       // A LINK entry has no file to download, so the row leads back to its week instead of to files.
       + `<td class="whitespace-nowrap text-center"><button type="button" class="view-week file-badge" data-week="${esc(l.weekOf)}" title="Xem mọi bài học và tài liệu của tuần này">Xem tuần</button></td></tr>`).join('')
@@ -218,6 +222,22 @@ function addLink(slot, input) {
   fetchTitle(entry);
 }
 
+/* ---------- Form: extra teachers ---------- */
+// Checkboxes grouped by class; the lesson's own teacher is left out. Extra teachers no longer active stay listed under "Khác".
+function renderExtras(lesson) {
+  const teacherId = lesson ? lesson.teacherId : state.session.userId;
+  const picked = new Set(lesson ? lesson.extraTeachers.map((t) => t.userId) : []);
+  const listed = new Set(teachers.map((t) => t.userId));
+  const options = [...teachers, ...(lesson ? lesson.extraTeachers.filter((t) => !listed.has(t.userId)).map((t) => ({ ...t, className: 'Khác' })) : [])]
+    .filter((t) => t.userId !== teacherId);
+  let lastClass;
+  $('ls-extra').innerHTML = options.map((t) => {
+    const header = t.className !== lastClass ? `<div class="extra-class">${esc(t.className ?? 'Xứ đoàn')}</div>` : '';
+    lastClass = t.className;
+    return `${header}<label><input type="checkbox" value="${t.userId}"${picked.has(t.userId) ? ' checked' : ''}> ${esc(t.name)}</label>`;
+  }).join('') || '<span class="text-slate-400">Chưa có Huynh trưởng.</span>';
+}
+
 /* ---------- Form: open, upload, save ---------- */
 function openForm(classId) {
   const weekOf = $('ls-week').value;
@@ -227,6 +247,7 @@ function openForm(classId) {
   $('ls-modal-title').textContent = `Giáo án — ${className(classId)} — ${fmtDate(weekOf)}`;
   // The teacher of a lesson is whoever saves it first.
   $('ls-teacher').value = lesson ? lesson.teacherName : personName(state.session);
+  renderExtras(lesson);
   $('ls-location').value = lesson ? lesson.location : 'Trong lớp';
   $('ls-content').value = lesson ? lesson.content : '';
   slots.PLAN.kept = lesson ? lesson.planFiles.map((f) => ({ ...f })) : [];
@@ -290,6 +311,7 @@ async function saveForm() {
     const { lesson } = await api('saveLesson', {
       schoolYear: state.year, weekOf: $('ls-week').value, classId: editing.classId, content,
       location: $('ls-location').value.trim(),
+      extraTeacherIds: [...$('ls-extra').querySelectorAll('input:checked')].map((box) => Number(box.value)),
       planFiles: sendable(slots.PLAN.kept), revisedFiles: sendable(slots.REVISED.kept),
     });
     lessons = [lesson, ...lessons.filter((l) => l.id !== lesson.id)].sort((a, b) => b.weekOf.localeCompare(a.weekOf) || a.classId - b.classId);

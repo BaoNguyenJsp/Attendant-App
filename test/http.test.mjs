@@ -251,3 +251,30 @@ test('photos: only JPEG or PNG up to 2 MB reach the bucket', async () => {
   assert.equal((await photo(env, ADMIN, 'PUT', 1, png)).status, 200);
   assert.equal((await photo(env, TEACHER, 'GET', 1)).headers.get('Content-Type'), 'image/png');
 });
+
+test('sector users: BQT ngành updates its own teachers only, never the email or groups outside the sector', async () => {
+  const env = await testEnv();
+  const sector = await env.DB.prepare("SELECT Id FROM Groups WHERE Name = 'Ngành Ấu'").first('Id');
+  const other = await env.DB.prepare("SELECT Id FROM Groups WHERE Name = 'Ngành Thiếu'").first('Id');
+  const [status, mine] = await call(env, SECTOR_ADMIN, 'getSectorUsers', { sectorGroupId: sector });
+  assert.equal(status, 200);
+  assert.ok(mine.users.length && mine.users.every((u) => !('email' in u) && u.groupIds.length));
+  assert.equal((await call(env, SECTOR_ADMIN, 'getSectorUsers', { sectorGroupId: other }))[0], 403);
+  assert.ok((await call(env, ADMIN, 'getSectorUsers', { sectorGroupId: sector }))[1].users.every((u) => u.email));
+
+  const target = mine.users[0];
+  const before = await env.DB.prepare('SELECT Email FROM Users WHERE Id = ?').bind(target.id).first('Email');
+  const outside = (await call(env, ADMIN, 'getDirectory'))[1].memberships.filter((m) => m.userId === target.id && !mine.groups.some((g) => g.id === m.groupId)).map((m) => m.groupId);
+  const user = { id: target.id, email: 'hijack@example.com', fullName: 'Tên Mới', saintName: 'Phêrô', phone: '0911', status: 'INACTIVE' };
+  assert.equal((await call(env, SECTOR_ADMIN, 'saveSectorUser', { sectorGroupId: sector, user, groupIds: [mine.groups.at(-1).id] }))[0], 200);
+  const after = await env.DB.prepare('SELECT Email, FullName, Status FROM Users WHERE Id = ?').bind(target.id).first();
+  assert.deepEqual([after.Email, after.FullName, after.Status], [before, 'Tên Mới', 'INACTIVE']);
+  const groups = (await env.DB.prepare('SELECT GroupId FROM Memberships WHERE UserId = ? ORDER BY GroupId').bind(target.id).all()).results.map((r) => r.GroupId);
+  assert.deepEqual(groups, [...outside, mine.groups.at(-1).id].sort((a, b) => a - b));
+
+  const outsider = (await call(env, ADMIN, 'getSectorUsers', { sectorGroupId: other }))[1].users[0];
+  assert.equal((await call(env, SECTOR_ADMIN, 'saveSectorUser', { sectorGroupId: sector, user: { ...outsider }, groupIds: [mine.groups[0].id] }))[0], 404);
+  assert.equal((await call(env, SECTOR_ADMIN, 'saveSectorUser', { sectorGroupId: sector, user, groupIds: [] }))[0], 400);
+  assert.equal((await call(env, SECTOR_ADMIN, 'saveSectorUser', { sectorGroupId: sector, user, groupIds: [99999] }))[0], 400);
+  assert.equal((await call(env, TEACHER, 'getSectorUsers', { sectorGroupId: sector }))[0], 403);
+});

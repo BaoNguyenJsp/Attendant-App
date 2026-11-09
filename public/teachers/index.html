@@ -21,6 +21,7 @@
       <button class="tab-btn active" data-tab="t-attendance">📝 Điểm Danh</button>
       <button class="tab-btn" data-tab="t-absences">🔎 Trích Lục</button>
       <button class="tab-btn" data-tab="t-stats">📊 Thống Kê</button>
+      <button class="tab-btn" data-tab="t-users">👤 Huynh trưởng</button>
     </div>
 
     <!-- t-gvdd -->
@@ -156,6 +157,46 @@
           </thead>
           <tbody id="ts-tbody"></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- t-users: Huynh trưởng của ngành — chỉ cập nhật, thêm mới ở trang Quản trị -->
+    <div id="t-users" class="bg-white rounded-b-xl shadow-sm p-5" style="display:none" data-pane>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 bg-slate-50 p-4 rounded-lg border border-slate-200 items-end">
+        <div><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Ngành</label>
+          <select id="tu-sector" class="w-full border p-2.5 rounded-lg font-semibold"></select>
+        </div>
+        <div class="md:col-span-2"><label class="block text-xs font-bold text-slate-600 uppercase mb-1">Tìm theo họ tên đầy đủ <span class="admin-only">hoặc email</span> (để trống: hiện tất cả)</label>
+          <input type="text" id="tu-query" class="w-full border p-2.5 rounded-lg font-semibold" placeholder="vd: Nguyễn Văn A">
+        </div>
+      </div>
+      <div class="tbl-scroll sticky">
+        <table class="w-full text-sm border-collapse">
+          <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
+            <th class="p-3 admin-only">Email</th><th class="p-3">Họ Tên</th><th class="p-3">SDT</th><th class="p-3">Lớp</th><th class="p-3">Trạng thái</th><th class="p-3"></th>
+          </tr></thead>
+          <tbody id="tu-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: cập nhật Huynh trưởng của ngành (không đổi email) -->
+  <div id="tu-modal" class="modal">
+    <div class="modal-content">
+      <h3 id="tu-title">Cập nhật Huynh trưởng</h3>
+      <div class="form-grid">
+        <div class="form-group"><label>Tên Thánh</label><input id="tu-saint" type="text"></div>
+        <div class="form-group"><label>Họ Và Tên *</label><input id="tu-fullname" type="text"></div>
+        <div class="form-group"><label>SDT</label><input id="tu-phone" type="text" placeholder="vd: 0912 345 678"></div>
+        <div class="form-group"><label>Trạng Thái</label><select id="tu-status"></select></div>
+        <div class="form-group full"><label>Lớp trong ngành (chọn nhiều)</label>
+          <div id="tu-groups" class="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-56 overflow-y-auto border rounded-lg p-2 bg-slate-50"></div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel">Hủy</button>
+        <button type="button" class="btn-save">Lưu</button>
       </div>
     </div>
   </div>

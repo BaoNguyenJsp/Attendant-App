@@ -97,6 +97,7 @@ export async function startSchoolYear(db, { attendanceStartDate, today }, actorI
     // 2b. lessons of the years before the old year are removed ('YYYY-YYYY' sorts as text); the caller trashes
     // their year folders on Drive. Remembered folder ids of those years are forgotten.
     db.prepare('DELETE FROM LessonFiles WHERE LessonId IN (SELECT Id FROM Lessons WHERE SchoolYear < ?)').bind(oldYear),
+    db.prepare('DELETE FROM LessonTeachers WHERE LessonId IN (SELECT Id FROM Lessons WHERE SchoolYear < ?)').bind(oldYear),
     db.prepare('DELETE FROM Lessons WHERE SchoolYear < ?').bind(oldYear),
   ];
   const removedYears = new Set((await all(db, 'SELECT DISTINCT SchoolYear FROM Lessons WHERE SchoolYear < ?', oldYear)).map((r) => r.SchoolYear));

@@ -28,6 +28,12 @@ export function makeDrive({ db, clientId, clientSecret, fetch = globalThis.fetch
 
   const call = async (url, init = {}) => fetch(url, { ...init, headers: { ...init.headers, Authorization: `Bearer ${await accessToken()}` } });
 
+  // Google's own reason for a refused call, so the message says what to fix.
+  const reason = async (res) => {
+    const message = await res.json().then((b) => b.error?.message, () => null);
+    return ` (Google ${res.status}${message ? `: ${message}` : ''})`;
+  };
+
   // Ids of the folders called `name` directly in the parent (two when two requests raced to create it).
   async function findFolders(parentId, name) {
     const query = `'${parentId}' in parents and name = '${name.replace(/['\\]/g, '\\$&')}' and mimeType = '${FOLDER_TYPE}' and trashed = false`;
@@ -39,7 +45,7 @@ export function makeDrive({ db, clientId, clientSecret, fetch = globalThis.fetch
     const [existing] = await findFolders(parentId, name);
     if (existing) return existing;
     const made = await call(FILES_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, mimeType: FOLDER_TYPE, parents: [parentId] }) });
-    if (!made.ok) fail(502, 'Không tạo được thư mục trên Google Drive.');
+    if (!made.ok) fail(502, `Không tạo được thư mục trên Google Drive.${await reason(made)}`);
     return (await made.json()).id;
   }
 
@@ -81,7 +87,7 @@ export function makeDrive({ db, clientId, clientSecret, fetch = globalThis.fetch
       body: JSON.stringify({ name: filename, parents: [folderId] }),
     });
     const location = res.ok ? res.headers.get('Location') : null;
-    if (!location) fail(502, 'Google Drive từ chối tạo phiên tải lên.');
+    if (!location) fail(502, `Google Drive từ chối tạo phiên tải lên.${res.ok ? '' : await reason(res)}`);
     return location;
   }
 

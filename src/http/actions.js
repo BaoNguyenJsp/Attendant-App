@@ -3,7 +3,7 @@
 import { fail } from '../lib/errors.js';
 import { requireTier, canManageSector, isAdmin } from '../lib/access.js';
 import { saveConfig, saveHolidays, saveClass, deleteClass, reorderClasses, saveGroup, deleteGroup } from '../lib/db/org.js';
-import { saveUser, deleteUser } from '../lib/db/users.js';
+import { saveUser, deleteUser, getSectorUsers, saveSectorUser } from '../lib/db/users.js';
 import { saveStudent, importStudents, deleteStudent } from '../lib/db/students.js';
 import { removePhoto } from './photos.js';
 import {
@@ -11,7 +11,7 @@ import {
   getTeacherAttendance, saveTeacherAttendance, getTeacherAttendanceStats, searchTeachers, getTeacherAbsences,
 } from '../lib/db/attendance.js';
 import { getScores, saveScores, getClassReport, getStudentRecord, startSchoolYear } from '../lib/db/academics.js';
-import { getLessons, saveLesson, createUploadUrls, trashYearFolders } from '../lib/db/lessons.js';
+import { getLessons, lessonTeacherOptions, saveLesson, createUploadUrls, trashYearFolders } from '../lib/db/lessons.js';
 import { importSheet } from '../lib/db/sheet-import.js';
 
 // Ids arrive as numbers or as text from a <select>; anything else is a bad request.
@@ -120,6 +120,22 @@ export const ACTIONS = {
   },
   searchTeachers: { tier: 'SECTOR_ADMIN', run: async ({ db, actor }, b) => ({ teachers: await searchTeachers(db, actor, b.query) }) },
   getTeacherAbsences: { tier: 'SECTOR_ADMIN', run: ({ db, actor, today }, b) => getTeacherAbsences(db, actor, { userId: id(b.userId), today }) },
+  // The teachers of a sector for its BQT ngành to update (not add); emails for Xứ đoàn only (R8).
+  getSectorUsers: {
+    tier: 'SECTOR_ADMIN',
+    run: async ({ db, actor }, b) => {
+      const r = await getSectorUsers(db, sector(actor, b.sectorGroupId));
+      return isAdmin(actor) ? r : { ...r, users: r.users.map(({ email, ...u }) => u) };
+    },
+  },
+  saveSectorUser: {
+    tier: 'SECTOR_ADMIN',
+    run: async ({ db, actor, lists }, b) => {
+      await saveSectorUser(db, sector(actor, b.sectorGroupId), { user: { ...b.user, id: id(b.user?.id) }, groupIds: b.groupIds }, actor.userId);
+      await lists.refresh('directory');
+      return {};
+    },
+  },
 
   /* ---------- academics ---------- */
   getScores: { run: async ({ db }, b) => ({ scores: await getScores(db, { classId: id(b.classId, 'Lớp') }) }) },
@@ -138,7 +154,7 @@ export const ACTIONS = {
   },
 
   /* ---------- lessons ---------- */
-  getLessons: { run: async ({ db }, b) => ({ lessons: await getLessons(db, { schoolYear: b.schoolYear }) }) },
+  getLessons: { run: async ({ db }, b) => ({ lessons: await getLessons(db, { schoolYear: b.schoolYear }), teachers: await lessonTeacherOptions(db) }) },
   saveLesson: { run: async ({ db, actor }, b) => ({ lesson: await saveLesson(db, actor, { ...b, classId: id(b.classId, 'Lớp') }) }) },
   createUploadUrls: {
     run: async ({ db, drive, actor, origin }, b) => ({
