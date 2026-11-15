@@ -283,6 +283,25 @@ test('sector users: BQT ngành updates its own teachers only, never the email or
   assert.equal((await call(env, TEACHER, 'getSectorUsers', { sectorGroupId: sector }))[0], 403);
 });
 
+test('leaving a sibling family: only that Huynh trưởng leaves; BQT ngành for their own sector only', async () => {
+  const env = await testEnv();
+  const sector = await env.DB.prepare("SELECT Id FROM Groups WHERE Name = 'Ngành Ấu'").first('Id');
+  const target = (await call(env, SECTOR_ADMIN, 'getSectorUsers', { sectorGroupId: sector }))[1].users[0];
+  const admin = await env.DB.prepare('SELECT Id FROM Users WHERE Email = ?').bind(ADMIN).first('Id');
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM SiblingMembers'),
+    env.DB.prepare('INSERT INTO SiblingMembers (StudentId, FamilyId) VALUES (1, 900), (2, 900)'),
+    env.DB.prepare('INSERT INTO SiblingUsers (UserId, FamilyId) VALUES (?, 900), (?, 900)').bind(target.id, admin),
+  ]);
+  assert.equal((await call(env, SECTOR_ADMIN, 'leaveSiblingFamily', { sectorGroupId: sector, userId: admin }))[0], 404); // not of the sector
+  const [status, { families }] = await call(env, SECTOR_ADMIN, 'leaveSiblingFamily', { sectorGroupId: sector, userId: target.id });
+  assert.equal(status, 200);
+  assert.deepEqual(families.members.filter((m) => m.familyId === 900).map((m) => m.key).sort(), ['s1', 's2', `u${admin}`]);
+  assert.equal((await call(env, TEACHER, 'leaveSiblingFamily', { userId: admin }))[0], 403);
+  assert.equal((await call(env, ADMIN, 'leaveSiblingFamily', { userId: admin }))[0], 200);
+  assert.equal(await env.DB.prepare('SELECT COUNT(*) AS n FROM SiblingUsers').first('n'), 0);
+});
+
 test('warehouse: a teacher asks and gives back; only a keeper changes the stock, approves and changes item photos', async () => {
   const env = await testEnv();
   await env.DB.prepare("INSERT INTO Secrets (Key, Value) VALUES ('DriveRefreshToken', 'refresh-1')").run();

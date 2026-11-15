@@ -16,7 +16,14 @@ await initCommon();
 await load('classes', 'students', 'families');
 
 let directory = { users: [], groups: [], memberships: [] };
-const siblings = siblingEditor('user', () => directory.users);
+const siblings = siblingEditor('user', () => directory.users, {
+  onLeave: async (key) => {
+    const { families } = await api('leaveSiblingFamily', { userId: Number(key.slice(1)) });
+    state.families = families;
+    renderUsers();
+    return families;
+  },
+});
 let holidays = [];
 const TIER_ORDER = Object.keys(TIER_LABEL); // CLASS, SECTOR, SECTOR_ADMIN, ADMIN
 // directory.groups is kept in display order, so the groups of a user come out in that order too.

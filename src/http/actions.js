@@ -5,6 +5,7 @@ import { requireTier, canManageSector, isAdmin } from '../lib/access.js';
 import { saveConfig, saveHolidays, saveClass, deleteClass, reorderClasses, saveGroup, deleteGroup } from '../lib/db/org.js';
 import { saveUser, deleteUser, getSectorUsers, saveSectorUser } from '../lib/db/users.js';
 import { saveStudent, importStudents, deleteStudent } from '../lib/db/students.js';
+import { leaveFamily } from '../lib/db/families.js';
 import { removePhoto } from './photos.js';
 import {
   getStudentAttendance, saveStudentAttendance, getStudentAttendanceStats, getAttendanceOverview, getStudentAbsences,
@@ -140,6 +141,19 @@ export const ACTIONS = {
     run: async ({ db, actor }, b) => {
       const r = await getSectorUsers(db, sector(actor, b.sectorGroupId));
       return isAdmin(actor) ? r : { ...r, users: r.users.map(({ email, ...u }) => u) };
+    },
+  },
+  // One Huynh trưởng leaves their sibling family; the others stay together. Xứ đoàn: anyone; BQT ngành: their sector.
+  leaveSiblingFamily: {
+    tier: 'SECTOR_ADMIN',
+    run: async ({ db, actor, lists }, b) => {
+      const userId = id(b.userId);
+      if (!isAdmin(actor) && !(await getSectorUsers(db, sector(actor, b.sectorGroupId))).users.some((u) => u.id === userId)) {
+        fail(404, 'Không tìm thấy Huynh trưởng trong ngành này.');
+      }
+      const statements = await leaveFamily(db, `u${userId}`);
+      if (statements.length) await db.batch(statements);
+      return { families: await lists.refresh('families') };
     },
   },
   saveSectorUser: {

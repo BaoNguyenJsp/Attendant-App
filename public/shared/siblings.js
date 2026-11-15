@@ -3,7 +3,7 @@
    Sibling families on the pages (UC-S4): a member is a student ('s12') or a Huynh trưởng ('u7'); a graduate is shown
    as the user made from them. Needs state.families (load('families')) and state.students for the search.
    ===================================================================== */
-import { state, $, esc, className, personName } from './common.js';
+import { state, $, esc, toast, className, personName } from './common.js';
 import { matchesStudent, matchesPerson } from './search.js';
 
 // The other members of a person's family.
@@ -59,10 +59,13 @@ const userMember = (u) => ({ key: `u${u.id}`, name: personName(u), classId: null
 // The sibling field of a form: elements `<prefix>-sibling-tags`, `-search` and `-dropdown`. The search offers active
 // students and the active users of `users()`. Siblings no longer active are not drawn but stay in the list, so a save keeps them.
 // With lockTeachers (the student form) Huynh trưởng are shown without the remove button; the server keeps them too.
-export function siblingEditor(prefix, users = () => [], { lockTeachers = false } = {}) {
+// With onLeave(key) -> families, the button `<prefix>-sibling-leave` takes only this person out of the family at once,
+// instead of removing every sibling one by one (which would also split the others apart).
+export function siblingEditor(prefix, users = () => [], { lockTeachers = false, onLeave = null } = {}) {
   const tags = $(`${prefix}-sibling-tags`);
   const search = $(`${prefix}-sibling-search`);
   const drop = $(`${prefix}-sibling-dropdown`);
+  const leave = onLeave && $(`${prefix}-sibling-leave`);
   let me = null;
   let keys = [];
   let before = '';
@@ -73,6 +76,8 @@ export function siblingEditor(prefix, users = () => [], { lockTeachers = false }
     tags.innerHTML = keys.map(known).filter((m) => m?.active).map((m) => `<span class="flex items-center gap-1">${siblingBadge(m)}`
       + (m.teacher && lockTeachers ? '' : `<button type="button" class="remove-sibling text-slate-500 hover:text-red-700 font-bold px-1" data-key="${m.key}" title="Bỏ">×</button>`)
       + '</span>').join('');
+    // Only for someone saved in a family.
+    leave?.classList.toggle('hidden', !me || !before);
   };
 
   search.addEventListener('input', () => {
@@ -97,6 +102,14 @@ export function siblingEditor(prefix, users = () => [], { lockTeachers = false }
     search.value = '';
     drop.classList.add('hidden');
     render();
+  });
+  leave?.addEventListener('click', async () => {
+    if (!confirm('Rời nhóm anh chị em? Các thành viên khác vẫn ở cùng một nhóm.')) return;
+    try { state.families = await onLeave(me); } catch (e) { return toast(e.message); }
+    keys = [];
+    before = '';
+    render();
+    toast('Đã rời nhóm anh chị em.');
   });
   tags.addEventListener('click', (e) => {
     const remove = e.target.closest('.remove-sibling');

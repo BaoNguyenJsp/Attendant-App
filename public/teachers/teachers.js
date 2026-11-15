@@ -202,7 +202,14 @@ let editingUser = null;
 // Siblings: every active student and Huynh trưởng, not only those of the sector in view.
 const activeTeachers = (await api('getActiveTeachers')).teachers
   .map((t) => ({ id: t.userId, fullName: t.name, className: t.className, status: 'ACTIVE' }));
-const siblings = siblingEditor('tu', () => activeTeachers);
+const siblings = siblingEditor('tu', () => activeTeachers, {
+  onLeave: async (key) => {
+    const { families } = await api('leaveSiblingFamily', { sectorGroupId: listOf('tu-sector'), userId: Number(key.slice(1)) });
+    state.families = families;
+    renderSectorUsers();
+    return families;
+  },
+});
 
 async function loadSectorUsers() {
   const sectorGroupId = listOf('tu-sector');
