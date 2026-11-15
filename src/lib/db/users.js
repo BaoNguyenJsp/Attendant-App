@@ -1,6 +1,7 @@
 // Users: login session, per-request check (R1), directory, save.
 import { all, now, textOrNull } from './sql.js';
 import { listGroups } from './org.js';
+import { familyOf, setFamily, tidyFamily } from './families.js';
 import { fail } from '../errors.js';
 import { TIER_RANK, USER_STATUSES } from '../codes.js';
 import { firstName } from '../text.js';
@@ -47,8 +48,8 @@ export async function getDirectory(db) {
   return { users, groups: await listGroups(db), memberships: await all(db, 'SELECT GroupId AS groupId, UserId AS userId FROM Memberships') };
 }
 
-// The user and their memberships are saved in one batch (UC-M1).
-export async function saveUser(db, { user, groupIds }, actorId) {
+// The user and their memberships are saved in one batch (UC-M1); siblings, when sent, right after (see families.js).
+export async function saveUser(db, { user, groupIds, siblings }, actorId) {
   const id = user?.id ?? null;
   const email = String(user?.email ?? '').trim().toLowerCase();
   const fullName = String(user?.fullName ?? '').trim();
@@ -82,7 +83,9 @@ export async function saveUser(db, { user, groupIds }, actorId) {
     for (const g of wanted) statements.push(db.prepare('INSERT INTO Memberships (GroupId, UserId) VALUES (?, (SELECT Id FROM Users WHERE Email = ?))').bind(g, email));
   }
   await db.batch(statements);
-  return db.prepare(`SELECT ${USER_COLUMNS} FROM Users WHERE Email = ?`).bind(email).first();
+  const saved = await db.prepare(`SELECT ${USER_COLUMNS} FROM Users WHERE Email = ?`).bind(email).first();
+  if (siblings !== undefined) await setFamily(db, `u${saved.id}`, siblings);
+  return saved;
 }
 
 // The class groups of a sector, in the order of the tab Lớp: the only groups its BQT ngành may change.
@@ -108,7 +111,7 @@ export async function getSectorUsers(db, sectorGroupId) {
 }
 
 // BQT ngành edits a member of the sector: never the email, and only the sector's class groups; other groups are kept.
-export async function saveSectorUser(db, sectorGroupId, { user, groupIds }, actorId) {
+export async function saveSectorUser(db, sectorGroupId, { user, groupIds, siblings }, actorId) {
   const { users, groups } = await getSectorUsers(db, sectorGroupId);
   const target = users.find((u) => u.id === user?.id);
   if (!target) fail(404, 'Không tìm thấy Huynh trưởng trong ngành này.');
@@ -117,7 +120,7 @@ export async function saveSectorUser(db, sectorGroupId, { user, groupIds }, acto
   if (picked.some((g) => !inSector.has(g))) fail(400, 'Nhóm không thuộc ngành này.');
   if (!picked.length) fail(400, 'Chọn ít nhất một lớp trong ngành.');
   const others = (await all(db, 'SELECT GroupId FROM Memberships WHERE UserId = ?', target.id)).map((m) => m.GroupId).filter((g) => !inSector.has(g));
-  return saveUser(db, { user: { ...user, id: target.id, email: target.email }, groupIds: [...others, ...picked] }, actorId);
+  return saveUser(db, { user: { ...user, id: target.id, email: target.email }, groupIds: [...others, ...picked], siblings }, actorId);
 }
 
 // Memberships and teacher attendance go with the user (ON DELETE CASCADE). Lessons need a teacher, so a user who
@@ -137,5 +140,8 @@ export async function deleteUser(db, id, actorId, transferTo) {
     );
   }
   statements.push(db.prepare('DELETE FROM Users WHERE Id = ?').bind(id));
+  // The user's SiblingUsers row goes by ON DELETE CASCADE; their family may be left with one member.
+  const { familyId } = await familyOf(db, `u${id}`);
+  if (familyId !== null) statements.push(...tidyFamily(db, familyId));
   await db.batch(statements);
 }

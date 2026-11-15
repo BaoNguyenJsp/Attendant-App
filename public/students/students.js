@@ -11,10 +11,11 @@ import {
 } from '../shared/common.js';
 import { GENDER_LABEL, STUDENT_STATUS_LABEL } from '../shared/labels.js';
 import { matchesStudent } from '../shared/search.js';
-import { badge, STATUS_TONE, cropPhoto } from '../shared/ui.js';
+import { badge, STATUS_TONE, cropPhoto, editIcon, deleteIcon } from '../shared/ui.js';
+import { siblingCell, siblingEditor } from '../shared/siblings.js';
 
 await initCommon();
-await load('students', 'classes');
+await load('students', 'classes', 'families');
 
 const byId = (id) => state.students.find((s) => s.id === Number(id));
 const options = (labels) => Object.entries(labels).map(([v, t]) => ({ v, t }));
@@ -22,26 +23,22 @@ const options = (labels) => Object.entries(labels).map(([v, t]) => ({ v, t }));
 fillClasses('st-class', 'gallery-class');
 fillSel('st-status', options(STUDENT_STATUS_LABEL), 'ACTIVE');
 fillSel('m-gender', [{ v: '', t: '—' }, ...options(GENDER_LABEL)]);
-fillSel('m-status', options(STUDENT_STATUS_LABEL));
 
 /* ---------- Cells shared by the class list and the search ---------- */
-const siblingCell = (s) => s.siblingIds.map(byId).filter(Boolean)
-  .map((x) => `<span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs whitespace-nowrap">${esc(x.fullName)} (${esc(className(x.classId))})</span>`).join(' ');
-
 // Each number on its own line with a copy button (UC-S1).
 const phoneCell = (s) => s.phones
   .map((p) => `<span class="whitespace-nowrap">${esc(p)} <button type="button" class="copy-phone text-slate-400 hover:text-blue-700" data-phone="${esc(p)}" title="Sao chép số này">📋</button></span>`)
   .join('<br>');
 
 const detailCells = (s) => `<td class="p-2 border text-center whitespace-nowrap">${esc(s.idNumber)}</td>`
-  + `<td class="p-2 border font-medium">${esc(personName(s))}</td>`
+  + `<td class="p-2 border font-medium whitespace-nowrap">${esc(personName(s))}</td>`
   + `<td class="p-2 border text-center">${esc(GENDER_LABEL[s.gender] ?? '')}</td>`
   + `<td class="p-2 border text-center whitespace-nowrap">${esc(fmtDate(s.dateOfBirth))}</td>`
   + `<td class="p-2 border text-sm">${esc(s.father ?? '')}</td>`
   + `<td class="p-2 border text-sm">${esc(s.mother ?? '')}</td>`
   + `<td class="p-2 border text-sm">${esc(s.address ?? '')}</td>`
   + `<td class="p-2 border text-center">${phoneCell(s)}</td>`
-  + `<td class="p-2 border text-center">${siblingCell(s)}</td>`;
+  + `<td class="p-2 border text-center">${siblingCell(`s${s.id}`)}</td>`;
 
 async function copyPhone(event) {
   const button = event.target.closest('.copy-phone');
@@ -64,7 +61,7 @@ function renderClass() {
   document.querySelectorAll('.class-write').forEach((el) => el.classList.toggle('hidden', !canEdit));
   $('st-tbody').innerHTML = rows.length
     ? rows.map((s) => `<tr class="hover:bg-slate-50 transition-colors bg-white">${detailCells(s)}`
-      + (canEdit ? `<td class="p-2 border text-center sticky-col"><button data-id="${s.id}" class="edit-student bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs px-4 py-2 rounded-lg whitespace-nowrap">Cập nhật</button> <button data-id="${s.id}" class="delete-student bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs px-4 py-2 rounded-lg whitespace-nowrap">Xóa</button></td>` : '')
+      + (canEdit ? `<td class="p-2 border text-center whitespace-nowrap sticky-col">${editIcon('edit-student', s.id)}${deleteIcon('delete-student', s.id)}</td>` : '')
       + '</tr>').join('')
     : `<tr><td colspan="10" class="p-4 text-center text-slate-400">Không có Thiếu nhi "${esc(STUDENT_STATUS_LABEL[status])}" trong lớp ${esc(className(classId))}.</td></tr>`;
 }
@@ -169,29 +166,9 @@ function setPhones(phones) {
 }
 const readPhones = () => [...$('m-phones').querySelectorAll('.m-phone')].map((input) => input.value.trim()).filter(Boolean);
 
-/* ---------- Form: siblings ---------- */
+/* ---------- Form: siblings (Huynh trưởng are added and removed from their own page) ---------- */
 let editingId = null;
-let siblingIds = [];
-
-function renderSiblingTags() {
-  $('m-sibling-tags').innerHTML = siblingIds.map(byId).filter(Boolean).map((s) => '<span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs flex items-center gap-1 font-semibold">'
-    + `${esc(s.fullName)} (${esc(className(s.classId))})`
-    + `<button type="button" class="remove-sibling text-blue-500 hover:text-blue-900 font-bold px-1" data-id="${s.id}">×</button></span>`).join('');
-}
-
-// Search rule (shared/search.js); everyone who matches is offered.
-function searchSiblings() {
-  const query = $('m-sibling-search').value;
-  const drop = $('m-sibling-dropdown');
-  if (!query.trim()) { drop.classList.add('hidden'); return; }
-  const hits = state.students.filter((s) => s.id !== editingId && !siblingIds.includes(s.id) && matchesStudent(s, query));
-  drop.innerHTML = hits.length
-    ? hits.map((s) => `<div class="sibling-option p-2 hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-0" data-id="${s.id}">`
-      + `<div class="text-sm font-bold text-blue-900">${esc(personName(s))}</div>`
-      + `<div class="text-xs text-slate-500">${esc(s.idNumber)} — ${esc(className(s.classId))}</div></div>`).join('')
-    : '<div class="p-2 text-sm text-slate-500 text-center">Không tìm thấy (nhập họ tên có dấu hoặc số CCCD)</div>';
-  drop.classList.remove('hidden');
-}
+const siblings = siblingEditor('m', () => [], { lockTeachers: true });
 
 /* ---------- Form: open, save ---------- */
 function openForm(id) {
@@ -208,12 +185,13 @@ function openForm(id) {
   $('m-address').value = s?.address ?? '';
   // Status is asked only for an existing student; a new one is always "Hoạt động".
   $('m-status-row').style.display = s ? '' : 'none';
-  $('m-status').value = s?.status ?? 'ACTIVE';
+  // Only Xứ đoàn graduates, and only from the last class; a graduate who became a Huynh trưởng keeps the status for good.
+  const lastClass = state.classes.at(-1)?.id;
+  const statuses = options(STUDENT_STATUS_LABEL).filter(({ v }) => v !== 'GRADUATED' || s?.status === 'GRADUATED' || (isAdmin() && s?.classId === lastClass));
+  fillSel('m-status', statuses, s?.status ?? 'ACTIVE');
+  $('m-status').disabled = !!(s && state.families.graduates[`s${s.id}`]);
   setPhones(s?.phones ?? []);
-  siblingIds = s ? [...s.siblingIds] : [];
-  renderSiblingTags();
-  $('m-sibling-search').value = '';
-  $('m-sibling-dropdown').classList.add('hidden');
+  siblings.open(s ? `s${s.id}` : null);
 
   fillSel('m-class', state.classes.map((c) => ({ v: c.id, t: c.name })), s ? s.classId : Number($('st-class').value));
   $('m-class').disabled = !isAdmin(); // only Xứ đoàn picks or changes the class; a teacher adds to the class in view
@@ -245,16 +223,17 @@ async function saveForm() {
   if (old) {
     body.id = old.id;
     body.status = $('m-status').value;
+    if (body.status === 'GRADUATED' && old.status !== 'GRADUATED'
+      && !confirm(`${personName(old)} tốt nghiệp: một Huynh trưởng mới (Hoạt động, lớp Chiên Con) được tạo với email tạm và thay Thiếu nhi trong nhóm anh chị em. Xứ đoàn cập nhật email thật để đăng nhập được. Không đổi lại trạng thái được.`)) return;
+    if (body.status === 'INACTIVE' && old.status !== 'INACTIVE' && siblings.count()
+      && !confirm(`${personName(old)} ngưng hoạt động sẽ rời nhóm anh chị em. Tiếp tục?`)) return;
   }
-  // Siblings are sent only when they changed, so an ordinary edit never touches the family.
-  const before = old ? [...old.siblingIds].sort((a, b) => a - b).join() : '';
-  if ([...siblingIds].sort((a, b) => a - b).join() !== before) body.siblingIds = siblingIds;
+  body.siblings = siblings.changed();
 
   let saved;
   try { saved = await api('saveStudent', body); } catch (e) { return toast(e.message); }
-  const changed = new Map([saved.student, ...saved.affected].map((s) => [s.id, s]));
-  state.students = state.students.map((s) => changed.get(s.id) ?? s);
-  if (!old) state.students.push(saved.student);
+  state.students = old ? state.students.map((s) => (s.id === saved.student.id ? saved.student : s)) : [...state.students, saved.student];
+  state.families = saved.families;
   closeForm();
   toast('Đã lưu.');
   renderClass();
@@ -267,7 +246,7 @@ async function deleteStudent(id) {
   if (!s || !confirm(`Xóa vĩnh viễn ${personName(s)}? Điểm danh, điểm và ảnh của Thiếu nhi này cũng bị xóa. Không thể hoàn tác.\nNếu chỉ nghỉ học, hãy chuyển sang "Ngưng hoạt động".`)) return;
   try {
     await api('deleteStudent', { id: s.id });
-    await load('students', 'classes'); // siblings of the student change too
+    await load('students', 'classes', 'families'); // siblings of the student change too
   } catch (e) { return toast(e.message); }
   toast('Đã xóa.');
   renderClass();
@@ -361,22 +340,6 @@ $('m-phones').addEventListener('click', (e) => {
   remove.parentElement.remove();
   if (!$('m-phones').children.length) setPhones([]);
 });
-$('m-sibling-search').addEventListener('input', searchSiblings);
-$('m-sibling-dropdown').addEventListener('click', (e) => {
-  const option = e.target.closest('.sibling-option');
-  if (!option) return;
-  siblingIds.push(Number(option.dataset.id));
-  $('m-sibling-search').value = '';
-  $('m-sibling-dropdown').classList.add('hidden');
-  renderSiblingTags();
-});
-$('m-sibling-tags').addEventListener('click', (e) => {
-  const remove = e.target.closest('.remove-sibling');
-  if (!remove) return;
-  siblingIds = siblingIds.filter((id) => id !== Number(remove.dataset.id));
-  renderSiblingTags();
-});
-
 const formModal = $('st-modal');
 formModal.addEventListener('click', (e) => { if (e.target === formModal) closeForm(); });
 formModal.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeForm(); });

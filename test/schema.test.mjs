@@ -8,7 +8,7 @@ const TABLES = [
   'AcademicYear', 'Attendance', 'Classes', 'Config', 'ConfigHistory', 'DriveFolders', 'DriveTrash',
   'GroupClasses', 'Groups', 'Holidays', 'Items', 'LessonFiles', 'LessonTeachers', 'Lessons', 'Locations', 'Memberships',
   'RequestLines', 'RequestPhotos', 'Requests', 'Scores', 'Secrets',
-  'SiblingMembers', 'StudentPhotos', 'Students', 'TeacherAttendance', 'Users',
+  'SiblingMembers', 'SiblingUsers', 'StudentPhotos', 'Students', 'TeacherAttendance', 'Users',
 ];
 
 async function seedOneStudent(db) {
@@ -110,4 +110,15 @@ test('the warehouse migration creates the same tables and indexes as schema.sql'
   const { results } = await createD1().prepare(sql).all();
   assert.deepEqual(shape(fresh.prepare(sql).all()), shape(results));
   fresh.exec(readFileSync(new URL('../migrations/2026-11-09-inventory.sql', import.meta.url), 'utf8')); // a second run changes nothing
+});
+
+test('the sibling users migration creates the same table and index as schema.sql', async () => {
+  const migration = readFileSync(new URL('../migrations/2026-11-15-sibling-users.sql', import.meta.url), 'utf8');
+  const fresh = new DatabaseSync(':memory:');
+  fresh.exec(migration);
+  const shape = (rows) => rows.map((r) => [r.name, r.sql.replace(/\s+/g, ' ').replace(' IF NOT EXISTS', '')]);
+  const sql = "SELECT name, sql FROM sqlite_master WHERE sql IS NOT NULL AND tbl_name = 'SiblingUsers' ORDER BY name";
+  const { results } = await createD1().prepare(sql).all();
+  assert.deepEqual(shape(fresh.prepare(sql).all()), shape(results));
+  fresh.exec(migration); // a second run changes nothing
 });

@@ -173,7 +173,7 @@
       <div class="tbl-scroll sticky">
         <table class="w-full text-sm border-collapse">
           <thead><tr class="bg-blue-900 text-white text-xs uppercase font-bold text-center">
-            <th class="p-3 admin-only">Email</th><th class="p-3">Họ Tên</th><th class="p-3">SDT</th><th class="p-3">Lớp</th><th class="p-3">Trạng thái</th><th class="p-3"></th>
+            <th class="p-3 admin-only">Email</th><th class="p-3">Họ Tên</th><th class="p-3">SDT</th><th class="p-3">Lớp</th><th class="p-3">Anh/Chị/Em</th><th class="p-3">Trạng thái</th><th class="p-3 sticky-col">Thao tác</th>
           </tr></thead>
           <tbody id="tu-tbody"></tbody>
         </table>
@@ -192,6 +192,11 @@
         <div class="form-group"><label>Trạng Thái</label><select id="tu-status"></select></div>
         <div class="form-group full"><label>Lớp trong ngành (chọn nhiều)</label>
           <div id="tu-groups" class="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-56 overflow-y-auto border rounded-lg p-2 bg-slate-50"></div>
+        </div>
+        <div class="form-group full relative"><label>Anh/Chị/Em</label>
+          <div id="tu-sibling-tags" class="flex flex-wrap gap-1 mb-2"></div>
+          <input id="tu-sibling-search" type="text" placeholder="Nhập họ tên Thiếu nhi / Huynh trưởng hoặc số CCCD..." autocomplete="off">
+          <div id="tu-sibling-dropdown" class="absolute z-10 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto hidden mt-1"></div>
         </div>
       </div>
       <div class="modal-actions">

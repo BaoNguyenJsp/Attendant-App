@@ -17,6 +17,10 @@ const TONES = {
 
 export const badge = (text, tone = 'grey') => `<span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${TONES[tone] ?? TONES.grey}">${esc(text || '—')}</span>`;
 
+// Icon buttons of a Thao tác column (style.css .icon-btn); the title and aria-label name the action. `cls` is the click hook.
+export const editIcon = (cls, id) => `<button type="button" class="${cls} icon-btn icon-edit" data-id="${id}" title="Cập nhật" aria-label="Cập nhật">✏️</button>`;
+export const deleteIcon = (cls, id) => `<button type="button" class="${cls} icon-btn icon-delete" data-id="${id}" title="Xóa" aria-label="Xóa">🗑️</button>`;
+
 export const STATUS_TONE = { ACTIVE: 'blue', INACTIVE: 'red', GRADUATED: 'grey' };
 
 // The badge of a group type or of a user's tier.

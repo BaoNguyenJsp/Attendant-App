@@ -49,7 +49,7 @@ test('unknown actions are 404; actions above the tier of the user are 403', asyn
   for (const action of ['getDirectory', 'saveUser', 'saveConfig', 'saveHolidays', 'deleteUser', 'startSchoolYear', 'importSheet', 'clearCache', 'saveClass', 'deleteClass', 'reorderClasses', 'saveGroup', 'deleteGroup']) {
     assert.equal((await call(env, TEACHER, action))[0], 403, action);
   }
-  for (const action of ['getTeacherAttendance', 'saveTeacherAttendance', 'getTeacherAttendanceStats', 'searchTeachers', 'getTeacherAbsences']) {
+  for (const action of ['getTeacherAttendance', 'saveTeacherAttendance', 'getTeacherAttendanceStats', 'searchTeachers', 'getTeacherAbsences', 'getActiveTeachers']) {
     assert.equal((await call(env, TEACHER, action))[0], 403, action);
   }
 });
@@ -68,9 +68,11 @@ test('lists are served from KV and a save through the API shows at once', async 
   await env.DB.prepare("UPDATE Classes SET Name = 'Chiên Non' WHERE Id = 1").run();
   assert.equal((await call(env, TEACHER, 'getClasses'))[1].classes[0].name, 'Chiên Con');
 
-  const [status, saved] = await call(env, TEACHER, 'saveStudent', { idNumber: '079399999999', fullName: 'Nguyễn Thị Mới', classId: '1', phones: ['0901'], siblingIds: [1] });
+  const [status, saved] = await call(env, TEACHER, 'saveStudent', { idNumber: '079399999999', fullName: 'Nguyễn Thị Mới', classId: '1', phones: ['0901'], siblings: ['s1'] });
   assert.equal(status, 200);
-  assert.deepEqual([saved.student.fullName, saved.student.siblingIds.includes(1), saved.affected.some((s) => s.id === 1)], ['Nguyễn Thị Mới', true, true]);
+  const familyOf = (key) => saved.families.members.find((m) => m.key === key)?.familyId;
+  assert.deepEqual([saved.student.fullName, familyOf(`s${saved.student.id}`) === familyOf('s1'), familyOf('s1') !== undefined], ['Nguyễn Thị Mới', true, true]);
+  assert.deepEqual((await call(env, TEACHER, 'getFamilies'))[1].families, saved.families);
   assert.equal((await call(env, TEACHER, 'getStudents'))[1].students.length, 601);
   const classes = (await call(env, TEACHER, 'getClasses'))[1].classes;
   assert.deepEqual([classes[0].size, classes[0].name], [51, 'Chiên Non']);
@@ -261,6 +263,8 @@ test('sector users: BQT ngành updates its own teachers only, never the email or
   assert.ok(mine.users.length && mine.users.every((u) => !('email' in u) && u.groupIds.length));
   assert.equal((await call(env, SECTOR_ADMIN, 'getSectorUsers', { sectorGroupId: other }))[0], 403);
   assert.ok((await call(env, ADMIN, 'getSectorUsers', { sectorGroupId: sector }))[1].users.every((u) => u.email));
+  const active = (await call(env, SECTOR_ADMIN, 'getActiveTeachers'))[1].teachers;
+  assert.ok(active.length > mine.users.length && active.every((t) => t.userId && t.name && !('email' in t)));
 
   const target = mine.users[0];
   const before = await env.DB.prepare('SELECT Email FROM Users WHERE Id = ?').bind(target.id).first('Email');

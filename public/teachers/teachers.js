@@ -12,10 +12,11 @@ import {
 } from '../shared/common.js';
 import { SESSION_LABEL, USER_STATUS_LABEL } from '../shared/labels.js';
 import { matchesPerson } from '../shared/search.js';
-import { absenceTable, printDocument, setupViewToggle, sessionTabs, lockHolidays, markCards, askUnsaved, shiftWeek, badge, STATUS_TONE } from '../shared/ui.js';
+import { absenceTable, printDocument, setupViewToggle, sessionTabs, lockHolidays, markCards, askUnsaved, shiftWeek, badge, STATUS_TONE, editIcon } from '../shared/ui.js';
+import { siblingCell, siblingEditor } from '../shared/siblings.js';
 
 await initCommon();
-await load('classes', 'groups');
+await load('classes', 'groups', 'students', 'families');
 
 // The lists a user may open: the sectors they manage; Xứ đoàn also gets the entry "Xứ đoàn".
 const sectors = state.groups.filter((g) => g.type === 'SECTOR' && state.session.sectorGroupIds.includes(g.id));
@@ -69,7 +70,7 @@ function renderWeek() {
   const box = (i, which, checked) => `<td class="p-2 border text-center"><input type="checkbox" class="attendance-checkbox" data-i="${i}" data-which="${which}"${checked ? ' checked' : ''}${off ? ' disabled' : ''}></td>`;
   $('ta-tbody').innerHTML = rows.map(({ teacher, marks }, i) => '<tr>'
     + (isAdmin() ? `<td class="p-2 border">${esc(teacher.email ?? '')}</td>` : '')
-    + `<td class="p-2 border font-medium">${esc(personName(teacher))}</td>`
+    + `<td class="p-2 border font-medium whitespace-nowrap">${esc(personName(teacher))}</td>`
     + `<td class="p-2 border text-center">${esc(teacher.className ?? 'Xứ đoàn')}</td>`
     + box(i, MARK.PRESENT, marks[code] === MARK.PRESENT)
     + box(i, MARK.EXCUSED, marks[code] === MARK.EXCUSED)
@@ -172,7 +173,7 @@ async function renderStats() {
   showSessionColumns('ts-table', codes);
   $('ts-tbody').innerHTML = r.stats.length
     ? r.stats.map((t) => {
-      return `<tr><td class="p-2 border font-medium">${esc(personName(t))}</td><td class="p-2 border text-center">${esc(t.className ?? 'Xứ đoàn')}</td>`
+      return `<tr><td class="p-2 border font-medium whitespace-nowrap">${esc(personName(t))}</td><td class="p-2 border text-center">${esc(t.className ?? 'Xứ đoàn')}</td>`
         + `<td class="p-2 border text-center">${t.taught}</td>`
         + codes.map((code) => `<td class="p-2 border text-center">${ratio(t.present[code], r.max[code])}</td>`).join('')
         + `<td class="p-2 border text-center font-bold">${ratio(sumOf(t.present, codes), sumOf(r.max, codes))}</td></tr>`;
@@ -198,6 +199,10 @@ function printStats() {
 /* ---------- Tab 4: the teachers of a sector (update only; new users are added on the admin page) ---------- */
 let sectorUsers = { users: [], groups: [] };
 let editingUser = null;
+// Siblings: every active student and Huynh trưởng, not only those of the sector in view.
+const activeTeachers = (await api('getActiveTeachers')).teachers
+  .map((t) => ({ id: t.userId, fullName: t.name, className: t.className, status: 'ACTIVE' }));
+const siblings = siblingEditor('tu', () => activeTeachers);
 
 async function loadSectorUsers() {
   const sectorGroupId = listOf('tu-sector');
@@ -213,11 +218,12 @@ function renderSectorUsers() {
   $('tu-tbody').innerHTML = users.length
     ? users.map((u) => '<tr class="hover:bg-slate-50 bg-white">'
       + (isAdmin() ? `<td class="p-2 border">${esc(u.email ?? '')}</td>` : '')
-      + `<td class="p-2 border font-medium">${esc(personName(u))}</td><td class="p-2 border text-center whitespace-nowrap">${esc(u.phone ?? '')}</td>`
+      + `<td class="p-2 border font-medium whitespace-nowrap">${esc(personName(u))}</td><td class="p-2 border text-center whitespace-nowrap">${esc(u.phone ?? '')}</td>`
       + `<td class="p-2 border">${u.groupIds.map((id) => `<span class="whitespace-nowrap">${esc(groupName(id))}</span>`).join('<br>')}</td>`
+      + `<td class="p-2 border">${siblingCell(`u${u.id}`)}</td>`
       + `<td class="p-2 border text-center">${badge(USER_STATUS_LABEL[u.status], STATUS_TONE[u.status])}</td>`
-      + `<td class="p-2 border text-center"><button class="edit-user bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs px-4 py-2 rounded-lg" data-id="${u.id}">Cập nhật</button></td></tr>`).join('')
-    : '<tr><td colspan="6" class="p-4 text-center text-slate-400">Không tìm thấy Huynh trưởng nào khớp.</td></tr>';
+      + `<td class="p-2 border text-center sticky-col">${editIcon('edit-user', u.id)}</td></tr>`).join('')
+    : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Không tìm thấy Huynh trưởng nào khớp.</td></tr>';
 }
 
 function openSectorUser(id) {
@@ -231,6 +237,7 @@ function openSectorUser(id) {
   $('tu-status').value = u.status;
   const mine = new Set(u.groupIds);
   $('tu-groups').innerHTML = sectorUsers.groups.map((g) => `<label class="flex items-center gap-2 text-sm py-0.5"><input type="checkbox" class="tu-group" value="${g.id}"${mine.has(g.id) ? ' checked' : ''}> ${esc(g.name)}</label>`).join('');
+  siblings.open(`u${u.id}`);
   $('tu-modal').classList.add('open');
 }
 
@@ -239,7 +246,9 @@ async function saveSectorUser() {
   if (!user.fullName) return toast('Nhập Họ và tên.');
   const groupIds = [...$('tu-groups').querySelectorAll('.tu-group:checked')].map((box) => Number(box.value));
   if (!groupIds.length) return toast('Chọn ít nhất một lớp trong ngành.');
-  try { await api('saveSectorUser', { sectorGroupId: listOf('tu-sector'), user, groupIds }); } catch (e) { return toast(e.message); }
+  try {
+    ({ families: state.families } = await api('saveSectorUser', { sectorGroupId: listOf('tu-sector'), user, groupIds, siblings: siblings.changed() }));
+  } catch (e) { return toast(e.message); }
   $('tu-modal').classList.remove('open');
   toast('Đã lưu.');
   await loadSectorUsers();

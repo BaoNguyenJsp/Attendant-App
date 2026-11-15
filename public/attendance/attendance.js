@@ -72,7 +72,7 @@ function renderWeek() {
   $('att-tbody').innerHTML = rows.map(({ student, marks }, i) => `<tr><td class="p-2 border text-center">${i + 1}</td>`
     + `<td class="p-2 border">${esc(student.idNumber)}</td>`
     + `<td class="p-2 border">${esc(student.saintName ?? '')}</td>`
-    + `<td class="p-2 border">${esc(student.fullName)}</td>`
+    + `<td class="p-2 border whitespace-nowrap">${esc(student.fullName)}</td>`
     + box(i, MARK.PRESENT, marks[code] === MARK.PRESENT)
     + box(i, MARK.EXCUSED, marks[code] === MARK.EXCUSED)
     + '</tr>').join('') || '<tr><td colspan="6" class="p-4 text-center text-slate-400">Lớp chưa có Thiếu nhi.</td></tr>';
@@ -185,7 +185,7 @@ async function renderStats() {
   $('stats-tbody').innerHTML = students.length
     ? students.map((s, i) => {
       const present = r.stats[s.id] ?? {};
-      return `<tr><td class="p-2 border text-center">${i + 1}</td><td class="p-2 border font-medium">${esc(personName(s))}</td>`
+      return `<tr><td class="p-2 border text-center">${i + 1}</td><td class="p-2 border font-medium whitespace-nowrap">${esc(personName(s))}</td>`
         + codes.map((code) => `<td class="p-2 border text-center">${ratio(present[code] ?? 0, r.max[code])}</td>`).join('')
         + `<td class="p-2 border text-center font-bold">${ratio(sumOf(present, codes), sumOf(r.max, codes))}</td></tr>`;
     }).join('')

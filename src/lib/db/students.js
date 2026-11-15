@@ -1,26 +1,20 @@
-// Students: list, save (UC-S2, S3), siblings (UC-S4), Excel import (UC-S5), photo mark (UC-S6).
+// Students: list, save (UC-S2, S3), siblings (UC-S4, see families.js), Excel import (UC-S5), photo mark (UC-S6).
 import { all, now, textOrNull } from './sql.js';
 import { fail } from '../errors.js';
 import { requireClass, isAdmin } from '../access.js';
 import { idKey, firstName, splitPhones, joinPhones, isDate, todayVN } from '../text.js';
 import { STUDENT_STATUSES, GENDERS } from '../codes.js';
+import { familyOf, leave, leaveFamily, setFamily, tidyFamily } from './families.js';
 
 const thisYear = () => Number(todayVN().slice(0, 4));
 
 export async function listStudents(db) {
   const rows = await all(db, `
-    SELECT s.Id AS id, s.IdNumber AS idNumber, s.SaintName AS saintName, s.FullName AS fullName, s.FirstName AS firstName,
-           s.DateOfBirth AS dateOfBirth, s.Gender AS gender, s.Father AS father, s.Mother AS mother, s.Address AS address, s.Phone AS phone,
-           s.ClassId AS classId, s.EnrollYear AS enrollYear, s.Status AS status, s.PhotoVersion AS photoVersion, m.FamilyId AS familyId
-    FROM Students s LEFT JOIN SiblingMembers m ON m.StudentId = s.Id ORDER BY s.Id`);
-  const families = new Map();
-  for (const r of rows) if (r.familyId !== null) families.set(r.familyId, [...(families.get(r.familyId) ?? []), r.id]);
-  return rows.map(({ phone, familyId, ...s }) => ({
-    ...s,
-    phones: splitPhones(phone),
-    hasPhoto: s.photoVersion > 0,
-    siblingIds: familyId === null ? [] : families.get(familyId).filter((id) => id !== s.id),
-  }));
+    SELECT Id AS id, IdNumber AS idNumber, SaintName AS saintName, FullName AS fullName, FirstName AS firstName,
+           DateOfBirth AS dateOfBirth, Gender AS gender, Father AS father, Mother AS mother, Address AS address, Phone AS phone,
+           ClassId AS classId, EnrollYear AS enrollYear, Status AS status, PhotoVersion AS photoVersion
+    FROM Students ORDER BY Id`);
+  return rows.map(({ phone, ...s }) => ({ ...s, phones: splitPhones(phone), hasPhoto: s.photoVersion > 0 }));
 }
 
 export const getStudent = (db, id) => db
@@ -49,6 +43,10 @@ function readFields(input) {
   };
 }
 
+// A graduate becomes an active user in the class group of this class. The placeholder email (.invalid) can never sign in
+// with Google, so the account is safe until Xứ đoàn sets the real email.
+const GRADUATE_CLASS = 'Chiên Con';
+
 async function requireClassExists(db, classId) {
   if (!(await db.prepare('SELECT Id FROM Classes WHERE Id = ?').bind(classId).first())) fail(400, 'Lớp không tồn tại.');
 }
@@ -67,6 +65,17 @@ export async function saveStudent(db, actor, input, { year = thisYear() } = {}) 
 
   const status = old ? (input.status ?? old.Status) : 'ACTIVE';
   if (!STUDENT_STATUSES.includes(status)) fail(400, 'Trạng thái không hợp lệ.');
+  // A graduate who became a user keeps the status for good.
+  if (old?.Status === 'GRADUATED' && status !== 'GRADUATED' && await db.prepare('SELECT 1 FROM SiblingUsers WHERE StudentId = ?').bind(id).first()) {
+    fail(400, 'Thiếu nhi đã tốt nghiệp thành Huynh trưởng, không đổi được trạng thái.');
+  }
+  const graduating = !!old && status === 'GRADUATED' && old.Status !== 'GRADUATED';
+  if (graduating) {
+    if (!isAdmin(actor)) fail(403, 'Chỉ Xứ đoàn được cho Thiếu nhi tốt nghiệp.');
+    const lastClass = await db.prepare('SELECT Id, Name FROM Classes ORDER BY SortOrder DESC LIMIT 1').first();
+    if (classId !== lastClass.Id) fail(400, `Chỉ Thiếu nhi lớp ${lastClass.Name} được tốt nghiệp.`);
+  }
+  const leaving = !!old && status === 'INACTIVE' && old.Status !== 'INACTIVE';
   const blankYear = input.enrollYear === undefined || input.enrollYear === null || input.enrollYear === '';
   const enrollYear = blankYear ? (old ? old.EnrollYear : year) : Number(input.enrollYear);
   if (enrollYear !== null && !(Number.isInteger(enrollYear) && enrollYear >= 1900 && enrollYear <= 2100)) fail(400, 'Năm nhập học không hợp lệ.');
@@ -77,48 +86,40 @@ export async function saveStudent(db, actor, input, { year = thisYear() } = {}) 
   const values = [f.idNumber, f.key, f.saintName, f.fullName, firstName(f.fullName), f.dateOfBirth, f.gender, f.father, f.mother, f.address, f.phone, classId, enrollYear, status];
   let studentId = id;
   if (old) {
-    await db.prepare(`UPDATE Students SET IdNumber = ?, IdKey = ?, SaintName = ?, FullName = ?, FirstName = ?, DateOfBirth = ?, Gender = ?, Father = ?, Mother = ?,
-      Address = ?, Phone = ?, ClassId = ?, EnrollYear = ?, Status = ?, UpdatedAt = ?, UpdatedBy = ? WHERE Id = ?`).bind(...values, now(), actor.userId, id).run();
+    const update = db.prepare(`UPDATE Students SET IdNumber = ?, IdKey = ?, SaintName = ?, FullName = ?, FirstName = ?, DateOfBirth = ?, Gender = ?, Father = ?, Mother = ?,
+      Address = ?, Phone = ?, ClassId = ?, EnrollYear = ?, Status = ?, UpdatedAt = ?, UpdatedBy = ? WHERE Id = ?`).bind(...values, now(), actor.userId, id);
+    // Ngưng hoạt động takes the student out of their sibling family; a graduate's new user takes their place in it.
+    if (leaving || graduating) {
+      await db.batch([update, ...(leaving ? await leaveFamily(db, `s${id}`) : await graduate(db, actor, id, f))]);
+      return { id, graduated: graduating };
+    }
+    await update.run();
   } else {
     const r = await db.prepare(`INSERT INTO Students (IdNumber, IdKey, SaintName, FullName, FirstName, DateOfBirth, Gender, Father, Mother, Address, Phone, ClassId, EnrollYear, Status, UpdatedBy)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(...values, actor.userId).run();
     studentId = r.meta.last_row_id;
   }
   // ponytail: the student row and the family rows are two writes; a failure between them leaves the student saved without the new siblings. One batch if that ever shows.
-  const affectedIds = input.siblingIds === undefined ? [studentId] : await setSiblings(db, studentId, input.siblingIds);
-  return { id: studentId, affectedIds };
+  if (input.siblings !== undefined) await setFamily(db, `s${studentId}`, input.siblings, { keepUsers: true });
+  return { id: studentId, graduated: false };
 }
 
-const familyOf = async (db, studentId) => {
-  const familyId = await db.prepare('SELECT FamilyId FROM SiblingMembers WHERE StudentId = ?').bind(studentId).first('FamilyId');
-  const members = familyId === null ? [] : (await all(db, 'SELECT StudentId FROM SiblingMembers WHERE FamilyId = ?', familyId)).map((r) => r.StudentId);
-  return { familyId, members };
-};
-
-// `siblingIds` is the wanted list of siblings of `me`. Returns the ids of every student whose family changed.
-async function setSiblings(db, me, siblingIds) {
-  const wanted = new Set((siblingIds ?? []).map(Number).filter((id) => id !== me));
-  const mine = await familyOf(db, me);
-  const involved = new Set([me, ...mine.members]);
-  // Members of my family that are still wanted stay; the others leave on their own.
-  const members = new Set([me, ...mine.members.filter((id) => wanted.has(id))]);
-  let familyId = mine.familyId;
-
-  for (const id of wanted) {
-    if (mine.members.includes(id)) continue;
-    if (!(await db.prepare('SELECT Id FROM Students WHERE Id = ?').bind(id).first())) fail(400, 'Anh chị em được chọn không tồn tại.');
-    // A new sibling brings their whole family: the two families become one.
-    const theirs = await familyOf(db, id);
-    for (const member of [id, ...theirs.members]) { members.add(member); involved.add(member); }
-    familyId ??= theirs.familyId;
-  }
-  familyId ??= await db.prepare('SELECT COALESCE(MAX(FamilyId), 0) + 1 AS n FROM SiblingMembers').first('n');
-
-  const statements = [...involved].map((id) => db.prepare('DELETE FROM SiblingMembers WHERE StudentId = ?').bind(id));
-  // A family of one is not a family.
-  if (members.size > 1) for (const id of members) statements.push(db.prepare('INSERT INTO SiblingMembers (StudentId, FamilyId) VALUES (?, ?)').bind(id, familyId));
-  await db.batch(statements);
-  return [...involved];
+// A new user with the student's name, ACTIVE with a placeholder email, in the class group of GRADUATE_CLASS; the user
+// takes the student's place in the sibling family. The user id is not known inside the batch, so it is found by email.
+async function graduate(db, actor, studentId, f) {
+  const groupId = await db.prepare(`SELECT g.Id FROM Groups g JOIN GroupClasses gc ON gc.GroupId = g.Id JOIN Classes c ON c.Id = gc.ClassId
+    WHERE g.Type = 'CLASS' AND c.Name = ? ORDER BY g.Id`).bind(GRADUATE_CLASS).first('Id');
+  if (groupId === null) fail(400, `Không tìm thấy nhóm của lớp ${GRADUATE_CLASS}.`);
+  const { familyId } = await familyOf(db, `s${studentId}`);
+  const email = `graduate-${studentId}-${crypto.randomUUID().slice(0, 8)}@pending.invalid`;
+  const userId = '(SELECT Id FROM Users WHERE Email = ?)';
+  return [
+    db.prepare('INSERT INTO Users (Email, SaintName, FullName, FirstName, UpdatedBy) VALUES (?, ?, ?, ?, ?)')
+      .bind(email, f.saintName, f.fullName, firstName(f.fullName), actor.userId),
+    db.prepare(`INSERT INTO Memberships (GroupId, UserId) VALUES (?, ${userId})`).bind(groupId, email),
+    leave(db, `s${studentId}`),
+    db.prepare(`INSERT INTO SiblingUsers (UserId, StudentId, FamilyId) VALUES (${userId}, ?, ?)`).bind(email, studentId, familyId),
+  ];
 }
 
 // One request, any number of rows, all or nothing. Rows without CCCD or full name are skipped. Returns the number of rows written.
@@ -153,10 +154,7 @@ export async function deleteStudent(db, actor, id) {
   const classId = await db.prepare('SELECT ClassId FROM Students WHERE Id = ?').bind(id).first('ClassId');
   if (classId === null) fail(404, 'Không tìm thấy Thiếu nhi.');
   requireClass(actor, classId);
-  const { familyId } = await familyOf(db, id);
-  await db.batch([
-    db.prepare('DELETE FROM Students WHERE Id = ?').bind(id),
-    // A family of one is not a family.
-    db.prepare('DELETE FROM SiblingMembers WHERE FamilyId = ? AND (SELECT COUNT(*) FROM SiblingMembers WHERE FamilyId = ?) < 2').bind(familyId, familyId),
-  ]);
+  // A graduate's user stays in the family (SiblingUsers.StudentId is set to NULL); tidyFamily(NULL) only drops empty user rows.
+  const { familyId } = await familyOf(db, `s${id}`);
+  await db.batch([db.prepare('DELETE FROM Students WHERE Id = ?').bind(id), ...tidyFamily(db, familyId)]);
 }

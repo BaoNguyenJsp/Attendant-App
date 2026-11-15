@@ -14,7 +14,7 @@ export const MARK = { NONE: 0, PRESENT: 1, EXCUSED: 2, ABSENT: 3 };
 const TIER_RANK = { CLASS: 1, SECTOR: 2, SECTOR_ADMIN: 3, ADMIN: 4 };
 
 /* ---------- State shared by the scripts of one page ---------- */
-export const state = { session: null, config: {}, year: '', students: [], classes: [], groups: [] };
+export const state = { session: null, config: {}, year: '', students: [], classes: [], groups: [], families: { members: [], graduates: {} } };
 
 export const isAdmin = () => state.session?.tier === 'ADMIN';
 export const isExec = () => (TIER_RANK[state.session?.tier] ?? 0) >= TIER_RANK.SECTOR_ADMIN;
@@ -245,7 +245,7 @@ export const api = (action, body) => request(`/api/${action}`, { method: 'POST',
 export const apiSend = (method, path, body) => request(path, { method, body });
 
 /* ---------- Lists kept in state ---------- */
-const LISTS = { students: 'getStudents', classes: 'getClasses', groups: 'getGroups' };
+const LISTS = { students: 'getStudents', families: 'getFamilies', classes: 'getClasses', groups: 'getGroups' };
 
 export async function load(...names) {
   const results = await Promise.all(names.map((name) => api(LISTS[name])));

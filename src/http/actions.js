@@ -60,6 +60,7 @@ export const ACTIONS = {
 
   /* ---------- cached lists ---------- */
   getStudents: list('students'),
+  getFamilies: list('families'),
   getClasses: list('classes'),
   getGroups: list('groups'),
   getConfig: list('config'),
@@ -73,7 +74,8 @@ export const ACTIONS = {
       const saved = await saveStudent(db, actor, { ...b, id: optionalId(b.id), classId: id(b.classId, 'Lớp') });
       const students = await lists.refresh('students');
       await lists.refresh('classes'); // class sizes
-      return { student: students.find((s) => s.id === saved.id), affected: students.filter((s) => saved.affectedIds.includes(s.id)) };
+      if (saved.graduated) await lists.refresh('directory'); // the new user
+      return { student: students.find((s) => s.id === saved.id), families: await lists.refresh('families') };
     },
   },
   importStudents: {
@@ -91,6 +93,7 @@ export const ACTIONS = {
       await removePhoto(env, studentId); // the R2 copy has no cascade
       await lists.refresh('students');
       await lists.refresh('classes');
+      await lists.refresh('families');
       return {};
     },
   },
@@ -129,6 +132,8 @@ export const ACTIONS = {
   },
   searchTeachers: { tier: 'SECTOR_ADMIN', run: async ({ db, actor }, b) => ({ teachers: await searchTeachers(db, actor, b.query) }) },
   getTeacherAbsences: { tier: 'SECTOR_ADMIN', run: ({ db, actor, today }, b) => getTeacherAbsences(db, actor, { userId: id(b.userId), today }) },
+  // Every active Huynh trưởng, names only (R8): the sibling search of the Huynh trưởng page looks beyond the sector.
+  getActiveTeachers: { tier: 'SECTOR_ADMIN', run: async ({ db }) => ({ teachers: await lessonTeacherOptions(db) }) },
   // The teachers of a sector for its BQT ngành to update (not add); emails for Xứ đoàn only (R8).
   getSectorUsers: {
     tier: 'SECTOR_ADMIN',
@@ -140,9 +145,9 @@ export const ACTIONS = {
   saveSectorUser: {
     tier: 'SECTOR_ADMIN',
     run: async ({ db, actor, lists }, b) => {
-      await saveSectorUser(db, sector(actor, b.sectorGroupId), { user: { ...b.user, id: id(b.user?.id) }, groupIds: b.groupIds }, actor.userId);
+      await saveSectorUser(db, sector(actor, b.sectorGroupId), { user: { ...b.user, id: id(b.user?.id) }, groupIds: b.groupIds, siblings: b.siblings }, actor.userId);
       await lists.refresh('directory');
-      return {};
+      return { families: await lists.refresh('families') };
     },
   },
 
@@ -187,9 +192,9 @@ export const ACTIONS = {
   saveUser: {
     tier: 'ADMIN',
     run: async ({ db, actor, lists }, b) => {
-      const user = await saveUser(db, { user: b.user, groupIds: b.groupIds }, actor.userId);
+      const user = await saveUser(db, { user: b.user, groupIds: b.groupIds, siblings: b.siblings }, actor.userId);
       await lists.refresh('directory');
-      return { user };
+      return { user, families: await lists.refresh('families') };
     },
   },
   deleteUser: {
@@ -197,6 +202,7 @@ export const ACTIONS = {
     run: async ({ db, actor, lists }, b) => {
       await deleteUser(db, id(b.id), actor.userId, b.transferTo ? id(b.transferTo, 'Người nhận giáo án') : undefined);
       await lists.refresh('directory');
+      await lists.refresh('families');
       return {};
     },
   },

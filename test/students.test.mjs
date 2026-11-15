@@ -2,30 +2,40 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { seededD1 } from './helpers/seeded.mjs';
 import { AppError } from '../src/lib/errors.js';
-import { loadSession } from '../src/lib/db/users.js';
+import { loadSession, deleteUser, saveUser } from '../src/lib/db/users.js';
+import { listFamilies } from '../src/lib/db/families.js';
 import { listStudents, saveStudent, importStudents, deleteStudent, getStudent, setPhotoVersion } from '../src/lib/db/students.js';
 
 const status = (code) => (e) => e instanceof AppError && e.status === code;
 const admin = (db) => loadSession(db, 'doruoora@gmail.com');
 const teacher = (db) => loadSession(db, 'teacher08@example.com'); // class 1 only
 const row = (db, id) => db.prepare('SELECT * FROM Students WHERE Id = ?').bind(id).first();
-const family = async (db, id) => (await listStudents(db)).find((s) => s.id === id).siblingIds.sort((a, b) => a - b);
+const keys = (...list) => list.sort();
+// The other members of a person's family, by key ('s12' student, 'u7' user); a graduate is their user.
+const family = async (db, key) => {
+  const { members, graduates } = await listFamilies(db);
+  const me = graduates[key] ?? key;
+  const familyId = members.find((m) => m.key === me)?.familyId;
+  return familyId === undefined ? [] : keys(...members.filter((m) => m.familyId === familyId && m.key !== me).map((m) => m.key));
+};
 const fresh = { idNumber: '079399999999', fullName: 'Nguyễn Thị Mới', classId: 1 };
 
 async function noFamilies(db) {
-  await db.exec('DELETE FROM SiblingMembers');
+  await db.exec('DELETE FROM SiblingMembers; DELETE FROM SiblingUsers');
   return db;
 }
 
-test('listStudents gives phones as a list and siblings by id', async () => {
+test('listStudents gives phones as a list; listFamilies gives the families by key', async () => {
   const db = await seededD1();
   const students = await listStudents(db);
   assert.equal(students.length, 600);
   assert.ok(students.every((s) => Array.isArray(s.phones) && s.phones.length >= 1 && s.hasPhoto === false));
-  const withSiblings = students.filter((s) => s.siblingIds.length);
-  assert.equal(withSiblings.length, 99);
-  const one = withSiblings[0];
-  assert.ok(one.siblingIds.every((id) => students.find((s) => s.id === id).siblingIds.includes(one.id)));
+  const { members, graduates } = await listFamilies(db);
+  assert.equal(members.length, 99);
+  assert.ok(members.every((m) => m.key.startsWith('s') && !m.teacher && typeof m.active === 'boolean'));
+  assert.deepEqual(graduates, {});
+  const one = members[0];
+  assert.ok((await family(db, one.key)).length >= 1);
 });
 
 test('a teacher adds a student to their class; the student is active whatever is sent', async () => {
@@ -84,31 +94,95 @@ test('editing: the CCCD can be corrected, the status set, and only an admin move
 test('siblings: adding merges families, removing takes one out, a family of one disappears', async () => {
   const db = await noFamilies(await seededD1());
   const a = await admin(db);
-  const save = (id, siblingIds) => saveStudent(db, a, { id, idNumber: `0793${String(id).padStart(8, '0')}`, fullName: `Học Sinh ${id}`, classId: Math.ceil(id / 50), siblingIds });
+  const save = (id, siblings) => saveStudent(db, a, { id, idNumber: `0793${String(id).padStart(8, '0')}`, fullName: `Học Sinh ${id}`, classId: Math.ceil(id / 50), siblings });
 
-  const first = await save(1, [51]);
-  assert.deepEqual(first.affectedIds.sort((x, y) => x - y), [1, 51]);
-  await save(101, [151]);
+  await save(1, ['s51']);
+  assert.deepEqual(await family(db, 's51'), ['s1']);
+  await save(101, ['s151']);
   // 1 adds 101: the two families become one
-  const merged = await save(1, [51, 101]);
-  assert.deepEqual(merged.affectedIds.sort((x, y) => x - y), [1, 51, 101, 151]);
-  assert.deepEqual(await family(db, 151), [1, 51, 101]);
+  await save(1, ['s51', 's101']);
+  assert.deepEqual(await family(db, 's151'), keys('s1', 's51', 's101'));
   assert.equal(await db.prepare('SELECT COUNT(DISTINCT FamilyId) AS n FROM SiblingMembers').first('n'), 1);
 
   // 1 removes 51: only 51 leaves
-  await save(1, [101, 151]);
-  assert.deepEqual(await family(db, 51), []);
-  assert.deepEqual(await family(db, 101), [1, 151]);
+  await save(1, ['s101', 's151']);
+  assert.deepEqual(await family(db, 's51'), []);
+  assert.deepEqual(await family(db, 's101'), keys('s1', 's151'));
 
-  // without siblingIds the family is not touched
+  // without siblings the family is not touched
   await saveStudent(db, a, { id: 1, idNumber: '079300000001', fullName: 'Học Sinh 1', classId: 1 });
-  assert.deepEqual(await family(db, 1), [101, 151]);
+  assert.deepEqual(await family(db, 's1'), keys('s101', 's151'));
 
   // removing everyone leaves no row for anybody
   await save(101, []);
   await save(1, []);
   assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM SiblingMembers').first('n'), 0);
-  await assert.rejects(save(1, [9999]), status(400));
+  await assert.rejects(save(1, ['s9999']), status(400));
+  await assert.rejects(save(1, ['x1']), status(400));
+});
+
+test('Ngưng hoạt động takes a student out of the family', async () => {
+  const db = await noFamilies(await seededD1());
+  const a = await admin(db);
+  const edit = (id, extra) => saveStudent(db, a, { id, idNumber: `0793${String(id).padStart(8, '0')}`, fullName: `Học Sinh ${id}`, classId: Math.ceil(id / 50), ...extra });
+  await edit(1, { siblings: ['s2', 's3'] });
+  await edit(3, { status: 'INACTIVE' });
+  assert.deepEqual([await family(db, 's3'), await family(db, 's1')], [[], ['s2']]);
+  await edit(2, { status: 'INACTIVE' });
+  assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM SiblingMembers').first('n'), 0);
+});
+
+test('graduating: Xứ đoàn only, last class only; the new active user of Chiên Con takes the place of the student', async () => {
+  const db = await noFamilies(await seededD1());
+  const a = await admin(db);
+  const edit = (actor, id, extra) => saveStudent(db, actor, { id, idNumber: `0793${String(id).padStart(8, '0')}`, fullName: `Học Sinh ${id}`, classId: Math.ceil(id / 50), ...extra });
+  await edit(a, 551, { siblings: ['s1', 's552'] });
+
+  await assert.rejects(edit(a, 1, { status: 'GRADUATED' }), status(400)); // Chiên Con is not the last class
+  const lastClassTeacher = { ...(await teacher(db)), classIds: [12] };
+  await assert.rejects(edit(lastClassTeacher, 551, { status: 'GRADUATED' }), status(403));
+  assert.equal((await edit(a, 551, { status: 'GRADUATED', saintName: 'Phêrô' })).graduated, true);
+  assert.equal((await row(db, 551)).Status, 'GRADUATED');
+
+  const user = await db.prepare(`SELECT u.Id, u.Email, u.Status, u.FullName, g.Name FROM SiblingUsers su JOIN Users u ON u.Id = su.UserId
+    JOIN Memberships m ON m.UserId = u.Id JOIN Groups g ON g.Id = m.GroupId WHERE su.StudentId = 551`).first();
+  assert.deepEqual([user.Status, user.FullName, user.Name], ['ACTIVE', 'Học Sinh 551', 'Lớp Chiên Con']);
+  assert.match(user.Email, /^graduate-551-[0-9a-f]{8}@pending\.invalid$/);
+  // one person: the student and the user are the same member of the family
+  const u = `u${user.Id}`;
+  assert.deepEqual(await family(db, 's1'), keys('s552', u));
+  assert.deepEqual(await family(db, 's551'), keys('s1', 's552'));
+  const { members, graduates } = await listFamilies(db);
+  assert.equal(graduates.s551, u);
+  const { familyId, ...shown } = members.find((m) => m.key === u);
+  assert.deepEqual(shown, { key: u, name: 'Phêrô Học Sinh 551', classId: null, active: true, teacher: true });
+
+  // the status is final; other fields still change
+  await assert.rejects(edit(a, 551, { status: 'ACTIVE' }), status(400));
+  await edit(a, 551, { address: 'Nhà mới' });
+
+  // the user's siblings are edited from the user too: teachers who were never students join with their whole family
+  await saveUser(db, { user: { id: 13, email: 'teacher08@example.com', fullName: 'X' }, groupIds: [2], siblings: ['s1', 'u14'] }, a.userId);
+  assert.deepEqual(await family(db, 's1'), keys('s552', u, 'u13', 'u14'));
+
+  // deleting the graduated student keeps the user in the family; users leave with their account
+  await deleteStudent(db, a, 551);
+  assert.deepEqual(await family(db, 's1'), keys('s552', u, 'u13', 'u14'));
+  for (const id of [14, 13, user.Id]) await deleteUser(db, id, a.userId, a.userId);
+  assert.deepEqual(await family(db, 's1'), ['s552']);
+  assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM SiblingUsers').first('n'), 0);
+});
+
+test('the student form cannot take a Huynh trưởng out of the family; the Huynh trưởng pages can', async () => {
+  const db = await noFamilies(await seededD1());
+  const a = await admin(db);
+  const save = (id, siblings) => saveStudent(db, a, { id, idNumber: `0793${String(id).padStart(8, '0')}`, fullName: `Học Sinh ${id}`, classId: Math.ceil(id / 50), siblings });
+  await saveUser(db, { user: { id: 13, email: 'teacher08@example.com', fullName: 'X' }, groupIds: [2], siblings: ['s1', 's2'] }, a.userId);
+  await save(1, []);
+  assert.deepEqual(await family(db, 's1'), ['u13']);
+  assert.deepEqual(await family(db, 's2'), []); // the student left; the Huynh trưởng stayed
+  await saveUser(db, { user: { id: 13, email: 'teacher08@example.com', fullName: 'X' }, groupIds: [2], siblings: [] }, a.userId);
+  assert.deepEqual(await family(db, 's1'), []);
 });
 
 test('import: updates by CCCD into the selected class, creates the rest, keeps what the file does not hold', async () => {
@@ -168,14 +242,14 @@ test('a teacher imports into their own class only, and cannot pull a student fro
 test('deleting a student: their class only, attendance goes with them, a family of two ends', async () => {
   const db = await noFamilies(await seededD1());
   const s1 = await row(db, 1);
-  await saveStudent(db, await admin(db), { id: 1, idNumber: s1.IdNumber, fullName: s1.FullName, classId: 1, siblingIds: [2] });
+  await saveStudent(db, await admin(db), { id: 1, idNumber: s1.IdNumber, fullName: s1.FullName, classId: 1, siblings: ['s2'] });
   await db.prepare("INSERT OR REPLACE INTO Attendance (StudentId, ClassId, WeekOf, SundayMass) VALUES (1, 1, '2026-09-06', 1)").run();
   await assert.rejects(deleteStudent(db, await teacher(db), 51), status(403)); // class 2
   await assert.rejects(deleteStudent(db, await teacher(db), 9999), status(404));
   await deleteStudent(db, await teacher(db), 1);
   assert.equal(await row(db, 1), null);
   assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM Attendance WHERE StudentId = 1').first('n'), 0);
-  assert.deepEqual(await family(db, 2), []);
+  assert.deepEqual(await family(db, 's2'), []);
   assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM SiblingMembers').first('n'), 0);
 });
 

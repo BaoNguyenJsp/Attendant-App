@@ -8,13 +8,15 @@
 import { initCommon, load, state, $, api, esc, toast, fillSel, setupTabs, TEACHER_SESSIONS, personName, snapToSunday, fmtDate } from '../shared/common.js';
 import { SESSION_LABEL, USER_STATUS_LABEL, TIER_LABEL } from '../shared/labels.js';
 import { matchesPerson } from '../shared/search.js';
-import { badge, tierBadge, STATUS_TONE } from '../shared/ui.js';
+import { badge, tierBadge, STATUS_TONE, editIcon, deleteIcon } from '../shared/ui.js';
 import { templateSheets } from '../shared/import-template.js';
+import { siblingCell, siblingEditor } from '../shared/siblings.js';
 
 await initCommon();
-await load('classes');
+await load('classes', 'students', 'families');
 
 let directory = { users: [], groups: [], memberships: [] };
+const siblings = siblingEditor('user', () => directory.users);
 let holidays = [];
 const TIER_ORDER = Object.keys(TIER_LABEL); // CLASS, SECTOR, SECTOR_ADMIN, ADMIN
 // directory.groups is kept in display order, so the groups of a user come out in that order too.
@@ -37,14 +39,15 @@ function renderUsers() {
   const users = query.trim() ? directory.users.filter((u) => matchesPerson(u, query, { byEmail: true })) : directory.users;
   $('user-tbody').innerHTML = users.length
     ? users.map((u) => `<tr class="hover:bg-slate-50 bg-white"><td class="p-2 border">${esc(u.email)}</td>`
-      + `<td class="p-2 border font-medium">${esc(personName(u))}</td><td class="p-2 border text-center whitespace-nowrap">${esc(u.phone ?? '')}</td>`
+      + `<td class="p-2 border font-medium whitespace-nowrap">${esc(personName(u))}</td><td class="p-2 border text-center whitespace-nowrap">${esc(u.phone ?? '')}</td>`
       + `<td class="p-2 border">${groupsOf(u.id).map((g) => `<span class="whitespace-nowrap">${tierBadge(g.type)} ${esc(g.name)}</span>`).join('<br>')}</td>`
+      + `<td class="p-2 border">${siblingCell(`u${u.id}`)}</td>`
       + `<td class="p-2 border text-center">${badge(USER_STATUS_LABEL[u.status], STATUS_TONE[u.status])}</td>`
-      + `<td class="p-2 border text-center whitespace-nowrap"><button class="edit-user bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs px-4 py-2 rounded-lg" data-id="${u.id}">Cập nhật</button>`
+      + `<td class="p-2 border text-center whitespace-nowrap sticky-col">${editIcon('edit-user', u.id)}`
       // No delete button on your own row: the server refuses it.
-      + (u.id === state.session.userId ? '' : ` <button class="delete-user bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs px-4 py-2 rounded-lg" data-id="${u.id}">Xóa</button>`)
+      + (u.id === state.session.userId ? '' : deleteIcon('delete-user', u.id))
       + '</td></tr>').join('')
-    : '<tr><td colspan="6" class="p-4 text-center text-slate-400">Không tìm thấy Huynh trưởng nào khớp.</td></tr>';
+    : '<tr><td colspan="7" class="p-4 text-center text-slate-400">Không tìm thấy Huynh trưởng nào khớp.</td></tr>';
 }
 
 let editingUser = null;
@@ -60,6 +63,7 @@ function openUser(id) {
   $('user-status').value = u?.status ?? 'ACTIVE';
   const mine = new Set(u ? groupsOf(u.id).map((g) => g.id) : []);
   $('user-groups').innerHTML = directory.groups.map((g) => `<label class="flex items-center gap-2 text-sm py-0.5"><input type="checkbox" class="user-group" value="${g.id}"${mine.has(g.id) ? ' checked' : ''}> ${tierBadge(g.type)} ${esc(g.name)}</label>`).join('');
+  siblings.open(u ? `u${u.id}` : null);
   $('user-modal').classList.add('open');
 }
 
@@ -81,7 +85,7 @@ async function saveUser() {
   const groupIds = [...$('user-groups').querySelectorAll('.user-group:checked')].map((box) => Number(box.value));
   try {
     // The user and their groups are saved together; unchanged groups are not rewritten by the server.
-    await api('saveUser', { user, groupIds });
+    ({ families: state.families } = await api('saveUser', { user, groupIds, siblings: siblings.changed() }));
     await loadDirectory();
   } catch (e) { return toast(e.message); }
   $('user-modal').classList.remove('open');
@@ -103,7 +107,7 @@ async function deleteUser(id) {
 }
 
 async function deleted() {
-  try { await loadDirectory(); } catch (e) { return toast(e.message); }
+  try { await Promise.all([loadDirectory(), load('families')]); } catch (e) { return toast(e.message); }
   toast('Đã xóa.');
   renderUsers();
 }
@@ -129,9 +133,6 @@ async function transferAndDelete() {
 }
 
 /* ---------- Groups and classes ---------- */
-const EDIT_BUTTON = 'bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs px-3 py-2 rounded-lg whitespace-nowrap';
-const DELETE_BUTTON = 'bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs px-3 py-2 rounded-lg whitespace-nowrap';
-
 // After a change the server has rewritten its lists; the page reads them again.
 async function change(action, body, done) {
   try {
@@ -156,7 +157,7 @@ function renderGroups() {
   };
   $('group-tbody').innerHTML = directory.groups.map((g) => `<tr><td class="p-2 border font-medium">${esc(g.name)}</td><td class="p-2 border text-center">${tierBadge(g.type)}</td><td class="p-2 border">${covered(g)}</td>`
     + `<td class="p-2 border text-sm">${esc(g.description ?? '')}</td>`
-    + `<td class="p-2 border text-center whitespace-nowrap"><button class="edit-group ${EDIT_BUTTON}" data-id="${g.id}">Cập nhật</button> <button class="delete-group ${DELETE_BUTTON}" data-id="${g.id}">Xóa</button></td></tr>`).join('');
+    + `<td class="p-2 border text-center whitespace-nowrap sticky-col">${editIcon('edit-group', g.id)}${deleteIcon('delete-group', g.id)}</td></tr>`).join('');
 }
 
 let editingGroup = null;
@@ -203,10 +204,10 @@ function deleteGroup(id) {
 function renderClasses() {
   $('class-tbody').innerHTML = state.classes.map((c, i) => `<tr><td class="p-2 border text-center">${i + 1}</td><td class="p-2 border font-medium">${esc(c.name)}</td>`
     + `<td class="p-2 border text-center">${esc(c.grade ?? '')}</td><td class="p-2 border text-center font-bold">${c.size}</td>`
-    + '<td class="p-2 border text-center whitespace-nowrap">'
+    + '<td class="p-2 border text-center whitespace-nowrap sticky-col">'
     + `<button class="move-class px-2 text-lg text-slate-500 hover:text-blue-900 disabled:opacity-30" data-id="${c.id}" data-step="-1" title="Lên trên"${i === 0 ? ' disabled' : ''}>▲</button>`
     + `<button class="move-class px-2 text-lg text-slate-500 hover:text-blue-900 disabled:opacity-30" data-id="${c.id}" data-step="1" title="Xuống dưới"${i === state.classes.length - 1 ? ' disabled' : ''}>▼</button> `
-    + `<button class="edit-class ${EDIT_BUTTON}" data-id="${c.id}">Cập nhật</button> <button class="delete-class ${DELETE_BUTTON}" data-id="${c.id}">Xóa</button></td></tr>`).join('');
+    + `${editIcon('edit-class', c.id)}${deleteIcon('delete-class', c.id)}</td></tr>`).join('');
 }
 
 let editingClass = null;

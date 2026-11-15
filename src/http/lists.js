@@ -3,9 +3,11 @@ import { cached, refresh, rebuildAll } from '../lib/cache.js';
 import { listClasses, listGroups, listConfig, listHolidays, yearOptions } from '../lib/db/org.js';
 import { listStudents } from '../lib/db/students.js';
 import { getDirectory } from '../lib/db/users.js';
+import { listFamilies } from '../lib/db/families.js';
 
 const loaders = (db) => ({
   students: () => listStudents(db),
+  families: () => listFamilies(db),
   classes: () => listClasses(db),
   groups: () => listGroups(db),
   config: () => listConfig(db),

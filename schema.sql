@@ -1,6 +1,7 @@
 -- Sổ Thiếu Nhi — D1 schema. Re-runnable: drops everything first.
 -- Dates are TEXT 'YYYY-MM-DD'; WeekOf is always a Sunday. Timestamps are UTC ISO text.
 -- A database made before the warehouse: run migrations/2026-11-09-inventory.sql instead (keeps the data).
+-- A database made before the sibling users: run migrations/2026-11-15-sibling-users.sql (keeps the data).
 DROP TABLE IF EXISTS RequestPhotos;
 DROP TABLE IF EXISTS RequestLines;
 DROP TABLE IF EXISTS Requests;
@@ -13,6 +14,7 @@ DROP TABLE IF EXISTS AcademicYear;
 DROP TABLE IF EXISTS Scores;
 DROP TABLE IF EXISTS TeacherAttendance;
 DROP TABLE IF EXISTS Attendance;
+DROP TABLE IF EXISTS SiblingUsers;
 DROP TABLE IF EXISTS SiblingMembers;
 DROP TABLE IF EXISTS StudentPhotos;
 DROP TABLE IF EXISTS Students;
@@ -119,6 +121,15 @@ CREATE TABLE SiblingMembers (
   FamilyId  INTEGER NOT NULL
 );
 CREATE INDEX SiblingMembers_FamilyId ON SiblingMembers (FamilyId);
+
+-- Users (Huynh trưởng) in a sibling family. StudentId is set for a graduate: the user made from that student takes the
+-- student's place in the family, so the two are one person. FamilyId is NULL for a graduate without siblings.
+CREATE TABLE SiblingUsers (
+  UserId    INTEGER PRIMARY KEY REFERENCES Users (Id) ON DELETE CASCADE,
+  StudentId INTEGER UNIQUE REFERENCES Students (Id) ON DELETE SET NULL,
+  FamilyId  INTEGER
+);
+CREATE INDEX SiblingUsers_FamilyId ON SiblingUsers (FamilyId);
 
 -- Photo bytes while R2 is not used (see src/http/photos.js). Always read one row by StudentId, never the whole table.
 CREATE TABLE StudentPhotos (

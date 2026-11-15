@@ -49,7 +49,7 @@ async function renderScores() {
   for (const { studentId, ...values } of scores) if (base.has(studentId)) base.set(studentId, values);
   $('sc-tbody').innerHTML = students.length
     ? students.map((s, i) => `<tr data-id="${s.id}"><td class="p-2 border text-center">${i + 1}</td>`
-      + `<td class="p-2 border text-center">${esc(s.idNumber)}</td><td class="p-2 border">${esc(personName(s))}</td>`
+      + `<td class="p-2 border text-center">${esc(s.idNumber)}</td><td class="p-2 border whitespace-nowrap">${esc(personName(s))}</td>`
       // A text field, so that a decimal comma can be typed; 0 is shown as 0, blank as blank.
       + FIELDS.map((f) => `<td class="p-2 border text-center"><input type="text" inputmode="decimal" data-f="${f}" class="score-input w-16 text-center border p-1.5 rounded" value="${base.get(s.id)[f] ?? ''}"${editable ? '' : ' disabled'}></td>`).join('')
       + '</tr>').join('')
@@ -174,7 +174,7 @@ async function renderSummary() {
   try { rows = await report(Number($('sum-class').value), $('sum-year').value); } catch (e) { return toast(e.message); }
   $('sum-tbody').innerHTML = rows.length
     ? rows.map((x, i) => `<tr><td class="p-2 border text-center">${i + 1}</td><td class="p-2 border">${esc(x.idNumber)}</td>`
-      + `<td class="p-2 border font-medium">${esc(personName(x))}</td><td class="p-2 border">${esc(x.className)}</td>`
+      + `<td class="p-2 border font-medium whitespace-nowrap">${esc(personName(x))}</td><td class="p-2 border">${esc(x.className)}</td>`
       + `<td class="p-2 border text-center">${fmt1(x.semester1Avg)}</td><td class="p-2 border text-center">${fmt1(x.semester2Avg)}</td>`
       + `<td class="p-2 border text-center font-bold">${fmt1(x.yearAvg)}</td><td class="p-2 border text-center">${percentCell(x.attendancePct)}</td>`
       + `<td class="p-2 border text-center">${ratingCell(x.rating)}</td></tr>`).join('')
@@ -210,7 +210,7 @@ async function renderAwards() {
   const awarded = rows.filter((x) => x.yearAvg !== null && x.yearAvg >= 8 && x.attendancePct >= 80);
   $('aw-tbody').innerHTML = awarded.length
     ? awarded.map((x, i) => `<tr><td class="p-2 border text-center">${i + 1}</td><td class="p-2 border">${esc(x.idNumber)}</td>`
-      + `<td class="p-2 border font-medium">${esc(personName(x))}</td><td class="p-2 border">${esc(x.className)}</td>`
+      + `<td class="p-2 border font-medium whitespace-nowrap">${esc(personName(x))}</td><td class="p-2 border">${esc(x.className)}</td>`
       + `<td class="p-2 border text-center font-bold">${fmt1(x.yearAvg)}</td><td class="p-2 border text-center">${percentCell(x.attendancePct)}</td></tr>`).join('')
     : '<tr><td colspan="6" class="p-4 text-center text-slate-400">Chưa có Thiếu nhi đạt điều kiện khen thưởng.</td></tr>';
 }
