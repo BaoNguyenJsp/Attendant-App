@@ -31,7 +31,7 @@ const slots = {
 
 async function loadLessons() {
   try {
-    ({ lessons, teachers } = await api('getLessons', { schoolYear: state.year }));
+    ({ lessons, teachers } = await api('getLessons'));
   } catch (e) {
     lessons = [];
     toast(`Lỗi khi tải dữ liệu giảng dạy: ${e.message}`);
@@ -239,6 +239,9 @@ function renderExtras(lesson) {
 }
 
 /* ---------- Form: open, upload, save ---------- */
+// A lesson of last school year is saved under its own year, so it is updated instead of copied into this year.
+const lessonYear = () => editing.lesson?.schoolYear ?? state.year;
+
 function openForm(classId) {
   const weekOf = $('ls-week').value;
   const lesson = lessons.find((l) => l.weekOf === weekOf && l.classId === classId) ?? null;
@@ -271,7 +274,7 @@ async function uploadQueued() {
   const queued = Object.entries(slots).flatMap(([slot, s]) => s.queued.map((file) => ({ slot, file })));
   if (!queued.length) return;
   const { uploadUrls } = await api('createUploadUrls', {
-    schoolYear: state.year, weekOf: $('ls-week').value, classId: editing.classId,
+    schoolYear: lessonYear(), weekOf: $('ls-week').value, classId: editing.classId,
     files: queued.map(({ slot, file }) => ({ slot, filename: file.name })),
   });
   let failed = 0;
@@ -309,7 +312,7 @@ async function saveForm() {
   try {
     await uploadQueued();
     const { lesson } = await api('saveLesson', {
-      schoolYear: state.year, weekOf: $('ls-week').value, classId: editing.classId, content,
+      schoolYear: lessonYear(), weekOf: $('ls-week').value, classId: editing.classId, content,
       location: $('ls-location').value.trim(),
       extraTeacherIds: [...$('ls-extra').querySelectorAll('input:checked')].map((box) => Number(box.value)),
       planFiles: sendable(slots.PLAN.kept), revisedFiles: sendable(slots.REVISED.kept),

@@ -120,11 +120,22 @@ export async function saveSectorUser(db, sectorGroupId, { user, groupIds }, acto
   return saveUser(db, { user: { ...user, id: target.id, email: target.email }, groupIds: [...others, ...picked] }, actorId);
 }
 
-// Memberships and teacher attendance go with the user (ON DELETE CASCADE); lessons keep their teacher, so such a user is locked instead.
-export async function deleteUser(db, id, actorId) {
+// Memberships and teacher attendance go with the user (ON DELETE CASCADE). Lessons need a teacher, so a user who
+// still has lessons is deleted only when transferTo names who takes them over.
+export async function deleteUser(db, id, actorId, transferTo) {
   if (id === actorId) fail(400, 'Không thể tự xóa tài khoản của mình.');
   const u = await db.prepare('SELECT (SELECT COUNT(*) FROM Users WHERE Id = ?) AS found, (SELECT COUNT(*) FROM Lessons WHERE TeacherId = ?) AS lessons').bind(id, id).first();
   if (!u.found) fail(404, 'Không tìm thấy Huynh trưởng.');
-  if (u.lessons) fail(409, `Không xóa được: Huynh trưởng còn ${u.lessons} giáo án. Hãy chuyển sang "Ngưng hoạt động".`);
-  await db.prepare('DELETE FROM Users WHERE Id = ?').bind(id).run();
+  const statements = [];
+  if (u.lessons) {
+    if (!transferTo) fail(409, `Huynh trưởng còn ${u.lessons} giáo án. Chọn người nhận giáo án trước khi xóa.`);
+    if (transferTo === id || !(await db.prepare('SELECT 1 FROM Users WHERE Id = ?').bind(transferTo).first())) fail(400, 'Người nhận giáo án không hợp lệ.');
+    // The new teacher of a lesson is no longer listed as its extra teacher.
+    statements.push(
+      db.prepare('DELETE FROM LessonTeachers WHERE UserId = ? AND LessonId IN (SELECT Id FROM Lessons WHERE TeacherId = ?)').bind(transferTo, id),
+      db.prepare('UPDATE Lessons SET TeacherId = ? WHERE TeacherId = ?').bind(transferTo, id),
+    );
+  }
+  statements.push(db.prepare('DELETE FROM Users WHERE Id = ?').bind(id));
+  await db.batch(statements);
 }

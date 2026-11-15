@@ -195,7 +195,7 @@ export const ACTIONS = {
   deleteUser: {
     tier: 'ADMIN',
     run: async ({ db, actor, lists }, b) => {
-      await deleteUser(db, id(b.id), actor.userId);
+      await deleteUser(db, id(b.id), actor.userId, b.transferTo ? id(b.transferTo, 'Người nhận giáo án') : undefined);
       await lists.refresh('directory');
       return {};
     },

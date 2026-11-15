@@ -84,16 +84,22 @@ test('getDirectory lists users, groups and memberships', async () => {
   assert.deepEqual(Object.keys(d.users[0]).sort(), ['email', 'firstName', 'fullName', 'id', 'phone', 'saintName', 'status']);
 });
 
-test('deleteUser removes the user and their groups; refuses self and users with lessons', async () => {
+test('deleteUser removes the user and their groups; refuses self; hands lessons over to transferTo', async () => {
   const db = await seededD1();
   const t = await loadSession(db, 'teacher08@example.com');
   const admin = await loadSession(db, 'doruoora@gmail.com');
   await assert.rejects(deleteUser(db, admin.userId, admin.userId), status(400));
   await assert.rejects(deleteUser(db, 99999, admin.userId), status(404));
   await db.prepare("INSERT OR REPLACE INTO Lessons (SchoolYear, WeekOf, ClassId, TeacherId) VALUES ('2026-2027', '2026-09-06', 1, ?)").bind(t.userId).run();
+  const lessonId = await db.prepare("SELECT Id FROM Lessons WHERE WeekOf = '2026-09-06' AND ClassId = 1").first('Id');
+  await db.prepare('INSERT INTO LessonTeachers (LessonId, UserId) VALUES (?, ?)').bind(lessonId, admin.userId).run();
   await assert.rejects(deleteUser(db, t.userId, admin.userId), status(409));
-  await db.prepare('DELETE FROM Lessons').run();
-  await deleteUser(db, t.userId, admin.userId);
+  await assert.rejects(deleteUser(db, t.userId, admin.userId, t.userId), status(400));
+  await assert.rejects(deleteUser(db, t.userId, admin.userId, 99999), status(400));
+  await deleteUser(db, t.userId, admin.userId, admin.userId);
+  assert.equal(await db.prepare('SELECT TeacherId FROM Lessons WHERE Id = ?').bind(lessonId).first('TeacherId'), admin.userId);
+  // The new teacher is no longer listed as an extra teacher of that lesson.
+  assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM LessonTeachers WHERE LessonId = ?').bind(lessonId).first('n'), 0);
   assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM Users WHERE Id = ?').bind(t.userId).first('n'), 0);
   assert.deepEqual(await groupsOf(db, t.userId), []);
   assert.equal(await isSessionValid(db, t), false);

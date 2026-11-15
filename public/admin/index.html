@@ -175,6 +175,21 @@
   </div>
 </div>
 
+<!-- Modal: chuyển giáo án trước khi xóa người dùng -->
+<div id="transfer-modal" class="modal">
+  <div class="modal-content">
+    <h3>Chuyển giáo án trước khi xóa</h3>
+    <p id="transfer-note" class="text-sm text-slate-600 mb-3"></p>
+    <div class="form-grid">
+      <div class="form-group full"><label>Người nhận giáo án *</label><select id="transfer-to"></select></div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel">Hủy</button>
+      <button type="button" class="btn-save">Chuyển và xóa</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: thêm / sửa lớp -->
 <div id="class-modal" class="modal">
   <div class="modal-content">
@@ -233,11 +248,6 @@
     </div>
   </div>
 </div>
-
-<button id="clear-cache" type="button" title="Xóa và dựng lại bộ nhớ đệm máy chủ"
-        class="fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full bg-blue-900 hover:bg-blue-800 text-white text-2xl shadow-lg flex items-center justify-center disabled:opacity-60">
-  🔥
-</button>
 
 <script type="module" src="admin.js"></script>
 </body>

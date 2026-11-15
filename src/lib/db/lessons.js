@@ -9,20 +9,22 @@ import { FILE_SLOTS, FILE_TYPES, DEFAULT_LOCATION } from '../codes.js';
 const MAX_UPLOADS_PER_SLOT = 3;
 const safeName = (s) => String(s ?? '').replace(/[\\/:*?"<>|]/g, '_').trim();
 
+// Without a school year: every lesson kept, at most two school years since the year rollover removes older ones.
 export async function getLessons(db, { schoolYear } = {}) {
-  const year = schoolYear || (await configMap(db)).CurrentSchoolYear;
+  const where = schoolYear ? 'WHERE l.SchoolYear = ?' : '';
+  const args = schoolYear ? [schoolYear] : [];
   const lessons = await all(db, `
     SELECT l.Id AS id, l.SchoolYear AS schoolYear, l.WeekOf AS weekOf, l.ClassId AS classId, l.TeacherId AS teacherId,
            TRIM(COALESCE(t.SaintName, '') || ' ' || t.FullName) AS teacherName, u.FullName AS updatedByName,
            l.Content AS content, l.Location AS location
     FROM Lessons l JOIN Users t ON t.Id = l.TeacherId LEFT JOIN Users u ON u.Id = l.UpdatedBy
-    WHERE l.SchoolYear = ? ORDER BY l.WeekOf DESC, l.ClassId`, year);
+    ${where} ORDER BY l.WeekOf DESC, l.ClassId`, ...args);
   const files = await all(db, `
     SELECT f.LessonId, f.Slot, f.Url AS url, f.Name AS name, f.Type AS type, f.DriveFileId AS driveFileId
-    FROM LessonFiles f JOIN Lessons l ON l.Id = f.LessonId WHERE l.SchoolYear = ? ORDER BY f.LessonId, f.Slot, f.Position`, year);
+    FROM LessonFiles f JOIN Lessons l ON l.Id = f.LessonId ${where} ORDER BY f.LessonId, f.Slot, f.Position`, ...args);
   const helpers = await all(db, `
     SELECT lt.LessonId, lt.UserId AS userId, TRIM(COALESCE(u.SaintName, '') || ' ' || u.FullName) AS name
-    FROM LessonTeachers lt JOIN Lessons l ON l.Id = lt.LessonId JOIN Users u ON u.Id = lt.UserId WHERE l.SchoolYear = ? ORDER BY u.FirstName`, year);
+    FROM LessonTeachers lt JOIN Lessons l ON l.Id = lt.LessonId JOIN Users u ON u.Id = lt.UserId ${where} ORDER BY u.FirstName`, ...args);
   const slot = (lessonId, name) => files.filter((f) => f.LessonId === lessonId && f.Slot === name).map(({ LessonId, Slot, ...f }) => f);
   return lessons.map((l) => ({
     ...l, planFiles: slot(l.id, 'PLAN'), revisedFiles: slot(l.id, 'REVISED'),

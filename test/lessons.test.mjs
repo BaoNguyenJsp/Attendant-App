@@ -37,14 +37,18 @@ async function connected(db, google = fakeGoogle()) {
   return { google, drive: makeDrive({ db, clientId: 'id', clientSecret: 'secret', fetch: google.fetch }) };
 }
 
-test('getLessons returns the lessons of one school year with teacher names', async () => {
+test('getLessons returns every lesson, or those of one school year, with teacher names', async () => {
   const db = await seededD1();
+  assert.deepEqual(await getLessons(db, { schoolYear: '2025-2026' }), []);
+  await db.prepare("INSERT INTO Lessons (SchoolYear, WeekOf, ClassId, TeacherId) SELECT '2025-2026', '2025-10-12', ClassId, TeacherId FROM Lessons LIMIT 1").run();
+  assert.equal((await getLessons(db, { schoolYear: '2025-2026' })).length, 1);
+  assert.equal((await getLessons(db, { schoolYear: '2026-2027' })).length, 36);
   const lessons = await getLessons(db, {});
-  assert.equal(lessons.length, 36);
+  assert.equal(lessons.length, 37);
+  assert.equal(lessons.at(-1).schoolYear, '2025-2026');
   const user = await db.prepare('SELECT SaintName, FullName FROM Users WHERE Id = ?').bind(lessons[0].teacherId).first();
   assert.equal(lessons[0].teacherName, `${user.SaintName} ${user.FullName}`);
   assert.deepEqual([lessons[0].location, lessons[0].planFiles, lessons[0].revisedFiles], ['Trong lớp', [], []]);
-  assert.deepEqual(await getLessons(db, { schoolYear: '2025-2026' }), []);
 });
 
 test('a new lesson needs content, gets the default location and keeps its files in order', async () => {

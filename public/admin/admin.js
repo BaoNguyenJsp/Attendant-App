@@ -1,7 +1,7 @@
 /* =====================================================================
    SỔ THIẾU NHI — admin/admin.js (Xứ đoàn only)
    Users (UC-M1), groups and classes with their edit forms (UC-M2, UC-M3), holidays (UC-M4), configuration (UC-M5),
-   year rollover (UC-M6), cache (UC-M7), Drive connection (UC-M8), import of the old Google Sheet.
+   year rollover (UC-M6), Drive connection (UC-M8), import of the old Google Sheet.
    ===================================================================== */
 'use strict';
 
@@ -94,10 +94,38 @@ async function deleteUser(id) {
   if (!u || !confirm(`Xóa vĩnh viễn ${personName(u)} (${u.email})? Nhóm và điểm danh Huynh trưởng của người này cũng bị xóa. Không thể hoàn tác.\nNếu chỉ tạm ngưng, hãy chuyển sang "Ngưng hoạt động".`)) return;
   try {
     await api('deleteUser', { id: u.id });
-    await loadDirectory();
-  } catch (e) { return toast(e.message); }
+  } catch (e) {
+    // The user still has lessons: the admin picks who takes them over, then the delete runs again.
+    if (e.status === 409) return openTransfer(u, e.message);
+    return toast(e.message);
+  }
+  await deleted();
+}
+
+async function deleted() {
+  try { await loadDirectory(); } catch (e) { return toast(e.message); }
   toast('Đã xóa.');
   renderUsers();
+}
+
+let transferring = null;
+function openTransfer(u, message) {
+  transferring = u;
+  $('transfer-note').textContent = `${message} Sau khi chuyển, ${personName(u)} sẽ bị xóa.`;
+  $('transfer-to').innerHTML = '<option value="">— Chọn Huynh trưởng —</option>'
+    + directory.users.filter((x) => x.id !== u.id && x.status === 'ACTIVE')
+      .map((x) => `<option value="${x.id}">${esc(personName(x))} (${esc(x.email)})</option>`).join('');
+  $('transfer-modal').classList.add('open');
+}
+
+async function transferAndDelete() {
+  const transferTo = Number($('transfer-to').value);
+  if (!transferTo) return toast('Chọn người nhận giáo án.');
+  try {
+    await api('deleteUser', { id: transferring.id, transferTo });
+  } catch (e) { return toast(e.message); }
+  $('transfer-modal').classList.remove('open');
+  await deleted();
 }
 
 /* ---------- Groups and classes ---------- */
@@ -356,16 +384,6 @@ async function runImport() {
   }
 }
 
-/* ---------- Cache and Drive ---------- */
-async function clearCache() {
-  const button = $('clear-cache');
-  button.disabled = true;
-  try {
-    await api('clearCache');
-    toast('Đã xóa và dựng lại bộ nhớ đệm.');
-  } catch (e) { toast(e.message); } finally { button.disabled = false; }
-}
-
 /* ---------- Events ---------- */
 $('user-query').addEventListener('input', renderUsers);
 $('user-add').addEventListener('click', () => openUser());
@@ -376,12 +394,13 @@ $('user-tbody').addEventListener('click', (e) => {
   if (remove) deleteUser(remove.dataset.id);
 });
 
-for (const id of ['user-modal', 'year-modal', 'class-modal', 'group-modal']) {
+for (const id of ['user-modal', 'transfer-modal', 'year-modal', 'class-modal', 'group-modal']) {
   const modal = $(id);
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('open'); });
   modal.querySelector('.btn-cancel').addEventListener('click', () => modal.classList.remove('open'));
 }
 $('user-modal').querySelector('.btn-save').addEventListener('click', saveUser);
+$('transfer-modal').querySelector('.btn-save').addEventListener('click', transferAndDelete);
 $('class-modal').querySelector('.btn-save').addEventListener('click', saveClass);
 $('group-modal').querySelector('.btn-save').addEventListener('click', saveGroup);
 $('class-add').addEventListener('click', () => openClass());
@@ -419,7 +438,6 @@ $('cfg-tbody').addEventListener('click', (e) => {
   if (button) deleteConfigRow(button.closest('tr'));
 });
 $('drive-connect').addEventListener('click', () => { location.href = '/auth/drive'; });
-$('clear-cache').addEventListener('click', clearCache);
 $('imp-template').addEventListener('click', downloadTemplate);
 $('imp-file').addEventListener('change', previewImport);
 $('imp-run').addEventListener('click', runImport);
