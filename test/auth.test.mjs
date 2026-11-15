@@ -122,6 +122,24 @@ test('the hourly job empties the Drive trash queue and survives a Drive that is 
   assert.equal(await env.DB.prepare('SELECT COUNT(*) AS n FROM DriveTrash').first('n'), 1);
 });
 
+test('the weekly job deletes the requests closed or rejected more than 7 days ago, and only those', async () => {
+  const env = await testEnv();
+  const ago = (days) => new Date(Date.now() - days * 864e5).toISOString();
+  const add = (status, decided, returned = null) => env.DB.prepare(`INSERT INTO Requests (UserId, Borrower, Phone, Team, Status, DecidedAt, ReturnedAt)
+    VALUES (1, ?, '0901234567', 'Ấu 1', ?, ?, ?)`).bind(`${status} ${decided ?? ''} ${returned ?? ''}`, status, decided, returned).run();
+  await add('CLOSED', ago(20), ago(8)); // returned 8 days ago: goes
+  await add('REJECTED', ago(9)); // rejected 9 days ago: goes
+  await add('CLOSED', ago(20), ago(6)); // returned 6 days ago: stays
+  await add('REJECTED', ago(1)); // stays
+  await add('ON_LOAN', ago(30)); // still out, however old: stays
+  await add('PENDING', null); // stays
+  let pending;
+  await worker.scheduled({}, env, { waitUntil: (p) => { pending = p; } });
+  await pending;
+  const left = (await env.DB.prepare('SELECT Status FROM Requests ORDER BY Id').all()).results.map((r) => r.Status);
+  assert.deepEqual(left, ['CLOSED', 'REJECTED', 'ON_LOAN', 'PENDING']);
+});
+
 test('the session cookie is marked Secure on https, and not on http where local dev runs', async () => {
   const env = await testEnv();
   const { app } = createApp();

@@ -25,3 +25,7 @@ export const ATTENDANCE_RATING_LABEL = { EXCELLENT: 'Xuất sắc', GOOD: 'Tốt
 export const attendanceRating = (pct) => (pct >= 80 ? 'EXCELLENT' : pct >= 65 ? 'GOOD' : pct >= 50 ? 'FAIR' : 'NEEDS_WORK');
 
 export const SLOT_LABEL = { PLAN: 'Giáo án (GLV)', REVISED: 'Giáo án đã chỉnh sửa (TBM)' };
+
+export const ITEM_KIND_LABEL = { RETURNABLE: 'Mượn - trả', CONSUMABLE: 'Hao phí' };
+export const REQUEST_STATUS_LABEL = { PENDING: 'Chờ duyệt', ON_LOAN: 'Đang mượn', CLOSED: 'Hoàn tất', REJECTED: 'Từ chối / Hủy' };
+export const PHOTO_STAGE_LABEL = { SUBMIT: 'Ảnh gửi kèm', APPROVE: 'Ảnh bàn giao', RETURN: 'Ảnh trả đồ' };

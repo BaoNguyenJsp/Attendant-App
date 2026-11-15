@@ -278,3 +278,46 @@ test('sector users: BQT ngành updates its own teachers only, never the email or
   assert.equal((await call(env, SECTOR_ADMIN, 'saveSectorUser', { sectorGroupId: sector, user, groupIds: [99999] }))[0], 400);
   assert.equal((await call(env, TEACHER, 'getSectorUsers', { sectorGroupId: sector }))[0], 403);
 });
+
+test('warehouse: a teacher asks and gives back; only a keeper changes the stock, approves and changes item photos', async () => {
+  const env = await testEnv();
+  await env.DB.prepare("INSERT INTO Secrets (Key, Value) VALUES ('DriveRefreshToken', 'refresh-1')").run();
+  // Google: a token, folders, uploads that answer a new file id, downloads that answer the bytes.
+  let files = 0;
+  const google = async (url, init = {}) => {
+    const u = String(url);
+    const json = (body) => new Response(JSON.stringify(body), { status: 200 });
+    if (u.startsWith('https://oauth2.googleapis.com/token')) return json({ access_token: 'token-1' });
+    if (u.includes('uploadType=multipart')) return json({ id: `drive-${++files}` });
+    if (u.endsWith('?alt=media')) return new Response(JPEG, { status: 200, headers: { 'Content-Type': 'image/jpeg' } });
+    if (init.method === 'POST') return json({ id: 'folder-1' });
+    return json({ files: [] });
+  };
+  const { app: drive } = createApp({ fetch: google });
+  const send = async (email, method, path, body) => drive.request(path, { method, headers: { Cookie: await cookieFor(env, email) }, body }, env);
+
+  assert.equal((await call(env, TEACHER, 'saveItem', { name: 'Máy chiếu', kind: 'RETURNABLE', quantity: 2 }))[0], 403);
+  const [status, { id }] = await call(env, SECTOR_ADMIN, 'saveItem', { name: 'Máy chiếu', kind: 'RETURNABLE', quantity: 2 });
+  assert.equal(status, 200);
+  for (const action of ['moveItem', 'deleteItem', 'saveLocation', 'deleteLocation', 'approveRequest']) {
+    assert.equal((await call(env, TEACHER, action, { id, itemId: id, type: 'IN', quantity: 1, name: 'Kho' }))[0], 403, action);
+  }
+  const [, { id: requestId }] = await call(env, TEACHER, 'createRequest', { borrower: 'A', phone: '0901234567', team: 'Ấu 1', dueDate: '2099-01-01', lines: [{ itemId: id, quantity: 1 }] });
+  assert.equal((await send(TEACHER, 'PUT', `/api/requests/${requestId}/photos/SUBMIT`, JPEG)).status, 200);
+  assert.equal((await call(env, SECTOR_ADMIN, 'approveRequest', { id: requestId }))[0], 200);
+  const [, { items, requests }] = await call(env, TEACHER, 'getInventory');
+  assert.deepEqual([items[0].available, requests[0].status, requests[0].photos[0].fileId], [1, 'ON_LOAN', 'drive-1']);
+  const evidence = await send(TEACHER, 'GET', `/api/requests/${requestId}/photos/drive-1`);
+  assert.deepEqual([evidence.status, [...new Uint8Array(await evidence.arrayBuffer())]], [200, [...JPEG]]);
+  assert.equal((await send(TEACHER, 'PUT', `/api/requests/${requestId}/photos/RETURN`, new Uint8Array([1, 2, 3]))).status, 400);
+  assert.equal((await send(TEACHER, 'PUT', `/api/requests/${requestId}/photos/RETURN`, JPEG)).status, 200);
+  assert.equal((await call(env, TEACHER, 'returnRequest', { id: requestId }))[0], 200);
+  assert.equal((await call(env, TEACHER, 'getInventory'))[1].items[0].available, 2);
+
+  assert.equal((await send(TEACHER, 'PUT', `/api/items/${id}/photo`, JPEG)).status, 403);
+  assert.equal((await send(SECTOR_ADMIN, 'PUT', `/api/items/${id}/photo`, JPEG)).status, 200);
+  const got = await send(TEACHER, 'GET', `/api/items/${id}/photo`);
+  assert.deepEqual([got.status, got.headers.get('Content-Type')], [200, 'image/jpeg']);
+  assert.equal((await send(SECTOR_ADMIN, 'DELETE', `/api/items/${id}/photo`)).status, 200);
+  assert.equal((await send(TEACHER, 'GET', `/api/items/${id}/photo`)).status, 404);
+});

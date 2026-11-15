@@ -1,5 +1,11 @@
 -- Sổ Thiếu Nhi — D1 schema. Re-runnable: drops everything first.
 -- Dates are TEXT 'YYYY-MM-DD'; WeekOf is always a Sunday. Timestamps are UTC ISO text.
+-- A database made before the warehouse: run migrations/2026-11-09-inventory.sql instead (keeps the data).
+DROP TABLE IF EXISTS RequestPhotos;
+DROP TABLE IF EXISTS RequestLines;
+DROP TABLE IF EXISTS Requests;
+DROP TABLE IF EXISTS Items;
+DROP TABLE IF EXISTS Locations;
 DROP TABLE IF EXISTS LessonTeachers;
 DROP TABLE IF EXISTS LessonFiles;
 DROP TABLE IF EXISTS Lessons;
@@ -220,3 +226,66 @@ CREATE TABLE Secrets (
   Key   TEXT PRIMARY KEY,
   Value TEXT NOT NULL
 ) WITHOUT ROWID;
+
+-- RETURNABLE: Total = units owned, Total - Available = units out on loan.
+-- CONSUMABLE: Available = what is left, Total = the highest stock level reached, for the percent left.
+-- Codes are made from the kind: MT-001 (mượn - trả), HP-001 (hao phí). Photos live in Google Drive under
+-- <DriveFolderId>/Warehouse/<Code>; PhotoFileId is the Drive file id.
+CREATE TABLE Locations (
+  Id   INTEGER PRIMARY KEY,
+  Name TEXT NOT NULL UNIQUE COLLATE NOCASE
+);
+
+CREATE TABLE Items (
+  Id          INTEGER PRIMARY KEY,
+  Code        TEXT NOT NULL UNIQUE,
+  Name        TEXT NOT NULL,
+  Kind        TEXT NOT NULL CHECK (Kind IN ('RETURNABLE', 'CONSUMABLE')),
+  LocationId  INTEGER REFERENCES Locations (Id) ON DELETE SET NULL,
+  Note        TEXT,
+  Total       INTEGER NOT NULL DEFAULT 0 CHECK (Total >= 0),
+  Available   INTEGER NOT NULL DEFAULT 0 CHECK (Available >= 0 AND Available <= Total),
+  PhotoFileId TEXT,
+  CreatedAt   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  UpdatedAt   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  UpdatedBy   INTEGER
+);
+
+-- A request (phiếu mượn / xuất) of one or more items. PENDING -> ON_LOAN (approved, returnable items out)
+-- -> CLOSED (returned). Approved with consumables only goes straight to CLOSED. REJECTED = refused or cancelled.
+-- Stock changes only at approval and at return. Closed and rejected requests are deleted a week after (weekly job);
+-- AUTOINCREMENT so a deleted number is never given again (its Drive folder YC-<Id> goes to the trash).
+CREATE TABLE Requests (
+  Id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  UserId     INTEGER NOT NULL,
+  ByName     TEXT,
+  Borrower   TEXT NOT NULL,
+  Phone      TEXT NOT NULL,
+  Team       TEXT NOT NULL,
+  DueDate    TEXT,
+  Note       TEXT,
+  Status     TEXT NOT NULL DEFAULT 'PENDING' CHECK (Status IN ('PENDING', 'ON_LOAN', 'CLOSED', 'REJECTED')),
+  CreatedAt  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  DecidedAt  TEXT,
+  DecidedBy  TEXT,
+  ReturnedAt TEXT,
+  ReturnedBy TEXT
+);
+CREATE INDEX Requests_UserId ON Requests (UserId);
+
+CREATE TABLE RequestLines (
+  RequestId INTEGER NOT NULL REFERENCES Requests (Id) ON DELETE CASCADE,
+  ItemId    INTEGER NOT NULL REFERENCES Items (Id) ON DELETE CASCADE,
+  Quantity  INTEGER NOT NULL CHECK (Quantity > 0),
+  PRIMARY KEY (RequestId, ItemId)
+) WITHOUT ROWID;
+
+-- Evidence photos in Google Drive: SUBMIT (sent with the request), APPROVE (hand-over), RETURN.
+CREATE TABLE RequestPhotos (
+  FileId    TEXT PRIMARY KEY,
+  RequestId INTEGER NOT NULL REFERENCES Requests (Id) ON DELETE CASCADE,
+  Stage     TEXT NOT NULL CHECK (Stage IN ('SUBMIT', 'APPROVE', 'RETURN')),
+  At        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ByName    TEXT
+) WITHOUT ROWID;
+CREATE INDEX RequestPhotos_RequestId ON RequestPhotos (RequestId);

@@ -13,6 +13,10 @@ import {
 import { getScores, saveScores, getClassReport, getStudentRecord, startSchoolYear } from '../lib/db/academics.js';
 import { getLessons, lessonTeacherOptions, saveLesson, createUploadUrls, trashYearFolders } from '../lib/db/lessons.js';
 import { importSheet } from '../lib/db/sheet-import.js';
+import {
+  KEEPER_TIER, getInventory, saveItem, deleteItem, moveItem, saveLocation, deleteLocation,
+  createRequest, approveRequest, rejectRequest, returnRequest,
+} from '../lib/db/inventory.js';
 
 // Ids arrive as numbers or as text from a <select>; anything else is a bad request.
 function id(value, label = 'Mã') {
@@ -34,6 +38,11 @@ function sector(actor, value) {
 }
 
 const publicSession = ({ userId, email, fullName, saintName, tier, classIds, sectorGroupIds }) => ({ userId, email, fullName, saintName, tier, classIds, sectorGroupIds });
+// An action that answers nothing but ok.
+const done = (work) => async (ctx, b) => {
+  await work(ctx, b);
+  return {};
+};
 const list = (name, key = name) => ({ run: async ({ lists }) => ({ [key]: await lists.get(name) }) });
 
 // Classes and groups (Xứ đoàn): every change rewrites the three lists that show them.
@@ -161,6 +170,18 @@ export const ACTIONS = {
       uploadUrls: await createUploadUrls(db, drive, actor, { schoolYear: b.schoolYear, weekOf: b.weekOf, classId: id(b.classId, 'Lớp'), files: b.files, origin }),
     }),
   },
+
+  /* ---------- warehouse: everyone asks for items and gives them back; keepers (BQT ngành / Xứ đoàn) run the stock ---------- */
+  getInventory: { run: ({ db, actor }) => getInventory(db, actor) },
+  saveItem: { tier: KEEPER_TIER, run: async ({ db, actor }, b) => ({ id: await saveItem(db, actor, { ...b, id: optionalId(b.id) }) }) },
+  deleteItem: { tier: KEEPER_TIER, run: done(({ db }, b) => deleteItem(db, id(b.id))) },
+  moveItem: { tier: KEEPER_TIER, run: done(({ db, actor }, b) => moveItem(db, actor, { ...b, itemId: id(b.itemId, 'Vật phẩm') })) },
+  saveLocation: { tier: KEEPER_TIER, run: async ({ db }, b) => ({ id: await saveLocation(db, { id: optionalId(b.id), name: b.name }) }) },
+  deleteLocation: { tier: KEEPER_TIER, run: done(({ db }, b) => deleteLocation(db, id(b.id))) },
+  createRequest: { run: async ({ db, actor, today }, b) => ({ id: await createRequest(db, actor, b, today) }) },
+  approveRequest: { tier: KEEPER_TIER, run: done(({ db, actor }, b) => approveRequest(db, actor, id(b.id, 'Phiếu'))) },
+  rejectRequest: { run: done(({ db, actor }, b) => rejectRequest(db, actor, id(b.id, 'Phiếu'))) },
+  returnRequest: { run: done(({ db, actor }, b) => returnRequest(db, actor, id(b.id, 'Phiếu'))) },
 
   /* ---------- admin (R7) ---------- */
   saveUser: {

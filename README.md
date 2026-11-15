@@ -21,11 +21,12 @@ Trang cũ (Express + Apps Script + Google Sheet, nhánh `master`) vẫn chạy r
 | Thư mục | Nội dung |
 |---|---|
 | `src/lib/` | Mã dùng chung: mã (codes), chuẩn hoá chữ và ngày, quyền, cache, Drive |
-| `src/lib/db/` | Mỗi mảng một module đọc/ghi D1: `org`, `users`, `students`, `attendance`, `academics`, `lessons` |
+| `src/lib/db/` | Mỗi mảng một module đọc/ghi D1: `org`, `users`, `students`, `attendance`, `academics`, `lessons`, `inventory` |
 | `src/http/` | `actions.js` (mọi `POST /api/<action>`), `photos.js`, `auth.js`, `lists.js` |
 | `src/app.js`, `src/worker.js` | Ứng dụng Hono và điểm vào của Worker (`fetch`, cron mỗi tuần) |
-| `public/` | Giao diện: `lessons`, `attendance`, `academics`, `students`, `teachers`, `admin`, `login`, `shared` |
+| `public/` | Giao diện: `lessons`, `attendance`, `academics`, `students`, `teachers`, `inventory`, `admin`, `login`, `shared` |
 | `schema.sql` | Lược đồ D1 (chạy lại được: xoá rồi tạo) |
+| `migrations/` | Thêm bảng mới vào D1 đang có dữ liệu (không xoá gì) |
 | `scripts/seed-demo.mjs` | Sinh dữ liệu mẫu → `seed.sql` |
 | `test/` | Kiểm thử chạy bằng `node --test`, không cần Cloudflare |
 
@@ -85,6 +86,14 @@ npm run smoke     # khi `npm run dev` đang chạy: đi qua mọi trang và mọ
 
 ## Vận hành
 
+- **Kho** (bảng `Locations`, `Items`, `Requests`, `RequestLines`, `RequestPhotos`): D1 đang chạy từ trước thì thêm bảng bằng
+  `npx wrangler d1 execute DB --remote --file=migrations/2026-11-09-inventory.sql` (không đụng dữ liệu cũ).
+  BQT ngành / Xứ đoàn (quản lý kho): thêm, sửa, xoá vật phẩm và nơi để, nhập thêm / ghi giảm, duyệt hoặc từ chối phiếu, nhắc trả qua Zalo, xem mọi phiếu và lịch sử.
+  Huynh trưởng khác: tạo phiếu mượn / xuất, huỷ phiếu đang chờ, trả đồ; chỉ thấy phiếu và lịch sử của mình.
+  Kho chỉ thay đổi khi phiếu được duyệt (trừ) và khi trả (cộng lại đồ mượn). Duyệt đồ mượn cần ảnh bàn giao (gửi kèm phiếu hoặc chụp lúc duyệt);
+  trả luôn cần ảnh; đồ hao phí không cần ảnh. Ảnh lưu trên Google Drive (cùng tài khoản với giáo án): `<DriveFolderId>/Warehouse/<mã vật phẩm>`
+  cho ảnh vật phẩm, `<DriveFolderId>/Warehouse/Phiếu mượn/YC-<số phiếu>` cho ảnh bàn giao / trả. Ảnh bị thay hoặc xoá vào thùng rác Drive cùng cron mỗi tuần.
+  Phiếu hoàn tất / từ chối quá 7 ngày bị xoá khỏi D1 (cùng cron, nên thực tế sau 7–14 ngày), kèm ảnh và thư mục `YC-<số phiếu>`. Kho không lưu lịch sử nhập / xuất.
 - **Nhóm và lớp** không có màn hình sửa: sửa bằng SQL trong Cloudflare console, rồi bấm nút bộ nhớ đệm (góc dưới phải trang Quản trị). Người có nhóm bị đổi cần đăng nhập lại: `UPDATE Users SET AuthVersion = AuthVersion + 1 WHERE Id = …`.
 - **Lịch sử cấu hình** nằm ở bảng `ConfigHistory` (không có màn hình).
 - **Khôi phục**: D1 giữ lịch sử 30 ngày (`wrangler d1 time-travel`).

@@ -265,6 +265,7 @@ const NAV = [
   ['/academics/', '🎓 Học tập', ''],
   ['/students/', '👥 Thiếu nhi', ''],
   ['/teachers/', '🧑‍🏫 Huynh trưởng', 'exec-only'],
+  ['/inventory/', '📦 Kho', ''],
   ['/admin/', '⚙ Quản trị', 'admin-only'],
 ];
 

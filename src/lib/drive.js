@@ -4,6 +4,7 @@ import { fail } from './errors.js';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const FILES_URL = 'https://www.googleapis.com/drive/v3/files';
 const UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable';
+const MULTIPART_URL = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id';
 const FOLDER_TYPE = 'application/vnd.google-apps.folder';
 
 export const NOT_CONNECTED = 'Google Drive chưa được kết nối. Quản trị viên vào trang Quản trị và bấm Kết nối Google Drive.';
@@ -91,11 +92,31 @@ export function makeDrive({ db, clientId, clientSecret, fetch = globalThis.fetch
     return location;
   }
 
+  // A small file sent through the Worker in one request (warehouse photos). Returns the new file id.
+  async function upload({ folderId, filename, contentType, bytes }) {
+    const boundary = `kho-${crypto.randomUUID()}`;
+    const meta = JSON.stringify({ name: filename, parents: [folderId] });
+    const body = new Blob([
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: ${contentType}\r\n\r\n`,
+      bytes, `\r\n--${boundary}--`,
+    ]);
+    const res = await call(MULTIPART_URL, { method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body });
+    if (!res.ok) fail(502, `Không tải được ảnh lên Google Drive.${await reason(res)}`);
+    return (await res.json()).id;
+  }
+
+  // The bytes of a file, as Google's response.
+  async function download(fileId) {
+    const res = await call(`${FILES_URL}/${encodeURIComponent(fileId)}?alt=media`);
+    if (!res.ok) fail(404, 'Không đọc được ảnh trên Google Drive.');
+    return res;
+  }
+
   // True when the file is in the trash or no longer exists.
   async function trash(fileId) {
     const res = await call(`${FILES_URL}/${encodeURIComponent(fileId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }) });
     return res.ok || res.status === 404;
   }
 
-  return { folderFor, findFolders, createUploadUrl, trash };
+  return { folderFor, findFolders, createUploadUrl, upload, download, trash };
 }

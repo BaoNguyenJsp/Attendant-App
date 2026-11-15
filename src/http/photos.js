@@ -2,8 +2,9 @@
 // The bytes live in the StudentPhotos table of D1. To move to R2, add the PHOTOS binding in wrangler.jsonc and
 // deploy: new photos then go to R2 under students/<Id>, and photos saved before stay readable from D1.
 import { fail } from '../lib/errors.js';
-import { requireClass } from '../lib/access.js';
+import { requireClass, requireTier } from '../lib/access.js';
 import { getStudent, setPhotoVersion } from '../lib/db/students.js';
+import { KEEPER_TIER, itemPhotoId, setItemPhoto, removeItemPhoto, addRequestPhoto, removeRequestPhoto, checkRequestPhoto } from '../lib/db/inventory.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const keyOf = (studentId) => `students/${studentId}`;
@@ -13,6 +14,15 @@ function imageType(bytes) {
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
   if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
   return null;
+}
+
+// JPEG or PNG up to 2 MB, from the request body.
+async function imageBody(c) {
+  const bytes = new Uint8Array(await c.req.arrayBuffer());
+  const contentType = imageType(bytes);
+  if (!contentType) fail(400, 'Ảnh phải là JPEG hoặc PNG.');
+  if (bytes.length > MAX_BYTES) fail(413, 'Ảnh không được lớn hơn 2 MB.');
+  return { bytes, contentType };
 }
 
 async function studentOf(c) {
@@ -61,10 +71,7 @@ export function registerPhotos(app, context) {
     const ctx = context(c);
     const student = await studentOf(c);
     requireClass(ctx.actor, student.classId);
-    const bytes = new Uint8Array(await c.req.arrayBuffer());
-    const contentType = imageType(bytes);
-    if (!contentType) fail(400, 'Ảnh phải là JPEG hoặc PNG.');
-    if (bytes.length > MAX_BYTES) fail(413, 'Ảnh không được lớn hơn 2 MB.');
+    const { bytes, contentType } = await imageBody(c);
     await writePhoto(c.env, student.id, bytes, contentType);
     // Seconds since 1970, always larger than the last one, so a replaced photo gets a new address.
     const photoVersion = Math.max(student.photoVersion + 1, Math.floor(Date.now() / 1000));
@@ -81,5 +88,52 @@ export function registerPhotos(app, context) {
     await setPhotoVersion(ctx.db, student.id, 0, ctx.actor.userId);
     await ctx.lists.refresh('students');
     return c.json({ status: 'ok' });
+  });
+
+  // Warehouse photos live in Google Drive (src/lib/db/inventory.js); the Worker sends them on, so they stay private.
+  // The page puts the Drive file id in the address (?v=), and a new photo gets a new id: the browser may keep the bytes.
+  const fromDrive = async (c, fileId) => {
+    const res = await context(c).drive.download(fileId);
+    return c.body(res.body, 200, { 'Content-Type': res.headers.get('Content-Type') ?? 'image/jpeg', 'Cache-Control': 'private, max-age=31536000, immutable' });
+  };
+  const idOf = (c) => {
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id)) fail(404, 'Không tìm thấy.');
+    return id;
+  };
+
+  app.get('/api/items/:id/photo', async (c) => fromDrive(c, await itemPhotoId(c.env.DB, idOf(c))));
+
+  app.put('/api/items/:id/photo', async (c) => {
+    const ctx = context(c);
+    requireTier(ctx.actor, KEEPER_TIER);
+    const photoFileId = await setItemPhoto(ctx.db, ctx.drive, ctx.actor, idOf(c), await imageBody(c));
+    return c.json({ status: 'ok', photoFileId });
+  });
+
+  app.delete('/api/items/:id/photo', async (c) => {
+    const ctx = context(c);
+    requireTier(ctx.actor, KEEPER_TIER);
+    await removeItemPhoto(ctx.db, ctx.actor, idOf(c));
+    return c.json({ status: 'ok' });
+  });
+
+  // stage: SUBMIT | APPROVE | RETURN.
+  app.put('/api/requests/:id/photos/:stage', async (c) => {
+    const ctx = context(c);
+    const fileId = await addRequestPhoto(ctx.db, ctx.drive, ctx.actor, idOf(c), c.req.param('stage'), await imageBody(c));
+    return c.json({ status: 'ok', fileId });
+  });
+
+  app.delete('/api/requests/:id/photos/:fileId', async (c) => {
+    const ctx = context(c);
+    await removeRequestPhoto(ctx.db, ctx.actor, idOf(c), c.req.param('fileId'));
+    return c.json({ status: 'ok' });
+  });
+
+  app.get('/api/requests/:id/photos/:fileId', async (c) => {
+    const ctx = context(c);
+    await checkRequestPhoto(ctx.db, ctx.actor, idOf(c), c.req.param('fileId'));
+    return fromDrive(c, c.req.param('fileId'));
   });
 }

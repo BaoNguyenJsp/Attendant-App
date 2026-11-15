@@ -11,7 +11,7 @@ import {
 } from '../shared/common.js';
 import { GENDER_LABEL, STUDENT_STATUS_LABEL } from '../shared/labels.js';
 import { matchesStudent } from '../shared/search.js';
-import { badge, STATUS_TONE } from '../shared/ui.js';
+import { badge, STATUS_TONE, cropPhoto } from '../shared/ui.js';
 
 await initCommon();
 await load('students', 'classes');
@@ -128,28 +128,7 @@ function renderGallery() {
 
 // Centre crop to 3:4 (ID photo shape), 210 x 280, JPEG 85 % (about 25-40 KB): enough for the face scan and
 // small enough for the D1 storage limit. Old square photos are shown cropped the same way until replaced.
-const PHOTO_WIDTH = 210;
-const PHOTO_HEIGHT = 280;
-
-function resizePhoto(file) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      // The largest 3:4 box that fits the picture, centred.
-      const width = Math.min(img.width, img.height * PHOTO_WIDTH / PHOTO_HEIGHT);
-      const height = width * PHOTO_HEIGHT / PHOTO_WIDTH;
-      const canvas = document.createElement('canvas');
-      canvas.width = PHOTO_WIDTH;
-      canvas.height = PHOTO_HEIGHT;
-      canvas.getContext('2d').drawImage(img, (img.width - width) / 2, (img.height - height) / 2, width, height, 0, 0, PHOTO_WIDTH, PHOTO_HEIGHT);
-      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Không xử lý được ảnh.'))), 'image/jpeg', 0.85);
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Tệp không phải là ảnh.')); };
-    img.src = url;
-  });
-}
+const resizePhoto = (file) => cropPhoto(file, 210, 280);
 
 const setPhoto = (id, photoVersion) => {
   state.students = state.students.map((s) => (s.id === id ? { ...s, photoVersion, hasPhoto: photoVersion > 0 } : s));

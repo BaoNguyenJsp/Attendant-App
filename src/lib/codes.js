@@ -20,6 +20,11 @@ export const GENDERS = ['F', 'M'];
 export const FILE_SLOTS = ['PLAN', 'REVISED'];
 export const FILE_TYPES = ['FILE', 'LINK'];
 export const DEFAULT_LOCATION = 'Trong lớp';
+export const ITEM_KINDS = ['RETURNABLE', 'CONSUMABLE'];
+// The item code is made from the kind: MT-001, HP-001.
+export const ITEM_CODE_PREFIX = { RETURNABLE: 'MT', CONSUMABLE: 'HP' };
+export const REQUEST_STATUSES = ['PENDING', 'ON_LOAN', 'CLOSED', 'REJECTED'];
+export const PHOTO_STAGES = ['SUBMIT', 'APPROVE', 'RETURN'];
 
 export const isMark = (v) => Number.isInteger(v) && v >= 0 && v <= 3;
 

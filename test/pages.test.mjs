@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import * as server from '../src/lib/text.js';
 import * as page from '../public/shared/search.js';
-import { SESSION_LABEL, MARK_LABEL, TIER_LABEL, STUDENT_STATUS_LABEL, USER_STATUS_LABEL, GENDER_LABEL, RATING_LABEL, ATTENDANCE_RATING_LABEL, SLOT_LABEL, attendanceRating } from '../public/shared/labels.js';
+import { SESSION_LABEL, MARK_LABEL, TIER_LABEL, STUDENT_STATUS_LABEL, USER_STATUS_LABEL, GENDER_LABEL, RATING_LABEL, ATTENDANCE_RATING_LABEL, SLOT_LABEL, ITEM_KIND_LABEL, REQUEST_STATUS_LABEL, PHOTO_STAGE_LABEL, attendanceRating } from '../public/shared/labels.js';
 import * as codes from '../src/lib/codes.js';
 import { parseScore } from '../public/shared/scores.js';
 import { sortKey, compareValues } from '../public/shared/sort.js';
@@ -22,6 +22,7 @@ const PAGES = [
   ['public/academics/index.html', 'public/academics/academics.js'],
   ['public/teachers/index.html', 'public/teachers/teachers.js'],
   ['public/admin/index.html', 'public/admin/admin.js'],
+  ['public/inventory/index.html', 'public/inventory/inventory.js'],
 ];
 const SHARED = ['public/shared/common.js', 'public/shared/labels.js', 'public/shared/search.js', 'public/shared/scores.js', 'public/shared/ui.js', 'public/shared/import-template.js', 'public/shared/sort.js'];
 const read = (path) => readFileSync(path, 'utf8');
@@ -89,6 +90,9 @@ test('every code has a label', () => {
   labelled(USER_STATUS_LABEL, codes.USER_STATUSES);
   labelled(GENDER_LABEL, codes.GENDERS);
   labelled(SLOT_LABEL, codes.FILE_SLOTS);
+  labelled(ITEM_KIND_LABEL, codes.ITEM_KINDS);
+  labelled(REQUEST_STATUS_LABEL, codes.REQUEST_STATUSES);
+  labelled(PHOTO_STAGE_LABEL, codes.PHOTO_STAGES);
   labelled(RATING_LABEL, ['EXCELLENT', 'GOOD', 'AVERAGE']);
   labelled(ATTENDANCE_RATING_LABEL, ['EXCELLENT', 'GOOD', 'FAIR', 'NEEDS_WORK']);
 });

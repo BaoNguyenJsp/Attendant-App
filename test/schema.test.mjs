@@ -1,10 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { createD1 } from './helpers/d1.mjs';
 
 const TABLES = [
   'AcademicYear', 'Attendance', 'Classes', 'Config', 'ConfigHistory', 'DriveFolders', 'DriveTrash',
-  'GroupClasses', 'Groups', 'Holidays', 'LessonFiles', 'LessonTeachers', 'Lessons', 'Memberships', 'Scores', 'Secrets',
+  'GroupClasses', 'Groups', 'Holidays', 'Items', 'LessonFiles', 'LessonTeachers', 'Lessons', 'Locations', 'Memberships',
+  'RequestLines', 'RequestPhotos', 'Requests', 'Scores', 'Secrets',
   'SiblingMembers', 'StudentPhotos', 'Students', 'TeacherAttendance', 'Users',
 ];
 
@@ -17,7 +20,7 @@ async function seedOneStudent(db) {
 
 test('schema creates every table of section 5', async () => {
   const db = createD1();
-  const { results } = await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all();
+  const { results } = await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
   assert.deepEqual(results.map((r) => r.name), TABLES);
 });
 
@@ -97,4 +100,14 @@ test('deleting a student removes their attendance, scores and family link', asyn
   await db.prepare('DELETE FROM Students WHERE Id = 1').run();
   const n = await db.prepare('SELECT (SELECT COUNT(*) FROM Attendance) + (SELECT COUNT(*) FROM Scores) + (SELECT COUNT(*) FROM SiblingMembers) AS n').first('n');
   assert.equal(n, 0);
+});
+
+test('the warehouse migration creates the same tables and indexes as schema.sql', async () => {
+  const fresh = new DatabaseSync(':memory:');
+  fresh.exec(readFileSync(new URL('../migrations/2026-11-09-inventory.sql', import.meta.url), 'utf8'));
+  const shape = (rows) => rows.map((r) => [r.name, r.sql.replace(/\s+/g, ' ')]);
+  const sql = "SELECT name, sql FROM sqlite_master WHERE sql IS NOT NULL AND tbl_name IN ('Locations', 'Items', 'Requests', 'RequestLines', 'RequestPhotos') ORDER BY name";
+  const { results } = await createD1().prepare(sql).all();
+  assert.deepEqual(shape(fresh.prepare(sql).all()), shape(results));
+  fresh.exec(readFileSync(new URL('../migrations/2026-11-09-inventory.sql', import.meta.url), 'utf8')); // a second run changes nothing
 });

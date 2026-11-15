@@ -152,3 +152,88 @@ export function shiftWeek(input, weeks) {
   input.value = day.toISOString().slice(0, 10);
   return true;
 }
+
+// The picture redrawn on a canvas as JPEG 85 %. box(img) gives the source rectangle and the output size.
+function redraw(file, box) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const { sx, sy, sw, sh, width, height } = box(img);
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, width, height);
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Không xử lý được ảnh.'))), 'image/jpeg', 0.85);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Tệp không phải là ảnh.')); };
+    img.src = url;
+  });
+}
+
+// The largest box of the width x height shape that fits the picture, centred, scaled to width x height.
+export const cropPhoto = (file, width, height) => redraw(file, (img) => {
+  const sw = Math.min(img.width, img.height * width / height);
+  const sh = sw * height / width;
+  return { sx: (img.width - sw) / 2, sy: (img.height - sh) / 2, sw, sh, width, height };
+});
+
+// The whole picture, its longest side at most `max` pixels (evidence photos: nothing cut off).
+export const shrinkPhoto = (file, max) => redraw(file, (img) => {
+  const k = Math.min(1, max / Math.max(img.width, img.height));
+  return { sx: 0, sy: 0, sw: img.width, sh: img.height, width: Math.round(img.width * k), height: Math.round(img.height * k) };
+});
+
+// A picture from the gallery, or with camera: true from the phone's camera app. Resolves with the file, or null when cancelled.
+// The input is put in the page and `capture` set as an attribute: the form mobile browsers honour most reliably.
+export function pickImage({ camera = false } = {}) {
+  return new Promise((resolve) => {
+    const input = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*', hidden: true });
+    if (camera) input.setAttribute('capture', 'environment');
+    const done = (file) => { input.remove(); resolve(file); };
+    input.addEventListener('change', () => done(input.files[0] ?? null));
+    input.addEventListener('cancel', () => done(null));
+    document.body.appendChild(input);
+    input.click();
+  });
+}
+
+// The live camera (the back one on phones) in a full-screen layer. Resolves with a JPEG, or null when closed.
+// No camera access (refused, old browser, page not on HTTPS): the phone's own camera picker instead.
+export async function takePhoto() {
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 } }, audio: false });
+  } catch {
+    return pickImage({ camera: true });
+  }
+  return new Promise((resolve) => {
+    const layer = document.createElement('div');
+    layer.className = 'fixed inset-0 z-[200] bg-black flex flex-col';
+    layer.innerHTML = '<video autoplay playsinline muted class="flex-1 min-h-0 w-full object-contain"></video>'
+      + '<div class="flex items-center justify-between px-6 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">'
+      + '<button type="button" data-cam="close" class="w-20 text-white font-bold py-2 text-left">✕ Hủy</button>'
+      + '<button type="button" data-cam="shot" aria-label="Chụp" class="w-16 h-16 rounded-full bg-white border-4 border-slate-400 active:scale-90 transition"></button>'
+      + '<span class="w-20"></span></div>';
+    const video = layer.querySelector('video');
+    video.srcObject = stream;
+    const finish = (blob) => {
+      stream.getTracks().forEach((track) => track.stop());
+      layer.remove();
+      resolve(blob);
+    };
+    layer.addEventListener('click', (e) => {
+      const action = e.target.closest('[data-cam]')?.dataset.cam;
+      if (action === 'close') finish(null);
+      if (action === 'shot' && video.videoWidth) {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        canvas.toBlob(finish, 'image/jpeg', 0.9);
+      }
+    });
+    document.body.appendChild(layer);
+  });
+}
