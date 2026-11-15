@@ -265,7 +265,7 @@ const NAV = [
   ['/academics/', '🎓 Học tập', ''],
   ['/students/', '👥 Thiếu nhi', ''],
   ['/teachers/', '🧑‍🏫 Huynh trưởng', 'exec-only'],
-  ['/inventory/', '📦 Kho', ''],
+  // ['/inventory/', '📦 Kho', ''], // hidden for now; page still reachable at /inventory/
   ['/admin/', '⚙ Quản trị', 'admin-only'],
 ];
 
